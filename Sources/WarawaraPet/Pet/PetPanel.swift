@@ -17,7 +17,7 @@ final class PetPanel: NSPanel {
         hasShadow = false
         level = .floating
         collectionBehavior = [.canJoinAllSpaces]
-        isMovableByWindowBackground = true
+        isMovableByWindowBackground = false
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
     }

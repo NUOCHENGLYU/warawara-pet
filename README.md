@@ -4,12 +4,23 @@ A tiny native macOS desktop-pet application (private birthday gift, not for
 public distribution). The pet is a Warawara-like character that lives in a
 transparent, borderless floating window above the desktop.
 
-**Current status: Phase 0 — Bootstrap.**
+**Current status: Phase 1 — One interactive pet (placeholder artwork).**
 
-What exists today: a minimal macOS app that launches as an accessory
-application (no Dock icon), shows a placeholder pet in a transparent,
-borderless, non-activating floating panel, and can be quit via right-click.
-No motion states, no sprites, no birthday logic yet.
+What exists today:
+
+- accessory app (no Dock icon), transparent borderless non-activating panel
+- placeholder pet (procedurally drawn blob — no copyrighted artwork)
+- gentle idle bob, randomized hops (6–14 s apart) with squash/stretch
+- click reaction (squash + rebound), right-click → Quit
+- mouse dragging with a slight body lean, soft bounce/settle on release
+- position clamping inside the visible screen area (menu bar/Dock excluded),
+  multi-display aware, re-clamps on display changes
+- window position persisted across launches (falls back to a safe default if
+  the saved display no longer exists)
+- tight elliptical hit region around the pet body
+
+No curiosity, floating, sleep, group, or birthday behavior yet. No sprites,
+no sound, no network, no third-party dependencies.
 
 ---
 
@@ -54,8 +65,9 @@ macOS UI behavior works until it has been observed on a real Mac.
 
    If macOS still blocks it: System Settings → Privacy & Security →
    "Open Anyway".
-4. A placeholder pet appears near the bottom-right of the main display.
-   Right-click it → "Quit WarawaraPet".
+4. The pet appears near the bottom-right of the main display (or where it
+   was last left). Click it, drag it around, watch it hop. Right-click it →
+   "Quit WarawaraPet".
 
 ## Running from source on a Mac
 
@@ -85,14 +97,24 @@ Package.swift                 Swift Package Manager (repo root = package root)
 Support/Info.plist            app bundle template
 Sources/WarawaraPet/
   App/                        entry point + AppDelegate
-  Pet/                        NSPanel window behavior
+  Models/                     pet state machine (PetState, HopParameters)
+  Pet/                        panel, window/motion/interaction controllers
+  Animation/                  pure motion curves (hop, settle)
   UI/                         SwiftUI placeholder pet rendering
-  Support/                    pure testable helpers (frame math)
+  Support/                    pure testable helpers (frame math, screens,
+                              hit region, randomness, position store)
 Tests/WarawaraPetTests/       unit tests (run on CI via swift test)
 Scripts/package-app.sh        assembles, ad-hoc signs, and zips the .app
 Resources/Sprites/            future sprite frames (see its README)
 .github/workflows/ci.yml      macOS CI: build → test → package → artifact
 ```
+
+## Threading model
+
+All window mutations, state transitions, and SwiftUI pose updates happen on
+the main thread (main-run-loop timers, main-queue dispatch). The idle hop
+scheduler uses a single timer that is cancelled whenever the pet leaves the
+idle state, so no motion ever runs concurrently.
 
 ## Signing and notarization (future)
 
@@ -102,11 +124,30 @@ broadly later: add a Developer ID certificate as a GitHub Actions secret,
 sign with `codesign --options runtime`, staple, and notarize with
 `notarytool`. No secrets are stored in this repository.
 
+## Verification status
+
+| Verified by | Items |
+|---|---|
+| Windows (static) | plist XML, shell syntax, line endings |
+| macOS CI | universal compile, all unit tests, packaging |
+| Real Mac only | everything below — none of it is verified yet |
+
 ## Manual test checklist (real Mac, to be completed)
 
 - [ ] app launches without crashing
 - [ ] transparent background, no title bar
-- [ ] does not steal keyboard focus
 - [ ] placeholder pet is visible
+- [ ] idle bob is gentle and continuous
+- [ ] pet hops on its own every ~6–14 s, with stretch/squash
+- [ ] clicking squashes and rebounds the pet
+- [ ] dragging moves the pet; body leans slightly; release bounces softly
+- [ ] pet cannot be dragged or hop off-screen (menu bar/Dock respected)
+- [ ] pet stays put when dragged to a second display (if available)
 - [ ] right-click → Quit works
-- [ ] app does not block clicks elsewhere on the desktop
+- [ ] relaunch restores the last position (and falls back safely if that
+      display was removed)
+- [ ] does not steal keyboard focus on any interaction
+- [ ] clicks on the transparent corners of the window pass through to
+      whatever is underneath (NOT assumed to work — verify)
+- [ ] clicks elsewhere on the desktop are never blocked
+- [ ] no visible CPU usage while idle

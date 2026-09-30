@@ -1,22 +1,37 @@
 import SwiftUI
 
 struct PetView: View {
+    @ObservedObject var controller: PetController
+
     @State private var bobbing = false
 
     private let bobAnimation = Animation
         .easeInOut(duration: 2.2)
         .repeatForever(autoreverses: true)
 
+    private let poseAnimation = Animation
+        .spring(response: 0.3, dampingFraction: 0.55)
+
     var body: some View {
         ZStack {
-            bodyBlob
-                .offset(y: bobbing ? -6 : 6)
-            eyes
-                .offset(y: (bobbing ? -6 : 6) - 10)
+            petGroup
+                .offset(y: bobOffset)
         }
         .frame(width: 160, height: 160, alignment: .bottom)
         .animation(bobAnimation, value: bobbing)
         .onAppear { bobbing = true }
+    }
+
+    private var petGroup: some View {
+        ZStack {
+            bodyBlob
+            eyes
+        }
+        .scaleEffect(x: scaleX, y: scaleY, anchor: .bottom)
+        .rotationEffect(.radians(leanAngle), anchor: .bottom)
+        .animation(poseAnimation, value: controller.state)
+        .animation(poseAnimation, value: controller.hopProgress)
+        .animation(poseAnimation, value: controller.settleProgress)
     }
 
     private var bodyBlob: some View {
@@ -38,6 +53,49 @@ struct PetView: View {
             EyeView()
             EyeView()
         }
+        .offset(y: 34)
+    }
+
+    private var bobOffset: CGFloat {
+        controller.state == .idle ? (bobbing ? -6 : 6) : 0
+    }
+
+    private var scaleX: CGFloat {
+        switch controller.state {
+        case .idle:
+            return 1
+        case .clicked:
+            return 1.04
+        case .dragged:
+            return 0.94
+        case .hop:
+            return 1 - 0.08 * HopCurve.stretchFactor(at: controller.hopProgress)
+                + 0.15 * HopCurve.squashAtLanding(at: controller.hopProgress)
+        case .settling:
+            return 1 + 0.1 * (1 - controller.settleProgress)
+        }
+    }
+
+    private var scaleY: CGFloat {
+        switch controller.state {
+        case .idle:
+            return 1
+        case .clicked:
+            return 0.78
+        case .dragged:
+            return 1.08
+        case .hop:
+            return 1 + 0.12 * HopCurve.stretchFactor(at: controller.hopProgress)
+                - 0.3 * HopCurve.squashAtLanding(at: controller.hopProgress)
+        case .settling:
+            return 1 - 0.2 * (1 - controller.settleProgress)
+        }
+    }
+
+    private var leanAngle: Double {
+        guard controller.state == .dragged else { return 0 }
+        let angle = atan2(controller.dragVector.dy, controller.dragVector.dx)
+        return Double(min(max(angle, -0.15), 0.15))
     }
 }
 
