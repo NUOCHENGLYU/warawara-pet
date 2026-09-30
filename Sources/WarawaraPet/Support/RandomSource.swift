@@ -34,17 +34,13 @@ enum RandomBounds {
         in range: ClosedRange<TimeInterval>,
         using rng: inout some RandomSource
     ) -> TimeInterval {
-        let lower = Swift.min(range.lowerBound, range.upperBound)
-        let span = abs(range.upperBound - range.lowerBound)
-        return lower + rng.nextUnit() * span
+        range.lowerBound + rng.nextUnit() * (range.upperBound - range.lowerBound)
     }
 
     static func randomCGFloat(
         in range: ClosedRange<CGFloat>,
         using rng: inout some RandomSource
     ) -> CGFloat {
-        let lower = Swift.min(range.lowerBound, range.upperBound)
-        let span = abs(range.upperBound - range.lowerBound)
-        return lower + CGFloat(rng.nextUnit()) * span
+        range.lowerBound + CGFloat(rng.nextUnit()) * (range.upperBound - range.lowerBound)
     }
 }

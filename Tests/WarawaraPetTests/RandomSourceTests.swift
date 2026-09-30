@@ -54,12 +54,4 @@ final class RandomSourceTests: XCTestCase {
             XCTAssertTrue((-40...40).contains(value))
         }
     }
-
-    func testRandomDelayHandlesInvertedRange() {
-        var rng = SeededRandomSource(seed: 11)
-        for _ in 0..<200 {
-            let delay = RandomBounds.randomDelay(in: 14...6, using: &rng)
-            XCTAssertTrue((6...14).contains(delay))
-        }
-    }
 }
