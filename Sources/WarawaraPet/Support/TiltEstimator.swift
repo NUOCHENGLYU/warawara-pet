@@ -18,6 +18,18 @@ struct TiltEstimator {
     private var smoothedVelocityX: CGFloat = 0
     private var lastTimestamp: TimeInterval?
 
+    init(
+        timeConstant: TimeInterval = 0.12,
+        maxGapDuration: TimeInterval = 1.0,
+        maxTilt: CGFloat = 0.15,
+        velocityAtMaxTilt: CGFloat = 600
+    ) {
+        self.timeConstant = timeConstant
+        self.maxGapDuration = maxGapDuration
+        self.maxTilt = maxTilt
+        self.velocityAtMaxTilt = velocityAtMaxTilt
+    }
+
     mutating func update(deltaX: CGFloat, at timestamp: TimeInterval) {
         guard let last = lastTimestamp else {
             lastTimestamp = timestamp
