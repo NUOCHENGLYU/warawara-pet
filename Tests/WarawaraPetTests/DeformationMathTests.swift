@@ -107,38 +107,40 @@ final class DeformationMathTests: XCTestCase {
 
     func testStretchAnglesAreCanonicalizedToUndirectedRange() {
         XCTAssertEqual(
-            deformation(velocity: CGVector(dx: 1, dy: 0), grab: .zero).stretchAngle,
+            deformation(velocity: CGVector(dx: 100, dy: 0), grab: .zero).stretchAngle,
             0,
             accuracy: 0.0001
         )
         XCTAssertEqual(
-            deformation(velocity: CGVector(dx: 0, dy: 1), grab: .zero).stretchAngle,
+            deformation(velocity: CGVector(dx: 0, dy: 100), grab: .zero).stretchAngle,
             .pi / 2,
             accuracy: 0.0001
         )
         // Down is the same undirected axis as up.
         XCTAssertEqual(
-            deformation(velocity: CGVector(dx: 0, dy: -1), grab: .zero).stretchAngle,
+            deformation(velocity: CGVector(dx: 0, dy: -100), grab: .zero).stretchAngle,
             .pi / 2,
             accuracy: 0.0001
         )
         // Left is the same undirected axis as right.
         XCTAssertEqual(
-            deformation(velocity: CGVector(dx: -1, dy: 0), grab: .zero).stretchAngle,
+            deformation(velocity: CGVector(dx: -100, dy: 0), grab: .zero).stretchAngle,
             0,
             accuracy: 0.0001
         )
     }
 
     func testAtan2WrapBoundaryDoesNotFlipTheAxis() {
-        // Velocity direction crossing the -x axis (the atan2 wrap point).
-        let e: CGFloat = 0.012
-        let justAbove = deformation(velocity: CGVector(dx: -1, dy: e), grab: .zero)
-        let justBelow = deformation(velocity: CGVector(dx: -1, dy: -e), grab: .zero)
+        // Velocity direction crossing the -x axis (the atan2 wrap point),
+        // at full speed so deformation is actually active.
+        let e: CGFloat = 1.2
+        let justAbove = deformation(velocity: CGVector(dx: -600, dy: e), grab: .zero)
+        let justBelow = deformation(velocity: CGVector(dx: -600, dy: -e), grab: .zero)
 
         for d in [justAbove, justBelow] {
             XCTAssertGreaterThanOrEqual(d.stretchAngle, 0)
             XCTAssertLessThan(d.stretchAngle, .pi)
+            XCTAssertGreaterThan(d.stretchScale, 1.3)
         }
 
         // The two axes are the same undirected line: the angle difference
