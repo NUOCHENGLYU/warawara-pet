@@ -42,3 +42,12 @@ enum SettleCurve {
         return 0.2 * (1 - clamped)
     }
 }
+
+/// Smoothstep interpolation used for the gentle post-float descent.
+enum DescentCurve {
+    static func interpolate(at t: CGFloat, from: CGFloat, to: CGFloat) -> CGFloat {
+        let clamped = min(max(t, 0), 1)
+        let eased = clamped * clamped * (3 - 2 * clamped)
+        return to + (from - to) * (1 - eased)
+    }
+}

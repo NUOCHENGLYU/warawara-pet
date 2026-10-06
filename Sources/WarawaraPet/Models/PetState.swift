@@ -3,9 +3,13 @@ import Foundation
 enum PetState: Equatable {
     case idle
     case hop
+    case float
+    case curious
     case clicked
     case dragged
     case settling
+    case sleepy
+    case sleeping
 }
 
 struct HopParameters: Equatable {
@@ -24,20 +28,50 @@ extension HopParameters {
     }
 }
 
+struct FloatParameters: Equatable {
+    let height: CGFloat
+    let drift: CGFloat
+    let duration: TimeInterval
+    let swayPhase: CGFloat
+}
+
+extension FloatParameters {
+    static func random(
+        using rng: inout some RandomSource,
+        tuning: PersonalityTuning
+    ) -> FloatParameters {
+        FloatParameters(
+            height: RandomBounds.randomCGFloat(in: tuning.floatMinHeight...tuning.floatMaxHeight, using: &rng),
+            drift: RandomBounds.randomCGFloat(in: tuning.floatMinDrift...tuning.floatMaxDrift, using: &rng),
+            duration: RandomBounds.randomDelay(in: tuning.floatMinDuration...tuning.floatMaxDuration, using: &rng),
+            swayPhase: RandomBounds.randomCGFloat(in: 0...(2 * .pi), using: &rng)
+        )
+    }
+}
+
 struct PetStateMachine {
     private(set) var state: PetState = .idle
 
     static func canTransition(from: PetState, to: PetState) -> Bool {
         switch (from, to) {
-        case (.idle, .hop), (.idle, .clicked), (.idle, .dragged):
+        case (.idle, .hop), (.idle, .float), (.idle, .curious), (.idle, .sleepy),
+             (.idle, .clicked), (.idle, .dragged):
             return true
         case (.hop, .idle), (.hop, .dragged):
             return true
-        case (.clicked, .idle), (.clicked, .clicked), (.clicked, .dragged):
+        case (.float, .settling), (.float, .clicked), (.float, .dragged):
+            return true
+        case (.curious, .idle), (.curious, .clicked), (.curious, .dragged):
+            return true
+        case (.clicked, .idle), (.clicked, .clicked), (.clicked, .settling), (.clicked, .dragged):
             return true
         case (.dragged, .settling):
             return true
         case (.settling, .idle), (.settling, .dragged):
+            return true
+        case (.sleepy, .sleeping), (.sleepy, .idle), (.sleepy, .clicked), (.sleepy, .dragged):
+            return true
+        case (.sleeping, .clicked), (.sleeping, .dragged):
             return true
         default:
             return false

@@ -4,8 +4,8 @@ A tiny native macOS desktop-pet application (private birthday gift, not for
 public distribution). The pet is a Warawara-like character that lives in a
 transparent, borderless floating window above the desktop.
 
-**Current status: Phase 1.6 complete — soft-body-style drag deformation,
-verified on an M1 MacBook Air.**
+**Current status: Phase 2 — personality (curious/float/sleepy/sleeping),
+awaiting real-Mac validation.**
 
 What exists today:
 
@@ -13,10 +13,15 @@ What exists today:
   that can never become key/main — clicks never steal keyboard focus
 - placeholder pet (procedurally drawn blob — no copyrighted artwork)
 - gentle idle bob, randomized hops (6–14 s apart) with squash/stretch
+- rare soft floats: slow lift, buoyant sway, gentle return; drag or click
+  can interrupt at any time
+- curiosity: after the cursor dwells nearby the pet leans/stretches toward
+  it subtly (distance hysteresis — no flicker, no chasing); never engages
+  while hopping, floating, settling, dragged, or sleeping
+- sleep: after 4 min of system inactivity the pet gets sleepy, after 8 min
+  it sleeps (slow breathing, tiny Z); click or drag wakes it smoothly
 - click reaction (squash + rebound), right-click → Quit
-- mouse dragging with soft-body-style deformation: directional, volume-
-  preserving stretch along the smoothed 2D drag velocity, grab-point torque
-  rotation, and an elastic return to neutral on release
+- mouse dragging with soft-body-style deformation (Phase 1.6, M1-verified)
 - position clamping inside the visible screen area (menu bar/Dock excluded),
   multi-display aware, re-clamps on display changes
 - window position persisted across launches (falls back to a safe default if
@@ -25,8 +30,8 @@ What exists today:
 - `.stationary` collection behavior so the pet stays visible during Show
   Desktop / Mission Control (unverified on a real Mac)
 
-No curiosity, floating, sleep, group, or birthday behavior yet. No sprites,
-no sound, no network, no third-party dependencies.
+No group, gathering, ascent, or birthday behavior yet. No sprites, no
+sound, no network, no third-party dependencies.
 
 ---
 
@@ -140,6 +145,28 @@ All constants live in `DeformationTuning.default`
 | `decayStartDelay` | 0.05 s | pause before held-still relaxation starts |
 | `releaseSpringResponse` / `releaseSpringDamping` | 0.3 s / 0.45 | release return to neutral |
 
+## Personality tuning (Phase 2)
+
+All Phase 2 constants live in `PersonalityTuning.default`
+(`Sources/WarawaraPet/Models/PersonalityTuning.swift`) and are tuned on a
+real Mac. Key defaults:
+
+| Constant | Default | Meaning |
+|---|---|---|
+| `curiosityEnterRadius` / `curiosityExitRadius` | 110 / 170 pt | hysteresis band for noticing the cursor |
+| `curiosityDwellTime` | 1.2 s | cursor must linger before engaging |
+| `floatChance` | 0.2 | probability of a float instead of a hop |
+| `floatMinInterval` / `floatMaxInterval` | 75 / 210 s | floats are rare |
+| `floatMinHeight` / `floatMaxHeight` | 80 / 130 pt | lift height |
+| `hopMinDelay` / `hopMaxDelay` | 6 / 14 s | hop cadence |
+| `sleepyTimeout` | 240 s | system inactivity before sleepy |
+| `sleepTimeout` | 480 s | before sleeping |
+| `breathingPeriod` | 4 s | sleep breathing |
+| `wakeTransitionDuration` | 0.3 s | wake spring response |
+| `awarenessTickInterval` | 0.15 s | curiosity/inactivity sampling |
+
+For quick sleep testing set `sleepyTimeout = 15` and `sleepTimeout = 30`.
+
 ## Signing and notarization (future)
 
 The artifact is currently ad-hoc signed (`codesign --sign -`), which is
@@ -183,6 +210,16 @@ sign with `codesign --options runtime`, staple, and notarize with
 - [ ] right-click → Quit works
 - [ ] relaunch restores the last position (and falls back safely if that
       display was removed)
+- [ ] Curious: slow cursor approach engages subtly; hovering near the
+      threshold never flickers; moving in/out repeatedly stays stable;
+      no chasing; click/drag always wins immediately
+- [ ] Float: watch for several minutes — floats are rare, lift/drift/descent
+      is gentle and stays on-screen; clicking mid-float squashes in place
+      then descends smoothly; dragging mid-float takes over immediately
+- [ ] Sleep (with sleepyTimeout=15, sleepTimeout=30 for testing):
+      idle → sleepy → sleeping; breathing is subtle; Z is subtle; click and
+      drag both wake the pet smoothly; normal idle behavior resumes after
+      waking; no permissions dialogs appeared
 - [ ] with "Click wallpaper to reveal desktop" enabled, clicking the desktop
       leaves the pet visible in place (`.stationary` — unverified; if the pet
       still hides, that is expected macOS behavior)

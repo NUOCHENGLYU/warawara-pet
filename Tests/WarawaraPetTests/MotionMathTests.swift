@@ -91,4 +91,29 @@ final class MotionMathTests: XCTestCase {
             XCTAssertTrue((0.9...1.4).contains(parameters.duration))
         }
     }
+
+    func testDescentStartsAtFromAndEndsAtTo() {
+        XCTAssertEqual(DescentCurve.interpolate(at: 0, from: 100, to: 40), 100, accuracy: 0.0001)
+        XCTAssertEqual(DescentCurve.interpolate(at: 1, from: 100, to: 40), 40, accuracy: 0.0001)
+    }
+
+    func testDescentIsMonotonic() {
+        var previous = DescentCurve.interpolate(at: 0, from: 120, to: 20)
+        for i in 1...100 {
+            let value = DescentCurve.interpolate(at: CGFloat(i) / 100, from: 120, to: 20)
+            XCTAssertLessThanOrEqual(value, previous + 0.0001)
+            previous = value
+        }
+    }
+
+    func testDescentIsIdentityWhenFromEqualsTo() {
+        for i in 0...100 {
+            let t = CGFloat(i) / 100
+            XCTAssertEqual(
+                DescentCurve.interpolate(at: t, from: 55, to: 55),
+                55,
+                accuracy: 0.0001
+            )
+        }
+    }
 }

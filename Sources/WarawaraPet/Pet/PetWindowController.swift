@@ -69,11 +69,14 @@ final class PetWindowController: NSObject {
             self.setWindowFrame(frame, animated: false)
         }
 
-        petController.startIdleSchedule()
+        petController.startAutonomousBehavior()
     }
 
     func saveCurrentPosition() {
         guard let positionStore, let panel else { return }
+        // Never persist transient mid-hop/mid-float/mid-drag frames; a quit
+        // during motion restores the last grounded position instead.
+        if controller?.isInTransientMotion == true { return }
         positionStore.saveOrigin(panel.frame.origin)
     }
 
