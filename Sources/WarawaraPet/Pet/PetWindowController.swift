@@ -37,6 +37,13 @@ final class PetWindowController: NSObject {
         )
         let interaction = PetInteractionController(windowController: self, controller: petController)
 
+        // Assign the store and controllers BEFORE any restoration logic
+        // reads them; otherwise the saved position is silently ignored.
+        self.positionStore = store
+        self.controller = petController
+        self.motionController = motion
+        self.interactionController = interaction
+
         let panel = PetPanel(size: Self.petSize)
 
         let hostingView = PetHostingView(rootView: PetView(controller: petController))
@@ -47,15 +54,11 @@ final class PetWindowController: NSObject {
         }
 
         panel.contentView = hostingView
-        panel.setFrame(restoredPositionFrame(), display: false)
+        panel.setFrame(restoredPositionFrame(using: store), display: false)
         panel.orderFrontRegardless()
 
         self.panel = panel
         self.hostingView = hostingView
-        self.controller = petController
-        self.motionController = motion
-        self.interactionController = interaction
-        self.positionStore = store
 
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -74,19 +77,13 @@ final class PetWindowController: NSObject {
         positionStore.saveOrigin(panel.frame.origin)
     }
 
-    private func restoredPositionFrame() -> CGRect {
-        if let saved = positionStore?.loadOrigin(),
-           let restored = ScreenGeometry.restoredFrame(
-               savedOrigin: saved,
-               petSize: Self.petSize,
-               visibleFrames: ScreenGeometry.screenVisibleFrames(),
-               margin: 32
-           ) {
-            return restored
-        }
-        return FrameMath.initialFrame(
+    private func restoredPositionFrame(using store: PetPositionStore) -> CGRect {
+        ScreenGeometry.restoredPositionFrame(
+            savedOrigin: store.loadOrigin(),
             petSize: Self.petSize,
-            in: FrameMath.currentScreenVisibleFrame()
+            visibleFrames: ScreenGeometry.screenVisibleFrames(),
+            restoreMargin: 32,
+            defaultVisibleFrame: FrameMath.currentScreenVisibleFrame()
         )
     }
 

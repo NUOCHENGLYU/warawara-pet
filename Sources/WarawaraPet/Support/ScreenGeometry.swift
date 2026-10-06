@@ -54,4 +54,29 @@ enum ScreenGeometry {
         }
         return nil
     }
+
+    /// Pure restore-vs-default decision: returns the clamped restored frame
+    /// when the saved origin is still valid on the current screens,
+    /// otherwise the default safe frame.
+    static func restoredPositionFrame(
+        savedOrigin: CGPoint?,
+        petSize: CGSize,
+        visibleFrames: [CGRect],
+        restoreMargin: CGFloat,
+        defaultVisibleFrame: CGRect
+    ) -> CGRect {
+        if let savedOrigin,
+           let restored = restoredFrame(
+               savedOrigin: savedOrigin,
+               petSize: petSize,
+               visibleFrames: visibleFrames,
+               margin: restoreMargin
+           ) {
+            return restored
+        }
+        return FrameMath.initialFrame(
+            petSize: petSize,
+            in: defaultVisibleFrame
+        )
+    }
 }

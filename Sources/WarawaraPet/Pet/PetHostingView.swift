@@ -10,6 +10,15 @@ final class PetHostingView: NSHostingView<PetView> {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         hitRegion = EllipseHitRegion.petDefault(in: bounds)
+        // The pet needs no keyboard input, so this view must not require
+        // the panel to become key for input delivery.
+        needsPanelToBecomeKey = false
+    }
+
+    // Deliver the first click immediately even though the panel is
+    // non-key-capable and the app is not active.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {

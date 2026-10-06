@@ -16,12 +16,17 @@ final class PetPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = false
         level = .floating
-        collectionBehavior = [.canJoinAllSpaces]
+        // .stationary keeps the pet visible during Show Desktop / Mission
+        // Control, like a desktop-level window. Real-Mac behavior with
+        // "click wallpaper to reveal desktop" is unverified.
+        collectionBehavior = [.canJoinAllSpaces, .stationary]
         isMovableByWindowBackground = false
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
+        becomesKeyOnlyIfNeeded = true
     }
 
-    override var canBecomeKey: Bool { true }
+    // The pet must never take keyboard focus away from the active app.
+    override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }

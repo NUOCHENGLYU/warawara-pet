@@ -81,4 +81,46 @@ final class PetPositionStoreTests: XCTestCase {
         )
         XCTAssertEqual(frame?.origin, origin)
     }
+
+    func testRestoredPositionFrameUsesSavedOriginWhenValid() {
+        let saved = CGPoint(x: 200, y: 300)
+        let frame = ScreenGeometry.restoredPositionFrame(
+            savedOrigin: saved,
+            petSize: CGSize(width: 160, height: 160),
+            visibleFrames: [CGRect(x: 0, y: 0, width: 1920, height: 1080)],
+            restoreMargin: 32,
+            defaultVisibleFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        )
+        XCTAssertEqual(frame.origin, saved)
+    }
+
+    func testRestoredPositionFrameFallsBackToDefaultWhenNothingSaved() {
+        let defaultVisible = CGRect(x: 0, y: 60, width: 1920, height: 1020)
+        let frame = ScreenGeometry.restoredPositionFrame(
+            savedOrigin: nil,
+            petSize: CGSize(width: 160, height: 160),
+            visibleFrames: [CGRect(x: 0, y: 0, width: 1920, height: 1080)],
+            restoreMargin: 32,
+            defaultVisibleFrame: defaultVisible
+        )
+        XCTAssertEqual(
+            frame,
+            FrameMath.initialFrame(petSize: CGSize(width: 160, height: 160), in: defaultVisible)
+        )
+    }
+
+    func testRestoredPositionFrameFallsBackToDefaultWhenDisplayGone() {
+        let defaultVisible = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let frame = ScreenGeometry.restoredPositionFrame(
+            savedOrigin: CGPoint(x: 5000, y: 4000),
+            petSize: CGSize(width: 160, height: 160),
+            visibleFrames: [CGRect(x: 0, y: 0, width: 1920, height: 1080)],
+            restoreMargin: 32,
+            defaultVisibleFrame: defaultVisible
+        )
+        XCTAssertEqual(
+            frame,
+            FrameMath.initialFrame(petSize: CGSize(width: 160, height: 160), in: defaultVisible)
+        )
+    }
 }

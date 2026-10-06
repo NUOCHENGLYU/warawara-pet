@@ -8,6 +8,9 @@ final class PetInteractionController {
     private var grabAnchor: NSPoint = .zero
     private var isDragging = false
 
+    private var tiltEstimator = TiltEstimator()
+    private var previousGlobalPoint: CGPoint = .zero
+
     private let dragThreshold: CGFloat = 3
     private let dragMargin: CGFloat = 8
 
@@ -19,6 +22,8 @@ final class PetInteractionController {
     func mouseDown(at event: NSEvent) {
         mouseDownPoint = event.locationInWindow
         isDragging = false
+        previousGlobalPoint = NSEvent.mouseLocation
+        tiltEstimator.reset()
         controller?.handleClick()
     }
 
@@ -35,6 +40,9 @@ final class PetInteractionController {
             controller?.handleDragBegan()
         }
 
+        // Capture the global mouse position BEFORE moving the window, then
+        // derive horizontal velocity from consecutive global positions so
+        // window motion itself does not pollute the measurement.
         let mouse = NSEvent.mouseLocation
         let origin = CGPoint(x: mouse.x - grabAnchor.x, y: mouse.y - grabAnchor.y)
         let target = CGRect(origin: origin, size: windowController.currentFrame.size)
@@ -46,9 +54,10 @@ final class PetInteractionController {
             ScreenGeometry.clampFrame(target, to: visible, margin: dragMargin),
             animated: false
         )
-        controller?.handleDragMoved(
-            vector: CGVector(dx: current.x - mouseDownPoint.x, dy: current.y - mouseDownPoint.y)
-        )
+
+        tiltEstimator.update(deltaX: mouse.x - previousGlobalPoint.x, at: event.timestamp)
+        previousGlobalPoint = mouse
+        controller?.handleDragMoved(tilt: tiltEstimator.tilt)
     }
 
     func mouseUp(at event: NSEvent) {

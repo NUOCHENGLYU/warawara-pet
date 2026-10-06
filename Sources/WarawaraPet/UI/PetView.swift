@@ -94,8 +94,7 @@ struct PetView: View {
 
     private var leanAngle: Double {
         guard controller.state == .dragged else { return 0 }
-        let angle = atan2(controller.dragVector.dy, controller.dragVector.dx)
-        return Double(min(max(angle, -0.15), 0.15))
+        return Double(controller.dragTilt)
     }
 }
 

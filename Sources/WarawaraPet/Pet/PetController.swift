@@ -5,7 +5,7 @@ final class PetController: ObservableObject {
     @Published private(set) var state: PetState = .idle
     @Published private(set) var hopProgress: CGFloat = 0
     @Published private(set) var settleProgress: CGFloat = 0
-    @Published private(set) var dragVector: CGVector = .zero
+    @Published private(set) var dragTilt: CGFloat = 0
 
     private weak var windowController: PetWindowController?
     private let motionController: PetMotionController
@@ -108,16 +108,16 @@ final class PetController: ObservableObject {
         state = stateMachine.state
     }
 
-    func handleDragMoved(vector: CGVector) {
+    func handleDragMoved(tilt: CGFloat) {
         guard stateMachine.state == .dragged else { return }
-        dragVector = vector
+        dragTilt = tilt
     }
 
     func handleDragEnded() {
         guard stateMachine.state == .dragged,
               stateMachine.transition(to: .settling) else { return }
         state = stateMachine.state
-        dragVector = .zero
+        dragTilt = 0
         guard let windowController else { return }
         motionController.startSettle(
             from: windowController.currentFrame,

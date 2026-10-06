@@ -4,20 +4,24 @@ A tiny native macOS desktop-pet application (private birthday gift, not for
 public distribution). The pet is a Warawara-like character that lives in a
 transparent, borderless floating window above the desktop.
 
-**Current status: Phase 1 — One interactive pet (placeholder artwork).**
+**Current status: Phase 1.5 — Real Mac fixes (awaiting real-Mac regression).**
 
 What exists today:
 
 - accessory app (no Dock icon), transparent borderless non-activating panel
+  that can never become key/main — clicks never steal keyboard focus
 - placeholder pet (procedurally drawn blob — no copyrighted artwork)
 - gentle idle bob, randomized hops (6–14 s apart) with squash/stretch
 - click reaction (squash + rebound), right-click → Quit
-- mouse dragging with a slight body lean, soft bounce/settle on release
+- mouse dragging with continuous velocity-based tilt (smoothed, clamped,
+  returns to neutral on release), soft bounce/settle on release
 - position clamping inside the visible screen area (menu bar/Dock excluded),
   multi-display aware, re-clamps on display changes
 - window position persisted across launches (falls back to a safe default if
   the saved display no longer exists)
 - tight elliptical hit region around the pet body
+- `.stationary` collection behavior so the pet stays visible during Show
+  Desktop / Mission Control (unverified on a real Mac)
 
 No curiosity, floating, sleep, group, or birthday behavior yet. No sprites,
 no sound, no network, no third-party dependencies.
@@ -140,13 +144,20 @@ sign with `codesign --options runtime`, staple, and notarize with
 - [ ] idle bob is gentle and continuous
 - [ ] pet hops on its own every ~6–14 s, with stretch/squash
 - [ ] clicking squashes and rebounds the pet
-- [ ] dragging moves the pet; body leans slightly; release bounces softly
+- [ ] FIRST click on the pet reacts immediately while another app is active
+- [ ] clicking/dragging never removes the text cursor or keyboard focus from
+      the active app; typing keeps going to that app
+- [ ] dragging moves the pet; lean follows drag velocity continuously
+      (slow = small tilt, fast = large tilt, reversal sweeps through neutral)
+- [ ] release springs tilt back to neutral and bounces softly
 - [ ] pet cannot be dragged or hop off-screen (menu bar/Dock respected)
 - [ ] pet stays put when dragged to a second display (if available)
 - [ ] right-click → Quit works
 - [ ] relaunch restores the last position (and falls back safely if that
       display was removed)
-- [ ] does not steal keyboard focus on any interaction
+- [ ] with "Click wallpaper to reveal desktop" enabled, clicking the desktop
+      leaves the pet visible in place (`.stationary` — unverified; if the pet
+      still hides, that is expected macOS behavior)
 - [ ] clicks on the transparent corners of the window pass through to
       whatever is underneath (NOT assumed to work — verify)
 - [ ] clicks elsewhere on the desktop are never blocked
