@@ -141,11 +141,11 @@ final class PetController: ObservableObject {
         switch stateMachine.state {
         case .idle:
             evaluateCuriosity(at: timestamp)
-            if evaluateSleepiness { evaluateSleepiness() }
+            if evaluateSleepiness { evaluateSleepinessNow() }
         case .curious:
             evaluateCuriosity(at: timestamp)
         case .sleepy:
-            if evaluateSleepiness { evaluateSleepiness() }
+            if evaluateSleepiness { evaluateSleepinessNow() }
         default:
             break
         }
@@ -204,7 +204,7 @@ final class PetController: ObservableObject {
         }
     }
 
-    private func evaluateSleepiness() {
+    private func evaluateSleepinessNow() {
         let idleSeconds = idleTimeProvider.secondsSinceLastUserActivity()
         switch SleepinessEvaluator.decision(
             state: stateMachine.state,
