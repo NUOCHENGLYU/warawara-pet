@@ -9,6 +9,7 @@ private final class FakeIdleTimeProvider: SystemIdleTimeProviding {
 final class PetControllerPersonalityTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suiteName: String!
+    private var heldWindowController: PetWindowController?
     private let idle = FakeIdleTimeProvider()
 
     override func setUp() {
@@ -26,6 +27,7 @@ final class PetControllerPersonalityTests: XCTestCase {
 
     private func makeController() -> PetController {
         let windowController = PetWindowController()
+        heldWindowController = windowController  // PetController holds it weakly
         let motion = PetMotionController(windowController: windowController)
         let store = PetPositionStore(defaults: defaults)
         let controller = PetController(

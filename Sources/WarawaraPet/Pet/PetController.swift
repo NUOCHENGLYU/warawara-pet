@@ -285,6 +285,7 @@ final class PetController: ObservableObject {
             motionController.cancelMotion()
             floatProgress = 0
             descentPending = true
+            guard stateMachine.transition(to: .clicked) else { return }
         } else if stateMachine.state == .clicked {
             stateMachine.transition(to: .clicked)
         } else {

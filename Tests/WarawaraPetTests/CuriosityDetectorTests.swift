@@ -97,7 +97,7 @@ final class CuriosityDetectorTests: XCTestCase {
         var detector = CuriosityDetector(tuning: tuning)
         var t: TimeInterval = 0
         var previous: CGFloat = 0
-        for _ in 0..<8 {
+        for _ in 0..<10 {
             t += 0.15
             detector.update(distance: 60, at: t)
             if detector.phase == .watching {
