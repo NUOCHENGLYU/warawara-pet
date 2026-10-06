@@ -32,7 +32,8 @@ final class FloatCurveTests: XCTestCase {
     }
 
     func testOffsetXReturnsHomeAndStaysWithinDrift() {
-        for phase in [CGFloat(0), .pi / 2, 2.3] {
+        let phases: [CGFloat] = [0, .pi / 2, 2.3]
+        for phase in phases {
             XCTAssertEqual(FloatCurve.offsetX(at: 0, drift: 60, phase: phase), 0, accuracy: 0.0001)
             XCTAssertEqual(FloatCurve.offsetX(at: 1, drift: 60, phase: phase), 0, accuracy: 0.0001)
             for i in 0...100 {
