@@ -8,7 +8,6 @@ final class PetInteractionController {
     private var grabAnchor: NSPoint = .zero
     private var isDragging = false
 
-    private var tiltEstimator = TiltEstimator()
     private var previousGlobalPoint: CGPoint = .zero
 
     private let dragThreshold: CGFloat = 3
@@ -23,7 +22,6 @@ final class PetInteractionController {
         mouseDownPoint = event.locationInWindow
         isDragging = false
         previousGlobalPoint = NSEvent.mouseLocation
-        tiltEstimator.reset()
         controller?.handleClick()
     }
 
@@ -37,12 +35,15 @@ final class PetInteractionController {
             guard exceededX || exceededY else { return }
             isDragging = true
             grabAnchor = current
-            controller?.handleDragBegan()
+            // grabAnchor is in view coordinates (the content view sits at
+            // the window origin), matching PetMetrics' pet-space convention.
+            controller?.handleDragBegan(
+                grabVector: PetMetrics.normalizedGrabVector(grabPoint: grabAnchor)
+            )
         }
 
-        // Capture the global mouse position BEFORE moving the window, then
-        // derive horizontal velocity from consecutive global positions so
-        // window motion itself does not pollute the measurement.
+        // Capture the global mouse position BEFORE moving the window so the
+        // window's own motion never pollutes the velocity measurement.
         let mouse = NSEvent.mouseLocation
         let origin = CGPoint(x: mouse.x - grabAnchor.x, y: mouse.y - grabAnchor.y)
         let target = CGRect(origin: origin, size: windowController.currentFrame.size)
@@ -55,9 +56,12 @@ final class PetInteractionController {
             animated: false
         )
 
-        tiltEstimator.update(deltaX: mouse.x - previousGlobalPoint.x, at: event.timestamp)
+        controller?.handleDragMoved(
+            deltaX: mouse.x - previousGlobalPoint.x,
+            deltaY: mouse.y - previousGlobalPoint.y,
+            at: event.timestamp
+        )
         previousGlobalPoint = mouse
-        controller?.handleDragMoved(tilt: tiltEstimator.tilt)
     }
 
     func mouseUp(at event: NSEvent) {

@@ -13,7 +13,7 @@ struct EllipseHitRegion {
 
     static func petDefault(in bounds: CGRect) -> EllipseHitRegion {
         EllipseHitRegion(
-            center: CGPoint(x: bounds.midX, y: 65),
+            center: PetMetrics.visualCenter,
             radiusX: 55,
             radiusY: 62
         )

@@ -12,6 +12,12 @@ struct PetView: View {
     private let poseAnimation = Animation
         .spring(response: 0.3, dampingFraction: 0.55)
 
+    private let deformationReleaseAnimation = Animation
+        .spring(
+            response: DeformationTuning.default.releaseSpringResponse,
+            dampingFraction: DeformationTuning.default.releaseSpringDamping
+        )
+
     var body: some View {
         ZStack {
             petGroup
@@ -27,8 +33,12 @@ struct PetView: View {
             bodyBlob
             eyes
         }
-        .scaleEffect(x: scaleX, y: scaleY, anchor: .bottom)
-        .rotationEffect(.radians(leanAngle), anchor: .bottom)
+        .modifier(DeformationEffect(
+            deformation: controller.dragDeformation,
+            isDragging: controller.state == .dragged,
+            releaseAnimation: deformationReleaseAnimation
+        ))
+        .scaleEffect(x: stateScaleX, y: stateScaleY, anchor: .bottom)
         .animation(poseAnimation, value: controller.state)
         .animation(poseAnimation, value: controller.hopProgress)
         .animation(poseAnimation, value: controller.settleProgress)
@@ -60,14 +70,12 @@ struct PetView: View {
         controller.state == .idle ? (bobbing ? -6 : 6) : 0
     }
 
-    private var scaleX: CGFloat {
+    private var stateScaleX: CGFloat {
         switch controller.state {
-        case .idle:
+        case .idle, .dragged:
             return 1
         case .clicked:
             return 1.04
-        case .dragged:
-            return 0.94
         case .hop:
             return 1 - 0.08 * HopCurve.stretchFactor(at: controller.hopProgress)
                 + 0.15 * HopCurve.squashAtLanding(at: controller.hopProgress)
@@ -76,14 +84,12 @@ struct PetView: View {
         }
     }
 
-    private var scaleY: CGFloat {
+    private var stateScaleY: CGFloat {
         switch controller.state {
-        case .idle:
+        case .idle, .dragged:
             return 1
         case .clicked:
             return 0.78
-        case .dragged:
-            return 1.08
         case .hop:
             return 1 + 0.12 * HopCurve.stretchFactor(at: controller.hopProgress)
                 - 0.3 * HopCurve.squashAtLanding(at: controller.hopProgress)
@@ -91,10 +97,32 @@ struct PetView: View {
             return 1 - 0.2 * (1 - controller.settleProgress)
         }
     }
+}
 
-    private var leanAngle: Double {
-        guard controller.state == .dragged else { return 0 }
-        return Double(controller.dragTilt)
+/// Applies the drag deformation around the grab anchor: torque rotation,
+/// rotate to the stretch axis, directional scale, rotate back. During drag
+/// the values apply instantly (no per-event animation stacking); when the
+/// drag ends, the scoped release spring returns everything to neutral. As
+/// the deformation approaches identity the anchor ceases to matter.
+private struct DeformationEffect: ViewModifier {
+    let deformation: PetDeformation
+    let isDragging: Bool
+    let releaseAnimation: Animation
+
+    func body(content: Content) -> some View {
+        content
+            .rotationEffect(.radians(Double(deformation.rotation)), anchor: anchorUnit)
+            .rotationEffect(.radians(Double(deformation.stretchAngle)), anchor: anchorUnit)
+            .scaleEffect(x: deformation.stretchScale, y: deformation.perpendicularScale, anchor: anchorUnit)
+            .rotationEffect(.radians(-Double(deformation.stretchAngle)), anchor: anchorUnit)
+            .animation(releaseAnimation, value: isDragging)
+    }
+
+    private var anchorUnit: UnitPoint {
+        UnitPoint(
+            x: 0.5 + 0.5 * Double(deformation.anchor.dx),
+            y: 0.5 - 0.5 * Double(deformation.anchor.dy)
+        )
     }
 }
 

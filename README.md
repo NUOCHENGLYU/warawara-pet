@@ -4,7 +4,8 @@ A tiny native macOS desktop-pet application (private birthday gift, not for
 public distribution). The pet is a Warawara-like character that lives in a
 transparent, borderless floating window above the desktop.
 
-**Current status: Phase 1.5 — Real Mac fixes (awaiting real-Mac regression).**
+**Current status: Phase 1.6 — Soft-body-style drag deformation (awaiting
+real-Mac tuning).**
 
 What exists today:
 
@@ -13,8 +14,9 @@ What exists today:
 - placeholder pet (procedurally drawn blob — no copyrighted artwork)
 - gentle idle bob, randomized hops (6–14 s apart) with squash/stretch
 - click reaction (squash + rebound), right-click → Quit
-- mouse dragging with continuous velocity-based tilt (smoothed, clamped,
-  returns to neutral on release), soft bounce/settle on release
+- mouse dragging with soft-body-style deformation: directional, volume-
+  preserving stretch along the smoothed 2D drag velocity, grab-point torque
+  rotation, and an elastic return to neutral on release
 - position clamping inside the visible screen area (menu bar/Dock excluded),
   multi-display aware, re-clamps on display changes
 - window position persisted across launches (falls back to a safe default if
@@ -120,6 +122,23 @@ the main thread (main-run-loop timers, main-queue dispatch). The idle hop
 scheduler uses a single timer that is cancelled whenever the pet leaves the
 idle state, so no motion ever runs concurrently.
 
+## Drag deformation tuning
+
+All constants live in `DeformationTuning.default`
+(`Sources/WarawaraPet/Models/PetPose.swift`) and are tuned on a real Mac:
+
+| Constant | Default | Meaning |
+|---|---|---|
+| `velocityTimeConstant` | 0.12 s | drag velocity smoothing |
+| `maxGapDuration` | 1.0 s | event gaps longer than this decay velocity |
+| `velocityAtMaxStretch` | 600 pt/s | speed for full stretch |
+| `minimumSpeed` | 20 pt/s | speeds below this deform nothing |
+| `maxStretch` | 0.35 | stretch along the drag axis |
+| `maxRotation` | 0.12 rad | torque rotation cap |
+| `rotationGain` | 0.0005 | torque → rotation gain |
+| `grabAnchorLimit` | 0.84 | grab anchor clamp (UnitPoint 0.08…0.92) |
+| `releaseSpringResponse` / `releaseSpringDamping` | 0.3 s / 0.45 | release return to neutral |
+
 ## Signing and notarization (future)
 
 The artifact is currently ad-hoc signed (`codesign --sign -`), which is
@@ -147,9 +166,15 @@ sign with `codesign --options runtime`, staple, and notarize with
 - [ ] FIRST click on the pet reacts immediately while another app is active
 - [ ] clicking/dragging never removes the text cursor or keyboard focus from
       the active app; typing keeps going to that app
-- [ ] dragging moves the pet; lean follows drag velocity continuously
-      (slow = small tilt, fast = large tilt, reversal sweeps through neutral)
-- [ ] release springs tilt back to neutral and bounces softly
+- [ ] dragging moves the pet; body deforms like a soft body:
+      - slow drag → barely visible deformation, no jitter
+      - fast drag → capped directional stretch with compression, no growth
+      - horizontal/vertical/diagonal drag → deformation axis matches movement
+      - grabbing above vs below center dragging the same way → opposite
+        subtle rotation; grabbing the center → almost none
+      - rapid direction reversal → smooth morph through neutral, no flicker
+- [ ] release springs deformation back to neutral elastically (< ~0.5 s,
+      no long oscillation) and the settle bounce still works
 - [ ] pet cannot be dragged or hop off-screen (menu bar/Dock respected)
 - [ ] pet stays put when dragged to a second display (if available)
 - [ ] right-click → Quit works

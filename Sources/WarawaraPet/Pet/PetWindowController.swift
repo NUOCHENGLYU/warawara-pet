@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 final class PetWindowController: NSObject {
-    static let petSize = CGSize(width: 160, height: 160)
+    static let petSize = PetMetrics.size
     static let windowMargin: CGFloat = 8
 
     private var panel: PetPanel?

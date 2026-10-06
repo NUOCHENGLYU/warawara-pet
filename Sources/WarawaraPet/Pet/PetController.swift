@@ -5,13 +5,14 @@ final class PetController: ObservableObject {
     @Published private(set) var state: PetState = .idle
     @Published private(set) var hopProgress: CGFloat = 0
     @Published private(set) var settleProgress: CGFloat = 0
-    @Published private(set) var dragTilt: CGFloat = 0
+    @Published private(set) var dragDeformation: PetDeformation = .neutral
 
     private weak var windowController: PetWindowController?
     private let motionController: PetMotionController
     private let positionStore: PetPositionStore
     private var rng = SystemRandomSource()
     private var stateMachine = PetStateMachine()
+    private var dragEstimator = DragDeformationEstimator()
     private var hopTimer: Timer?
     private var clickRevertItem: DispatchWorkItem?
 
@@ -98,7 +99,7 @@ final class PetController: ObservableObject {
 
     // MARK: - Drag
 
-    func handleDragBegan() {
+    func handleDragBegan(grabVector: CGVector) {
         cancelHopTimer()
         clickRevertItem?.cancel()
         motionController.cancelMotion()
@@ -106,18 +107,20 @@ final class PetController: ObservableObject {
         settleProgress = 0
         guard stateMachine.transition(to: .dragged) else { return }
         state = stateMachine.state
+        dragEstimator.beginDrag(grabVector: grabVector)
     }
 
-    func handleDragMoved(tilt: CGFloat) {
+    func handleDragMoved(deltaX: CGFloat, deltaY: CGFloat, at timestamp: TimeInterval) {
         guard stateMachine.state == .dragged else { return }
-        dragTilt = tilt
+        dragEstimator.update(deltaX: deltaX, deltaY: deltaY, at: timestamp)
+        dragDeformation = dragEstimator.deformation
     }
 
     func handleDragEnded() {
         guard stateMachine.state == .dragged,
               stateMachine.transition(to: .settling) else { return }
         state = stateMachine.state
-        dragTilt = 0
+        dragDeformation = .neutral
         guard let windowController else { return }
         motionController.startSettle(
             from: windowController.currentFrame,
