@@ -54,6 +54,27 @@ struct DragDeformationEstimator {
         )
     }
 
+    /// Time-aware damping toward zero velocity while the grab is held but
+    /// the mouse is stationary. Does NOT advance `lastTimestamp`, so the
+    /// next real movement sample still measures velocity over the true
+    /// interval between events. Decay only applies once the pause exceeds
+    /// `decayStartDelay`, so normal movement is unaffected. The grab
+    /// vector (and therefore the render/torque anchor) stays untouched.
+    mutating func decay(at timestamp: TimeInterval) {
+        guard let last = lastTimestamp else { return }
+        let dt = timestamp - last
+        let effective = dt - tuning.decayStartDelay
+        guard effective > 0 else { return }
+        let factor = CGFloat(exp(-effective / tuning.velocityTimeConstant))
+        smoothedVelocity.dx *= factor
+        smoothedVelocity.dy *= factor
+        deformation = DeformationMath.deformation(
+            forVelocity: smoothedVelocity,
+            grabVector: grabVector,
+            tuning: tuning
+        )
+    }
+
     mutating func reset() {
         deformation = .neutral
         smoothedVelocity = .zero

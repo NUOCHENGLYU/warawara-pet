@@ -43,6 +43,9 @@ struct DeformationTuning {
     /// Clamp for each axis of the normalized grab anchor, e.g. 0.84 maps
     /// to UnitPoint range 0.08...0.92 so the pivot never sits on the edge.
     var grabAnchorLimit: CGFloat = 0.84
+    /// Pause after the last movement sample before held-still decay kicks
+    /// in. Keeps normal movement (fast successive events) unaffected.
+    var decayStartDelay: TimeInterval = 0.05
     /// Spring used to return deformation to neutral after release.
     var releaseSpringResponse: Double = 0.3
     var releaseSpringDamping: Double = 0.45

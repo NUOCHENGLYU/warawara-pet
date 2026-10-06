@@ -137,6 +137,7 @@ All constants live in `DeformationTuning.default`
 | `maxRotation` | 0.12 rad | torque rotation cap |
 | `rotationGain` | 0.0005 | torque → rotation gain |
 | `grabAnchorLimit` | 0.84 | grab anchor clamp (UnitPoint 0.08…0.92) |
+| `decayStartDelay` | 0.05 s | pause before held-still relaxation starts |
 | `releaseSpringResponse` / `releaseSpringDamping` | 0.3 s / 0.45 | release return to neutral |
 
 ## Signing and notarization (future)
@@ -173,6 +174,8 @@ sign with `codesign --options runtime`, staple, and notarize with
       - grabbing above vs below center dragging the same way → opposite
         subtle rotation; grabbing the center → almost none
       - rapid direction reversal → smooth morph through neutral, no flicker
+      - holding the mouse still mid-drag → pet relaxes back toward neutral
+        around the held grab point; moving again responds immediately
 - [ ] release springs deformation back to neutral elastically (< ~0.5 s,
       no long oscillation) and the settle bounce still works
 - [ ] pet cannot be dragged or hop off-screen (menu bar/Dock respected)

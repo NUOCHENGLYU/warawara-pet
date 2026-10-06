@@ -164,4 +164,79 @@ final class DragDeformationEstimatorTests: XCTestCase {
         // torque = -0.5 * 400 -> rotation = -200 * gain = -0.1, capped at -0.05
         XCTAssertEqual(estimator.deformation.rotation, -0.05, accuracy: 0.005)
     }
+
+    // MARK: - Held-still decay
+
+    func testDecayWithinStartDelayDoesNothing() {
+        var estimator = DragDeformationEstimator()
+        estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
+        dragRight(&estimator, samples: 60, speed: 600)
+        let before = estimator.deformation
+
+        estimator.decay(at: 0.96 + 0.03)  // 0.03 s pause < decayStartDelay
+        XCTAssertEqual(estimator.deformation, before)
+    }
+
+    func testDecayAfterPauseMonotonicallyApproachesNeutral() {
+        var estimator = DragDeformationEstimator()
+        estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
+        dragRight(&estimator, samples: 60, speed: 600)
+        XCTAssertGreaterThan(estimator.deformation.stretchScale, 1.3)
+        XCTAssertEqual(abs(estimator.deformation.rotation), tuning.maxRotation, accuracy: 0.001)
+
+        var previous = estimator.deformation
+        for tickTime in [1.06, 1.16, 1.36, 1.66, 1.96] {
+            estimator.decay(at: tickTime)
+            let current = estimator.deformation
+            XCTAssertLessThanOrEqual(current.stretchScale, previous.stretchScale)
+            XCTAssertLessThanOrEqual(abs(current.rotation), abs(previous.rotation))
+            previous = current
+        }
+
+        XCTAssertEqual(estimator.deformation.stretchScale, 1, accuracy: 0.001)
+        XCTAssertEqual(estimator.deformation.rotation, 0, accuracy: 0.001)
+    }
+
+    func testDecayPreservesGrabAnchor() {
+        var estimator = DragDeformationEstimator()
+        estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
+        dragRight(&estimator, samples: 60, speed: 600)
+        let before = estimator.deformation
+
+        estimator.decay(at: 1.36)
+        let after = estimator.deformation
+
+        XCTAssertEqual(after.anchor.dx, before.anchor.dx, accuracy: 0.0001)
+        XCTAssertEqual(after.anchor.dy, before.anchor.dy, accuracy: 0.0001)
+        XCTAssertEqual(after.anchor.dy, tuning.grabAnchorLimit, accuracy: 0.0001)
+    }
+
+    func testMovementResumesSmoothlyAfterDecay() {
+        var estimator = DragDeformationEstimator()
+        estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
+        dragRight(&estimator, samples: 60, speed: 600)
+
+        estimator.decay(at: 1.36)
+        let decayedScale = estimator.deformation.stretchScale
+        XCTAssertLessThan(decayedScale, 1.05)
+
+        // The first resume sample must NOT spike: with the correct sample
+        // baseline its dt spans the whole pause, so its average velocity is
+        // low. (If decay advanced the baseline, this would jump upward.)
+        var t: TimeInterval = 1.36
+        t += 0.016
+        estimator.update(deltaX: 9.6, deltaY: 0, at: t)
+        XCTAssertLessThanOrEqual(estimator.deformation.stretchScale, decayedScale + 0.001)
+        XCTAssertLessThanOrEqual(abs(estimator.deformation.rotation), tuning.maxRotation + 0.001)
+
+        for _ in 1..<60 {
+            t += 0.016
+            estimator.update(deltaX: 9.6, deltaY: 0, at: t)
+            XCTAssertLessThanOrEqual(estimator.deformation.stretchScale, 1 + tuning.maxStretch + 0.001)
+            XCTAssertLessThanOrEqual(abs(estimator.deformation.rotation), tuning.maxRotation + 0.001)
+        }
+
+        XCTAssertEqual(estimator.deformation.stretchScale, 1 + tuning.maxStretch, accuracy: 0.01)
+        XCTAssertEqual(estimator.deformation.rotation, -tuning.maxRotation, accuracy: 0.01)
+    }
 }
