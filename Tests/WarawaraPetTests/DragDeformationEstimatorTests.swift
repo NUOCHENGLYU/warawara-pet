@@ -150,7 +150,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
 
     func testCustomTuningIsRespected() {
         let custom = DeformationTuning(
-            timeConstant: 0.05,
+            velocityTimeConstant: 0.05,
             velocityAtMaxStretch: 400,
             maxStretch: 0.2,
             maxRotation: 0.05,
