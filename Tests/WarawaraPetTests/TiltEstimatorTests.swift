@@ -112,9 +112,9 @@ final class TiltEstimatorTests: XCTestCase {
 
     func testParametersAreConfigurable() {
         var estimator = TiltEstimator(
+            timeConstant: 0.5,
             maxTilt: 0.3,
-            velocityAtMaxTilt: 300,
-            timeConstant: 0.5
+            velocityAtMaxTilt: 300
         )
         XCTAssertEqual(estimator.tilt(forVelocityX: 300), 0.3, accuracy: 0.0001)
         XCTAssertEqual(estimator.tilt(forVelocityX: -300), -0.3, accuracy: 0.0001)
