@@ -142,7 +142,12 @@ final class CuriosityPoseTests: XCTestCase {
             )
             XCTAssertLessThanOrEqual(abs(estimator.pose.rotation), 0.08 + 0.0001)
         }
-        // The target ended on the left; the pose leans left (positive).
+        // The target ended on the left; after the smoothing time constant
+        // elapses the pose converges toward the left lean (positive).
+        for _ in 0..<40 {
+            t += 0.033
+            estimator.update(direction: CGVector(dx: -1, dy: 0), dwellProgress: 1, at: t)
+        }
         XCTAssertGreaterThan(estimator.pose.rotation, 0.05)
     }
 }
