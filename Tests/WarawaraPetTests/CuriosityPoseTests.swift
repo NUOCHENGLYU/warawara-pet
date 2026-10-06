@@ -97,4 +97,52 @@ final class CuriosityPoseTests: XCTestCase {
         estimator.reset()
         XCTAssertEqual(estimator.pose, .neutral)
     }
+
+    func testAbruptReversalDoesNotSnap() {
+        var estimator = CuriosityPoseEstimator(tuning: tuning)
+        var t: TimeInterval = 0
+        for _ in 0..<40 {
+            t += 0.033
+            estimator.update(direction: CGVector(dx: 1, dy: 0), dwellProgress: 1, at: t)
+        }
+        XCTAssertEqual(estimator.pose.rotation, -0.08, accuracy: 0.005)
+
+        var smallestMagnitude = abs(estimator.pose.rotation)
+        for _ in 0..<40 {
+            t += 0.033
+            estimator.update(direction: CGVector(dx: -1, dy: 0), dwellProgress: 1, at: t)
+            smallestMagnitude = min(smallestMagnitude, abs(estimator.pose.rotation))
+            XCTAssertLessThanOrEqual(abs(estimator.pose.rotation), 0.08 + 0.0001)
+        }
+        // The pose passed continuously through (near) neutral: no discrete jump.
+        XCTAssertLessThan(smallestMagnitude, 0.01)
+        XCTAssertEqual(estimator.pose.rotation, 0.08, accuracy: 0.005)
+    }
+
+    func testLongGapDoesNotProduceSpikes() {
+        var estimator = CuriosityPoseEstimator(tuning: tuning)
+        estimator.update(direction: CGVector(dx: 1, dy: 0), dwellProgress: 1, at: 0)
+        estimator.update(direction: CGVector(dx: 1, dy: 0), dwellProgress: 1, at: 0.033)
+        // 5 s gap: the direction re-anchors but every pose value stays clamped.
+        estimator.update(direction: CGVector(dx: 0, dy: 1), dwellProgress: 1, at: 5.033)
+        XCTAssertLessThanOrEqual(abs(estimator.pose.rotation), 0.08 + 0.0001)
+        XCTAssertLessThanOrEqual(estimator.pose.stretchScale, 1.05 + 0.0001)
+    }
+
+    func testTracksMovingTargetContinuously() {
+        var estimator = CuriosityPoseEstimator(tuning: tuning)
+        var t: TimeInterval = 0
+        for k in 0...20 {
+            t += 0.033
+            let angle = CGFloat(Double(k) / 20) * .pi
+            estimator.update(
+                direction: CGVector(dx: cos(angle), dy: sin(angle)),
+                dwellProgress: 1,
+                at: t
+            )
+            XCTAssertLessThanOrEqual(abs(estimator.pose.rotation), 0.08 + 0.0001)
+        }
+        // The target ended on the left; the pose leans left (positive).
+        XCTAssertGreaterThan(estimator.pose.rotation, 0.05)
+    }
 }

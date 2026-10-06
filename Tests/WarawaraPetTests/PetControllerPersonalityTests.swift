@@ -145,4 +145,57 @@ final class PetControllerPersonalityTests: XCTestCase {
         controller.completeClickReaction()
         XCTAssertEqual(controller.state, .idle)
     }
+
+    func testCuriosityTrackingTickUpdatesPoseWhileCurious() {
+        let controller = makeController()
+        controller.mouseLocationProvider = { CGPoint(x: 10, y: 10) }
+        var t: TimeInterval = 100
+        for _ in 0..<10 {
+            t += 0.15
+            controller.awarenessTick(at: t, evaluateSleepiness: false)
+        }
+        XCTAssertEqual(controller.state, .curious)
+
+        // Cursor moves to the right; the 30 Hz tracker follows smoothly.
+        controller.mouseLocationProvider = { CGPoint(x: 200, y: 10) }
+        for _ in 0..<60 {
+            t += 0.033
+            controller.curiosityTrackingTick(at: t)
+        }
+        XCTAssertLessThan(controller.curiosityPose.rotation, -0.05)
+        XCTAssertGreaterThan(controller.curiosityPose.stretchScale, 1)
+    }
+
+    func testLeavingCuriousStopsTrackingAndRestoresNeutral() {
+        let controller = makeController()
+        controller.mouseLocationProvider = { CGPoint(x: 10, y: 10) }
+        var t: TimeInterval = 100
+        for _ in 0..<10 {
+            t += 0.15
+            controller.awarenessTick(at: t, evaluateSleepiness: false)
+        }
+        XCTAssertEqual(controller.state, .curious)
+
+        controller.mouseLocationProvider = { CGPoint(x: 200, y: 10) }
+        for _ in 0..<30 {
+            t += 0.033
+            controller.curiosityTrackingTick(at: t)
+        }
+        XCTAssertNotEqual(controller.curiosityPose, .neutral)
+
+        // Pointer leaves: curiosity ends and the pose resets to neutral.
+        controller.mouseLocationProvider = { CGPoint(x: 5000, y: 5000) }
+        t += 0.15
+        controller.awarenessTick(at: t, evaluateSleepiness: false)
+        XCTAssertEqual(controller.state, .idle)
+        XCTAssertEqual(controller.curiosityPose, .neutral)
+
+        // Tracking ticks are now inert.
+        controller.mouseLocationProvider = { CGPoint(x: -200, y: 10) }
+        for _ in 0..<30 {
+            t += 0.033
+            controller.curiosityTrackingTick(at: t)
+        }
+        XCTAssertEqual(controller.curiosityPose, .neutral)
+    }
 }

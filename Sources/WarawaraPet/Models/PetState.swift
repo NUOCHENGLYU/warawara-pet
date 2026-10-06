@@ -41,9 +41,18 @@ extension FloatParameters {
         tuning: PersonalityTuning
     ) -> FloatParameters {
         FloatParameters(
-            height: RandomBounds.randomCGFloat(in: tuning.floatMinHeight...tuning.floatMaxHeight, using: &rng),
-            drift: RandomBounds.randomCGFloat(in: tuning.floatMinDrift...tuning.floatMaxDrift, using: &rng),
-            duration: RandomBounds.randomDelay(in: tuning.floatMinDuration...tuning.floatMaxDuration, using: &rng),
+            height: RandomBounds.randomCGFloat(
+                in: 0.8 * tuning.floatHeight...1.2 * tuning.floatHeight,
+                using: &rng
+            ),
+            drift: RandomBounds.randomCGFloat(
+                in: 0.6 * tuning.floatHorizontalDrift...1.3 * tuning.floatHorizontalDrift,
+                using: &rng
+            ),
+            duration: RandomBounds.randomDelay(
+                in: 0.85 * tuning.floatDuration...1.15 * tuning.floatDuration,
+                using: &rng
+            ),
             swayPhase: RandomBounds.randomCGFloat(in: 0...(2 * .pi), using: &rng)
         )
     }
@@ -59,7 +68,7 @@ struct PetStateMachine {
             return true
         case (.hop, .idle), (.hop, .dragged):
             return true
-        case (.float, .settling), (.float, .clicked), (.float, .dragged):
+        case (.float, .idle), (.float, .clicked), (.float, .dragged):
             return true
         case (.curious, .idle), (.curious, .clicked), (.curious, .dragged):
             return true

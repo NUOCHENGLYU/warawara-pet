@@ -66,6 +66,11 @@ struct PetView: View {
             isActive: controller.state == .curious,
             releaseAnimation: poseAnimation
         ))
+        .modifier(PoseEffect(
+            deformation: controller.floatDeformation,
+            isActive: controller.state == .float,
+            releaseAnimation: poseAnimation
+        ))
         .scaleEffect(x: stateScaleX, y: stateScaleY, anchor: .bottom)
         .scaleEffect(breathingScale, anchor: .bottom)
         .animation(breathingAnimation, value: breathingPhase)
@@ -108,15 +113,13 @@ struct PetView: View {
 
     private var stateScaleX: CGFloat {
         switch controller.state {
-        case .idle, .dragged, .curious:
+        case .idle, .dragged, .curious, .float:
             return 1
         case .clicked:
             return 1.04
         case .hop:
             return 1 - 0.08 * HopCurve.stretchFactor(at: controller.hopProgress)
                 + 0.15 * HopCurve.squashAtLanding(at: controller.hopProgress)
-        case .float:
-            return 1 - 0.05 * FloatCurve.liftStretch(at: controller.floatProgress)
         case .settling:
             return 1 + 0.1 * (1 - controller.settleProgress)
         case .sleepy:
@@ -128,15 +131,13 @@ struct PetView: View {
 
     private var stateScaleY: CGFloat {
         switch controller.state {
-        case .idle, .dragged, .curious:
+        case .idle, .dragged, .curious, .float:
             return 1
         case .clicked:
             return 0.78
         case .hop:
             return 1 + 0.12 * HopCurve.stretchFactor(at: controller.hopProgress)
                 - 0.3 * HopCurve.squashAtLanding(at: controller.hopProgress)
-        case .float:
-            return 1 + 0.08 * FloatCurve.liftStretch(at: controller.floatProgress)
         case .settling:
             return 1 - 0.2 * (1 - controller.settleProgress)
         case .sleepy:

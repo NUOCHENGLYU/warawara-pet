@@ -11,7 +11,7 @@ final class PetStateMachineTests: XCTestCase {
         XCTAssertTrue(PetStateMachine.canTransition(from: .idle, to: .dragged))
         XCTAssertTrue(PetStateMachine.canTransition(from: .hop, to: .idle))
         XCTAssertTrue(PetStateMachine.canTransition(from: .hop, to: .dragged))
-        XCTAssertTrue(PetStateMachine.canTransition(from: .float, to: .settling))
+        XCTAssertTrue(PetStateMachine.canTransition(from: .float, to: .idle))
         XCTAssertTrue(PetStateMachine.canTransition(from: .float, to: .clicked))
         XCTAssertTrue(PetStateMachine.canTransition(from: .float, to: .dragged))
         XCTAssertTrue(PetStateMachine.canTransition(from: .curious, to: .idle))
@@ -46,7 +46,7 @@ final class PetStateMachineTests: XCTestCase {
         // Autonomous motions cannot overlap.
         XCTAssertFalse(PetStateMachine.canTransition(from: .hop, to: .float))
         XCTAssertFalse(PetStateMachine.canTransition(from: .float, to: .hop))
-        XCTAssertFalse(PetStateMachine.canTransition(from: .float, to: .idle))
+        XCTAssertFalse(PetStateMachine.canTransition(from: .float, to: .settling))
         XCTAssertFalse(PetStateMachine.canTransition(from: .float, to: .sleepy))
         XCTAssertFalse(PetStateMachine.canTransition(from: .curious, to: .float))
         XCTAssertFalse(PetStateMachine.canTransition(from: .curious, to: .sleepy))
@@ -105,9 +105,10 @@ final class PetStateMachineTests: XCTestCase {
         XCTAssertTrue(machine.transition(to: .settling))
         XCTAssertTrue(machine.transition(to: .idle))
 
+        // Natural float completion lands softly back in idle (no bounce
+        // state in between — the settle phase lives inside the float curve).
         var machine2 = PetStateMachine()
         XCTAssertTrue(machine2.transition(to: .float))
-        XCTAssertTrue(machine2.transition(to: .settling))
         XCTAssertTrue(machine2.transition(to: .idle))
     }
 

@@ -155,9 +155,16 @@ real Mac. Key defaults:
 |---|---|---|
 | `curiosityEnterRadius` / `curiosityExitRadius` | 110 / 170 pt | hysteresis band for noticing the cursor |
 | `curiosityDwellTime` | 1.2 s | cursor must linger before engaging |
+| `curiosityTrackingInterval` | 1/30 s | visual-tracking cadence (only while curious; raise to 1/60 if needed) |
 | `floatChance` | 0.2 | probability of a float instead of a hop |
 | `floatMinInterval` / `floatMaxInterval` | 75 / 210 s | floats are rare |
-| `floatMinHeight` / `floatMaxHeight` | 80 / 130 pt | lift height |
+| `floatDuration` | 5.5 s | full lift/hover/descent/settle cycle |
+| `floatLiftFraction` / `floatHoverFraction` / `floatDescentFraction` | 0.25 / 0.40 / 0.30 | phase split |
+| `floatHeight` | 100 pt | hover height |
+| `floatBobAmplitude` / `floatBobPeriod` | 6 pt / 2.2 s | low-frequency hover bob |
+| `floatSwayAmplitude` / `floatSwayPeriod` | 24 pt / 3.5 s | slow horizontal sway |
+| `floatHorizontalDrift` | 18 pt | slow smooth drift |
+| `floatBodyStretch` / `floatSwayLean` | 0.06 / 0.03 | low-amplitude body deformation |
 | `hopMinDelay` / `hopMaxDelay` | 6 / 14 s | hop cadence |
 | `sleepyTimeout` | 240 s | system inactivity before sleepy |
 | `sleepTimeout` | 480 s | before sleeping |
@@ -213,9 +220,14 @@ sign with `codesign --options runtime`, staple, and notarize with
 - [ ] Curious: slow cursor approach engages subtly; hovering near the
       threshold never flickers; moving in/out repeatedly stays stable;
       no chasing; click/drag always wins immediately
-- [ ] Float: watch for several minutes — floats are rare, lift/drift/descent
-      is gentle and stays on-screen; clicking mid-float squashes in place
-      then descends smoothly; dragging mid-float takes over immediately
+- [ ] Float: watch for several minutes — floats are rare; the pet lifts
+      slowly, hovers clearly near peak height with a gentle bob (visibly
+      distinct from a hop), sways sideways, descends softly and lands with
+      no bounce; stays on-screen; clicking mid-float squashes in place then
+      descends smoothly; dragging mid-float takes over immediately
+- [ ] Curious: slow cursor approach engages subtly; while curious the pet
+      follows the cursor fluidly (no stepping/choppiness); hovering near the
+      threshold never flickers; no chasing; click/drag always win immediately
 - [ ] Sleep (with sleepyTimeout=15, sleepTimeout=30 for testing):
       idle → sleepy → sleeping; breathing is subtle; Z is subtle; click and
       drag both wake the pet smoothly; normal idle behavior resumes after

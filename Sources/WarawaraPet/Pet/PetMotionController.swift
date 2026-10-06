@@ -114,9 +114,16 @@ final class PetMotionController {
         case .float:
             let duration = floatParams.duration
             let t = CGFloat(min(max(elapsed / duration, 0), 1))
+            let tuning = PersonalityTuning.default
             var frame = startFrame
-            frame.origin.x += FloatCurve.offsetX(at: t, drift: floatParams.drift, phase: floatParams.swayPhase)
-            frame.origin.y += FloatCurve.offsetY(at: t, height: floatParams.height)
+            frame.origin.x += FloatCurve.offsetX(
+                at: t,
+                drift: floatParams.drift,
+                swayAmplitude: tuning.floatSwayAmplitude,
+                swayCycles: FloatCurve.swayCycles(duration: duration, tuning: tuning),
+                swayPhase: floatParams.swayPhase
+            )
+            frame.origin.y += FloatCurve.offsetY(at: t, height: floatParams.height, tuning: tuning)
             frame = ScreenGeometry.clampFrame(
                 frame,
                 to: ScreenGeometry.visibleFrame(for: frame),

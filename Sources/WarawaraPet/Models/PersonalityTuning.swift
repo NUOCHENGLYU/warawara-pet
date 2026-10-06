@@ -10,17 +10,29 @@ struct PersonalityTuning {
     var curiosityMaxRotation: CGFloat = 0.08
     var curiosityMaxStretch: CGFloat = 0.05
     var curiositySmoothingTimeConstant: TimeInterval = 0.25
+    /// Cadence of the visual-tracking loop, active only while curious.
+    /// State detection stays on `awarenessTickInterval`; 30 Hz is the
+    /// initial target and can be raised to 60 Hz for smoother tracking.
+    var curiosityTrackingInterval: TimeInterval = 1.0 / 30.0
 
-    // Float
+    // Float — sustained drifting, clearly distinct from hop
     var floatChance: Double = 0.2
     var floatMinInterval: TimeInterval = 75
     var floatMaxInterval: TimeInterval = 210
-    var floatMinHeight: CGFloat = 80
-    var floatMaxHeight: CGFloat = 130
-    var floatMinDrift: CGFloat = 30
-    var floatMaxDrift: CGFloat = 70
-    var floatMinDuration: TimeInterval = 4.5
-    var floatMaxDuration: TimeInterval = 7.0
+    var floatDuration: TimeInterval = 5.5
+    var floatLiftFraction: CGFloat = 0.25
+    var floatHoverFraction: CGFloat = 0.40
+    var floatDescentFraction: CGFloat = 0.30
+    var floatHeight: CGFloat = 100
+    var floatBobAmplitude: CGFloat = 6
+    var floatBobPeriod: TimeInterval = 2.2
+    var floatSwayAmplitude: CGFloat = 24
+    var floatSwayPeriod: TimeInterval = 3.5
+    var floatHorizontalDrift: CGFloat = 18
+    var floatBodyStretch: CGFloat = 0.06
+    var floatSwayLean: CGFloat = 0.03
+    /// Descent duration used when a click interrupts a float and the pet
+    /// sinks back to the float base.
     var floatDescentDuration: TimeInterval = 0.45
 
     // Hop scheduling (moved from PetController)

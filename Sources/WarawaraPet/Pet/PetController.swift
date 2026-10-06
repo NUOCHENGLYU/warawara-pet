@@ -8,6 +8,7 @@ final class PetController: ObservableObject {
     @Published private(set) var hopProgress: CGFloat = 0
     @Published private(set) var settleProgress: CGFloat = 0
     @Published private(set) var floatProgress: CGFloat = 0
+    @Published private(set) var floatDeformation: PetDeformation = .neutral
     @Published private(set) var dragDeformation: PetDeformation = .neutral
     @Published private(set) var curiosityPose: PetDeformation = .neutral
 
@@ -23,6 +24,7 @@ final class PetController: ObservableObject {
     private var autonomousTimer: Timer?
     private var awarenessTimer: Timer?
     private var awarenessTickCount = 0
+    private var curiosityTrackerTimer: Timer?
     private var curiosityDetector: CuriosityDetector
     private var curiosityPoseEstimator: CuriosityPoseEstimator
     private var floatBaseFrame: CGRect?
@@ -70,12 +72,19 @@ final class PetController: ObservableObject {
         case .idle:
             scheduleNextAutonomousAction()
             startAwarenessTimer()
-        case .curious, .sleepy:
+            stopCuriosityTracker()
+        case .curious:
             cancelAutonomousTimer()
             startAwarenessTimer()
+            startCuriosityTracker()
+        case .sleepy:
+            cancelAutonomousTimer()
+            startAwarenessTimer()
+            stopCuriosityTracker()
         default:
             cancelAutonomousTimer()
             stopAwarenessTimer()
+            stopCuriosityTracker()
         }
     }
 
@@ -176,18 +185,9 @@ final class PetController: ObservableObject {
                 scheduleNextAutonomousAction()
             }
         case .curious:
-            if curiosityDetector.isEngaged {
-                let direction = CGVector(
-                    dx: dx / max(distance, 1),
-                    dy: dy / max(distance, 1)
-                )
-                curiosityPoseEstimator.update(
-                    direction: direction,
-                    dwellProgress: 1,
-                    at: timestamp
-                )
-                publishCuriosityPoseIfChanged()
-            } else {
+            // The 30 Hz tracker owns the visual pose; the awareness tick
+            // only decides when to stop being curious.
+            if !curiosityDetector.isEngaged {
                 guard stateMachine.transition(to: .idle) else { return }
                 state = stateMachine.state
                 curiosityPose = .neutral
@@ -195,6 +195,57 @@ final class PetController: ObservableObject {
         default:
             break
         }
+    }
+
+    // MARK: - Curiosity visual tracking (active only while curious)
+    // State detection stays on the low-frequency awareness timer; this
+    // separate loop samples the cursor at ~30 Hz only while engaged so the
+    // following pose is fluid without permanent idle polling.
+
+    private func startCuriosityTracker() {
+        guard curiosityTrackerTimer == nil else { return }
+        curiosityTrackerTimer = Timer.scheduledTimer(
+            withTimeInterval: personalityTuning.curiosityTrackingInterval,
+            repeats: true
+        ) { [weak self] _ in
+            self?.curiosityTrackerTick()
+        }
+    }
+
+    private func stopCuriosityTracker() {
+        curiosityTrackerTimer?.invalidate()
+        curiosityTrackerTimer = nil
+    }
+
+    private func curiosityTrackerTick() {
+        curiosityTrackingTick(at: ProcessInfo.processInfo.systemUptime)
+    }
+
+    /// Deterministic entry point for the visual tracker; inert outside the
+    /// curious state.
+    func curiosityTrackingTick(at timestamp: TimeInterval) {
+        guard stateMachine.state == .curious else { return }
+        updateCuriosityPose(at: timestamp)
+    }
+
+    private func updateCuriosityPose(at timestamp: TimeInterval) {
+        guard let windowController else { return }
+        let frame = windowController.currentFrame
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        let mouse = mouseLocationProvider()
+        let dx = mouse.x - center.x
+        let dy = mouse.y - center.y
+        let distance = hypot(dx, dy)
+        let direction = CGVector(
+            dx: dx / max(distance, 1),
+            dy: dy / max(distance, 1)
+        )
+        curiosityPoseEstimator.update(
+            direction: direction,
+            dwellProgress: 1,
+            at: timestamp
+        )
+        publishCuriosityPoseIfChanged()
     }
 
     private func publishCuriosityPoseIfChanged() {
@@ -261,18 +312,28 @@ final class PetController: ObservableObject {
         motionController.startFloat(
             from: startFrame,
             parameters: parameters,
-            progress: { [weak self] progress in self?.floatProgress = progress },
+            progress: { [weak self] progress in
+                guard let self else { return }
+                self.floatProgress = progress
+                self.floatDeformation = FloatPoseMath.pose(
+                    at: progress,
+                    parameters: parameters,
+                    tuning: self.personalityTuning
+                )
+            },
             completion: { [weak self] _ in self?.finishFloat() }
         )
     }
 
     private func finishFloat() {
         floatProgress = 0
-        guard stateMachine.transition(to: .settling) else { return }
+        floatDeformation = .neutral
+        guard stateMachine.transition(to: .idle) else { return }
         state = stateMachine.state
-        let base = floatBaseFrame ?? windowController?.currentFrame ?? .zero
         floatBaseFrame = nil
-        startSettleMotion(from: base, to: base)
+        if let frame = windowController?.currentFrame {
+            positionStore.saveOrigin(frame.origin)
+        }
     }
 
     // MARK: - Click
@@ -284,6 +345,7 @@ final class PetController: ObservableObject {
             // the base), then descend gently after the reaction.
             motionController.cancelMotion()
             floatProgress = 0
+            floatDeformation = .neutral
             descentPending = true
             guard stateMachine.transition(to: .clicked) else { return }
         } else if stateMachine.state == .clicked {
@@ -332,6 +394,7 @@ final class PetController: ObservableObject {
         hopProgress = 0
         settleProgress = 0
         floatProgress = 0
+        floatDeformation = .neutral
         floatBaseFrame = nil
         descentPending = false
         curiosityPose = .neutral
