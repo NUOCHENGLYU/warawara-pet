@@ -4,8 +4,8 @@ A tiny native macOS desktop-pet application (private birthday gift, not for
 public distribution). The pet is a Warawara-like character that lives in a
 transparent, borderless floating window above the desktop.
 
-**Current status: Phase 1.6 — Soft-body-style drag deformation (awaiting
-real-Mac tuning).**
+**Current status: Phase 1.6 complete — soft-body-style drag deformation,
+verified on an M1 MacBook Air.**
 
 What exists today:
 
