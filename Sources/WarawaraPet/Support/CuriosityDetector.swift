@@ -62,4 +62,12 @@ struct CuriosityDetector {
 
     var isWatching: Bool { phase == .watching }
     var isEngaged: Bool { phase == .engaged }
+
+    /// Debug hook (Force Curious developer control): enters the engaged
+    /// phase immediately. Normal exit rules still apply.
+    mutating func forceEngage() {
+        phase = .engaged
+        dwellProgress = 1
+        insideSince = nil
+    }
 }

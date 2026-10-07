@@ -99,6 +99,26 @@ final class PetWindowController: NSObject {
         )
         quitItem.target = NSApp
         menu.addItem(quitItem)
+
+        if DebugControls.isEnabled {
+            let debugItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
+            let debugMenu = NSMenu()
+            let forceActions: [(String, Selector)] = [
+                ("Force Hop", #selector(PetController.forceHop)),
+                ("Force Float", #selector(PetController.forceFloat)),
+                ("Force Curious", #selector(PetController.forceCurious)),
+                ("Force Sleepy", #selector(PetController.forceSleepy)),
+                ("Force Sleeping", #selector(PetController.forceSleeping))
+            ]
+            for (title, selector) in forceActions {
+                let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+                item.target = controller
+                debugMenu.addItem(item)
+            }
+            debugItem.submenu = debugMenu
+            menu.addItem(debugItem)
+        }
+
         return menu
     }
 }

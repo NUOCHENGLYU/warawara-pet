@@ -156,14 +156,14 @@ real Mac. Key defaults:
 | `curiosityEnterRadius` / `curiosityExitRadius` | 110 / 170 pt | hysteresis band for noticing the cursor |
 | `curiosityDwellTime` | 1.2 s | cursor must linger before engaging |
 | `curiosityTrackingInterval` | 1/30 s | visual-tracking cadence (only while curious; raise to 1/60 if needed) |
-| `floatChance` | 0.2 | probability of a float instead of a hop |
-| `floatMinInterval` / `floatMaxInterval` | 75 / 210 s | floats are rare |
-| `floatDuration` | 5.5 s | full lift/hover/descent/settle cycle |
-| `floatLiftFraction` / `floatHoverFraction` / `floatDescentFraction` | 0.25 / 0.40 / 0.30 | phase split |
-| `floatHeight` | 100 pt | hover height |
-| `floatBobAmplitude` / `floatBobPeriod` | 6 pt / 2.2 s | low-frequency hover bob |
-| `floatSwayAmplitude` / `floatSwayPeriod` | 24 pt / 3.5 s | slow horizontal sway |
-| `floatHorizontalDrift` | 18 pt | slow smooth drift |
+| `floatChance` | 0.2 | probability of a float at each eligible fire |
+| `floatCooldown` | 75 s | minimum time between floats; hops continue meanwhile |
+| `floatDuration` | 6.5 s | full lift/hover/descent/settle cycle |
+| `floatLiftFraction` / `floatHoverFraction` / `floatDescentFraction` | 0.29 / 0.43 / 0.25 | phase split (~1.9 s / ~2.8 s / ~1.6 s) |
+| `floatHeight` | 145 pt | hover height |
+| `floatBobAmplitude` / `floatBobPeriod` | 16 pt / 2.2 s | low-frequency hover bob |
+| `floatSwayAmplitude` / `floatSwayPeriod` | 45 pt / 3.5 s | slow horizontal sway |
+| `floatHorizontalDrift` | 25 pt | slow smooth drift |
 | `floatBodyStretch` / `floatSwayLean` | 0.06 / 0.03 | low-amplitude body deformation |
 | `hopMinDelay` / `hopMaxDelay` | 6 / 14 s | hop cadence |
 | `sleepyTimeout` | 240 s | system inactivity before sleepy |
@@ -173,6 +173,23 @@ real Mac. Key defaults:
 | `awarenessTickInterval` | 0.15 s | curiosity/inactivity sampling |
 
 For quick sleep testing set `sleepyTimeout = 15` and `sleepTimeout = 30`.
+
+## Developer controls (debug menu)
+
+A right-click **Debug** submenu with Force Hop / Float / Curious / Sleepy /
+Sleeping is available only when debug controls are enabled:
+
+```bash
+defaults write com.birthday.warawarapet warawarapet.debug -bool true
+```
+
+(or launch with the argument `-WarawaraPetDebug`), then relaunch. Each
+Force action runs the real production state and motion path. Disable
+before the final gift build:
+
+```bash
+defaults delete com.birthday.warawarapet warawarapet.debug
+```
 
 ## Signing and notarization (future)
 
@@ -220,11 +237,15 @@ sign with `codesign --options runtime`, staple, and notarize with
 - [ ] Curious: slow cursor approach engages subtly; hovering near the
       threshold never flickers; moving in/out repeatedly stays stable;
       no chasing; click/drag always wins immediately
-- [ ] Float: watch for several minutes — floats are rare; the pet lifts
-      slowly, hovers clearly near peak height with a gentle bob (visibly
-      distinct from a hop), sways sideways, descends softly and lands with
-      no bounce; stays on-screen; clicking mid-float squashes in place then
-      descends smoothly; dragging mid-float takes over immediately
+- [ ] Float: use the Debug menu → Force Float repeatedly. The pet lifts
+      slowly (~2 s), hovers clearly near peak height with a gentle bob and
+      sway (~2.8 s, visibly distinct from a hop), descends slowly and lands
+      extremely softly with no bounce; stays on-screen; clicking mid-float
+      squashes in place then descends smoothly; dragging mid-float takes
+      over immediately
+- [ ] Debug menu: Force Hop / Float / Curious / Sleepy / Sleeping all work
+      and follow normal wake/exit rules; the menu is absent when the debug
+      defaults key is removed
 - [ ] Curious: slow cursor approach engages subtly; while curious the pet
       follows the cursor fluidly (no stepping/choppiness); hovering near the
       threshold never flickers; no chasing; click/drag always win immediately

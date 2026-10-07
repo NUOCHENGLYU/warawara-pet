@@ -17,18 +17,19 @@ struct PersonalityTuning {
 
     // Float — sustained drifting, clearly distinct from hop
     var floatChance: Double = 0.2
-    var floatMinInterval: TimeInterval = 75
-    var floatMaxInterval: TimeInterval = 210
-    var floatDuration: TimeInterval = 5.5
-    var floatLiftFraction: CGFloat = 0.25
-    var floatHoverFraction: CGFloat = 0.40
-    var floatDescentFraction: CGFloat = 0.30
-    var floatHeight: CGFloat = 100
-    var floatBobAmplitude: CGFloat = 6
+    /// Minimum time between floats. The scheduler keeps hopping normally;
+    /// floats only become eligible again after this cooldown.
+    var floatCooldown: TimeInterval = 75
+    var floatDuration: TimeInterval = 6.5
+    var floatLiftFraction: CGFloat = 0.29
+    var floatHoverFraction: CGFloat = 0.43
+    var floatDescentFraction: CGFloat = 0.25
+    var floatHeight: CGFloat = 145
+    var floatBobAmplitude: CGFloat = 16
     var floatBobPeriod: TimeInterval = 2.2
-    var floatSwayAmplitude: CGFloat = 24
+    var floatSwayAmplitude: CGFloat = 45
     var floatSwayPeriod: TimeInterval = 3.5
-    var floatHorizontalDrift: CGFloat = 18
+    var floatHorizontalDrift: CGFloat = 25
     var floatBodyStretch: CGFloat = 0.06
     var floatSwayLean: CGFloat = 0.03
     /// Descent duration used when a click interrupts a float and the pet

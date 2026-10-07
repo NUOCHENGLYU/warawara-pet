@@ -5,24 +5,30 @@ enum AutonomousAction: Equatable {
     case float
 }
 
-/// Pure, bounded autonomous-action scheduling: rolls a rare float or a hop
-/// with a randomized delay, driven by the injected random source.
+/// Pure, bounded autonomous scheduling.
+///
+/// The one-shot autonomous timer ALWAYS uses the short hop-range delay, so
+/// a rare float never blocks hop activity for long periods. Floats are
+/// gated instead by a cooldown: `floatEligibleSince` is the earliest time
+/// a float may be chosen again, and each eligible fire has only a small
+/// `floatChance` probability of producing a float.
 enum AutonomousScheduler {
-    static func nextDecision(
+    static func nextAction(
+        now: TimeInterval,
+        floatEligibleSince: TimeInterval,
         using rng: inout some RandomSource,
         tuning: PersonalityTuning
-    ) -> (action: AutonomousAction, delay: TimeInterval) {
-        if rng.nextUnit() < tuning.floatChance {
-            let delay = RandomBounds.randomDelay(
-                in: tuning.floatMinInterval...tuning.floatMaxInterval,
-                using: &rng
-            )
-            return (.float, delay)
+    ) -> AutonomousAction {
+        if now >= floatEligibleSince, rng.nextUnit() < tuning.floatChance {
+            return .float
         }
-        let delay = RandomBounds.randomDelay(
-            in: tuning.hopMinDelay...tuning.hopMaxDelay,
-            using: &rng
-        )
-        return (.hop, delay)
+        return .hop
+    }
+
+    static func nextDelay(
+        using rng: inout some RandomSource,
+        tuning: PersonalityTuning
+    ) -> TimeInterval {
+        RandomBounds.randomDelay(in: tuning.hopMinDelay...tuning.hopMaxDelay, using: &rng)
     }
 }
