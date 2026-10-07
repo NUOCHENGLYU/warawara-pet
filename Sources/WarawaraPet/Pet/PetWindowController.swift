@@ -92,6 +92,8 @@ final class PetWindowController: NSObject {
 
     private func makeContextMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.delegate = self
+        debugLogMenuState("menu opened")
         let quitItem = NSMenuItem(
             title: "Quit WarawaraPet",
             action: #selector(NSApplication.terminate(_:)),
@@ -120,5 +122,36 @@ final class PetWindowController: NSObject {
         }
 
         return menu
+    }
+}
+
+// MARK: - Context menu visibility
+// macOS demotes a borderless, non-key-capable, nonactivating panel when a
+// context menu shown from it closes. Re-front the panel after tracking
+// ends — on the next main-runloop tick — without ever making it key/main
+// and without activating the app. The panel is never recreated and its
+// frame/state/position/persistence are untouched.
+
+extension PetWindowController: NSMenuDelegate {
+    func menuDidClose(_ menu: NSMenu) {
+        debugLogMenuState("menu closed")
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.debugLogMenuState("re-front before")
+            self.panel?.orderFrontRegardless()
+            self.debugLogMenuState("re-front after")
+        }
+    }
+
+    private func debugLogMenuState(_ stage: String) {
+        guard DebugControls.isEnabled else { return }
+        let frame = panel.map { NSStringFromRect($0.frame) } ?? "nil"
+        let visible = panel?.isVisible ?? false
+        let occlusion = panel?.occlusionState.rawValue ?? 0
+        let level = panel.map { $0.level.rawValue } ?? 0
+        NSLog(
+            "%@",
+            "[WarawaraPetDebug] \(stage) frame=\(frame) visible=\(visible) occlusion=\(occlusion) level=\(level)"
+        )
     }
 }

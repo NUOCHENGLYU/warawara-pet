@@ -232,6 +232,9 @@ sign with `codesign --options runtime`, staple, and notarize with
 - [ ] pet cannot be dragged or hop off-screen (menu bar/Dock respected)
 - [ ] pet stays put when dragged to a second display (if available)
 - [ ] right-click → Quit works
+- [ ] right-click menu: dismiss it without choosing anything → the pet
+      stays visible (repeat several times); the active app keeps keyboard
+      focus throughout menu interaction
 - [ ] relaunch restores the last position (and falls back safely if that
       display was removed)
 - [ ] Curious: slow cursor approach engages subtly; hovering near the
