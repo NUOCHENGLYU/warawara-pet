@@ -168,11 +168,12 @@ final class PetWindowController: NSObject {
         let canHide = panel?.canHide ?? false
         let hidesOnDeactivate = panel?.hidesOnDeactivate ?? false
         let occlusion = panel?.occlusionState.rawValue ?? 0
+        let visible = panel?.isVisible ?? false
+        let isKey = panel?.isKeyWindow ?? false
+        let isMain = panel?.isMainWindow ?? false
         let stateText = controller.map { String(describing: $0.state) } ?? "nil"
         let message = "\(stage) isActive=\(app.isActive) isHidden=\(app.isHidden)"
-            + " visible=\(panel?.isVisible ?? false)"
-            + " isKey=\(panel?.isKeyWindow ?? false)"
-            + " isMain=\(panel?.isMainWindow ?? false)"
+            + " visible=\(visible) isKey=\(isKey) isMain=\(isMain)"
             + " frame=\(frame) windowNumber=\(windowNumber) level=\(level)"
             + " canHide=\(canHide) hidesOnDeactivate=\(hidesOnDeactivate)"
             + " occlusion=\(occlusion) state=\(stateText)"
