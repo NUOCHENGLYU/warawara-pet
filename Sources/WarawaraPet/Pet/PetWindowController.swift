@@ -108,6 +108,7 @@ final class PetWindowController: NSObject {
     /// therefore never interacts with the nonactivating panel, so opening
     /// or dismissing the menu cannot demote or hide the pet.
     private func popUpDetachedMenu() -> Bool {
-        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        let menu = makeContextMenu()
+        return menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
     }
 }
