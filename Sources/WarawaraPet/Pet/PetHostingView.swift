@@ -2,7 +2,11 @@ import AppKit
 import SwiftUI
 
 final class PetHostingView: NSHostingView<PetView> {
-    var contextMenuProvider: (() -> NSMenu)?
+    /// Shows the pet's context menu as a detached screen-coordinate popup,
+    /// deliberately NOT anchored to this view or its panel: view-anchored
+    /// menu tracking on a borderless nonactivating panel makes macOS demote
+    /// the panel when tracking ends. Returns true if an item was selected.
+    var contextMenuPopover: (() -> Bool)?
     weak var interactionController: PetInteractionController?
 
     private var hitRegion: EllipseHitRegion?
@@ -47,8 +51,8 @@ final class PetHostingView: NSHostingView<PetView> {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        if let menu = contextMenuProvider?() {
-            NSMenu.popUpContextMenu(menu, with: event, for: self)
+        if let popover = contextMenuPopover {
+            popover()
         } else {
             super.rightMouseDown(with: event)
         }

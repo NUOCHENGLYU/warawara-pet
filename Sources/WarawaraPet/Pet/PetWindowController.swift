@@ -49,8 +49,8 @@ final class PetWindowController: NSObject {
         let hostingView = PetHostingView(rootView: PetView(controller: petController))
         hostingView.frame = NSRect(origin: .zero, size: Self.petSize)
         hostingView.interactionController = interaction
-        hostingView.contextMenuProvider = { [weak self] in
-            self?.makeContextMenu() ?? NSMenu()
+        hostingView.contextMenuPopover = { [weak self] in
+            self?.popUpDetachedMenu() ?? false
         }
 
         panel.contentView = hostingView
@@ -92,8 +92,6 @@ final class PetWindowController: NSObject {
 
     private func makeContextMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.delegate = self
-        debugLogMenuState("menu opened")
         let quitItem = NSMenuItem(
             title: "Quit WarawaraPet",
             action: #selector(NSApplication.terminate(_:)),
@@ -123,35 +121,28 @@ final class PetWindowController: NSObject {
 
         return menu
     }
-}
 
-// MARK: - Context menu visibility
-// macOS demotes a borderless, non-key-capable, nonactivating panel when a
-// context menu shown from it closes. Re-front the panel after tracking
-// ends — on the next main-runloop tick — without ever making it key/main
-// and without activating the app. The panel is never recreated and its
-// frame/state/position/persistence are untouched.
-
-extension PetWindowController: NSMenuDelegate {
-    func menuDidClose(_ menu: NSMenu) {
-        debugLogMenuState("menu closed")
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.debugLogMenuState("re-front before")
-            self.panel?.orderFrontRegardless()
-            self.debugLogMenuState("re-front after")
-        }
+    /// Shows the pet's context menu as a detached popup at the current
+    /// global mouse location, intentionally NOT anchored to the hosting
+    /// view or the panel (`in: nil` = screen coordinates). Menu tracking
+    /// therefore never interacts with the nonactivating panel, so opening
+    /// or dismissing the menu cannot demote or hide the pet.
+    private func popUpDetachedMenu() -> Bool {
+        let menu = makeContextMenu()
+        debugLogMenuState("menu popup before")
+        let result = menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        debugLogMenuState("menu popup after popUpResult=\(result)")
+        return result
     }
 
     private func debugLogMenuState(_ stage: String) {
         guard DebugControls.isEnabled else { return }
         let frame = panel.map { NSStringFromRect($0.frame) } ?? "nil"
         let visible = panel?.isVisible ?? false
-        let occlusion = panel?.occlusionState.rawValue ?? 0
-        let level = panel.map { $0.level.rawValue } ?? 0
+        let stateText = controller.map { String(describing: $0.state) } ?? "nil"
         NSLog(
             "%@",
-            "[WarawaraPetDebug] \(stage) frame=\(frame) visible=\(visible) occlusion=\(occlusion) level=\(level)"
+            "[WarawaraPetDebug] \(stage) frame=\(frame) visible=\(visible) state=\(stateText)"
         )
     }
 }
