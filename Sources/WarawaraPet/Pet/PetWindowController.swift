@@ -169,15 +169,14 @@ final class PetWindowController: NSObject {
         let hidesOnDeactivate = panel?.hidesOnDeactivate ?? false
         let occlusion = panel?.occlusionState.rawValue ?? 0
         let stateText = controller.map { String(describing: $0.state) } ?? "nil"
-        MenuLifecycleLogger.log(
-            "\(stage) isActive=\(app.isActive) isHidden=\(app.isHidden)"
-                + " visible=\(panel?.isVisible ?? false)"
-                + " isKey=\(panel?.isKeyWindow ?? false)"
-                + " isMain=\(panel?.isMainWindow ?? false)"
-                + " frame=\(frame) windowNumber=\(windowNumber) level=\(level)"
-                + " canHide=\(canHide) hidesOnDeactivate=\(hidesOnDeactivate)"
-                + " occlusion=\(occlusion) state=\(stateText)"
-        )
+        let message = "\(stage) isActive=\(app.isActive) isHidden=\(app.isHidden)"
+            + " visible=\(panel?.isVisible ?? false)"
+            + " isKey=\(panel?.isKeyWindow ?? false)"
+            + " isMain=\(panel?.isMainWindow ?? false)"
+            + " frame=\(frame) windowNumber=\(windowNumber) level=\(level)"
+            + " canHide=\(canHide) hidesOnDeactivate=\(hidesOnDeactivate)"
+            + " occlusion=\(occlusion) state=\(stateText)"
+        MenuLifecycleLogger.log(message)
     }
 }
 
