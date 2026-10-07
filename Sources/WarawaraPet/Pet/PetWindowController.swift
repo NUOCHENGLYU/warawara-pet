@@ -12,6 +12,12 @@ final class PetWindowController: NSObject {
     private var interactionController: PetInteractionController?
     private var positionStore: PetPositionStore?
     private var screenObserver: NSObjectProtocol?
+    private var menuDebugObserverTokens: [NSObjectProtocol] = []
+
+    // TEMPORARY DIAGNOSTIC (menu investigation).
+    deinit {
+        MenuLifecycleLogger.log("PetWindowController deinit")
+    }
 
     var currentFrame: CGRect {
         panel?.frame ?? .zero
@@ -60,6 +66,9 @@ final class PetWindowController: NSObject {
         self.panel = panel
         self.hostingView = hostingView
 
+        installMenuDebugPanelObservers(for: panel)
+        logMenuDebugSnapshot("panel shown")
+
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -92,6 +101,8 @@ final class PetWindowController: NSObject {
 
     private func makeContextMenu() -> NSMenu {
         let menu = NSMenu()
+        // TEMPORARY DIAGNOSTIC delegate (menu investigation).
+        menu.delegate = self
         let quitItem = NSMenuItem(
             title: "Quit WarawaraPet",
             action: #selector(NSApplication.terminate(_:)),
@@ -109,6 +120,70 @@ final class PetWindowController: NSObject {
     /// or dismissing the menu cannot demote or hide the pet.
     private func popUpDetachedMenu() -> Bool {
         let menu = makeContextMenu()
-        return menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        logMenuDebugSnapshot("menu popup before")
+        let result = menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        logMenuDebugSnapshot("menu popup after result=\(result)")
+        // TEMPORARY DIAGNOSTIC post-close snapshots (menu investigation).
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.logMenuDebugSnapshot("menu close +nextTick")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.logMenuDebugSnapshot("menu close +100ms")
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.logMenuDebugSnapshot("menu close +500ms")
+            }
+        }
+        return result
+    }
+
+    // MARK: - TEMPORARY DIAGNOSTIC (menu investigation)
+    // Remove this section before the final gift build.
+
+    private func installMenuDebugPanelObservers(for panel: PetPanel) {
+        let names: [NSNotification.Name] = [
+            NSWindow.didBecomeKeyNotification,
+            NSWindow.didResignKeyNotification,
+            NSWindow.didBecomeMainNotification,
+            NSWindow.didResignMainNotification
+        ]
+        for name in names {
+            let token = NotificationCenter.default.addObserver(
+                forName: name,
+                object: panel,
+                queue: .main
+            ) { note in
+                MenuLifecycleLogger.log("panel \(note.name.rawValue)")
+            }
+            menuDebugObserverTokens.append(token)
+        }
+    }
+
+    private func logMenuDebugSnapshot(_ stage: String) {
+        let panel = self.panel
+        let app = NSApp
+        let frame = panel.map { NSStringFromRect($0.frame) } ?? "nil"
+        let windowNumber = panel?.windowNumber ?? -1
+        let level = panel.map { $0.level.rawValue } ?? -1
+        let canHide = panel?.canHide ?? false
+        let hidesOnDeactivate = panel?.hidesOnDeactivate ?? false
+        let occlusion = panel?.occlusionState.rawValue ?? 0
+        let stateText = controller.map { String(describing: $0.state) } ?? "nil"
+        MenuLifecycleLogger.log(
+            "\(stage) isActive=\(app.isActive) isHidden=\(app.isHidden)"
+                + " visible=\(panel?.isVisible ?? false)"
+                + " isKey=\(panel?.isKeyWindow ?? false)"
+                + " isMain=\(panel?.isMainWindow ?? false)"
+                + " frame=\(frame) windowNumber=\(windowNumber) level=\(level)"
+                + " canHide=\(canHide) hidesOnDeactivate=\(hidesOnDeactivate)"
+                + " occlusion=\(occlusion) state=\(stateText)"
+        )
+    }
+}
+
+// TEMPORARY DIAGNOSTIC (menu investigation). Remove before the final build.
+extension PetWindowController: NSMenuDelegate {
+    func menuDidClose(_ menu: NSMenu) {
+        logMenuDebugSnapshot("menuDidClose")
     }
 }

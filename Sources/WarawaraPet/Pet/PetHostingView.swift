@@ -51,10 +51,12 @@ final class PetHostingView: NSHostingView<PetView> {
     }
 
     override func rightMouseDown(with event: NSEvent) {
+        MenuLifecycleLogger.log("rightMouseDown")
         if let popover = contextMenuPopover {
             popover()
         } else {
             super.rightMouseDown(with: event)
         }
+        MenuLifecycleLogger.log("rightMouseDown returned")
     }
 }
