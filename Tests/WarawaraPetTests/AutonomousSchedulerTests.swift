@@ -38,7 +38,8 @@ final class AutonomousSchedulerTests: XCTestCase {
     }
 
     func testEligibleFloatFrequencyIsRareButPresent() {
-        let tuning = PersonalityTuning.default  // floatChance 0.2
+        var tuning = PersonalityTuning.default
+        tuning.floatChance = 0.2
         var rng = SeededRandomSource(seed: 42)
         var floats = 0
         for _ in 0..<2000 {
@@ -47,6 +48,13 @@ final class AutonomousSchedulerTests: XCTestCase {
             }
         }
         XCTAssertTrue((330...470).contains(floats), "unexpected float frequency: \(floats)")
+    }
+
+    func testTuningDefaultsAreSane() {
+        let tuning = PersonalityTuning.default
+        XCTAssertTrue((0...1).contains(tuning.floatChance))
+        XCTAssertGreaterThan(tuning.floatCooldownMin, 0)
+        XCTAssertLessThanOrEqual(tuning.floatCooldownMin, tuning.floatCooldownMax)
     }
 
     func testSchedulerIsDeterministicForSameSeed() {

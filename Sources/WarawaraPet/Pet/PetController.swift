@@ -1,7 +1,7 @@
 import AppKit
 import Combine
 
-final class PetController: NSObject, ObservableObject {
+final class PetController: ObservableObject {
     @Published private(set) var state: PetState = .idle {
         didSet { stateDidChange(from: oldValue) }
     }
@@ -30,7 +30,6 @@ final class PetController: NSObject, ObservableObject {
     private var floatBaseFrame: CGRect?
     private var descentPending = false
     private var nextFloatEligibleAt: TimeInterval = 0
-    private var debugSleepOverride = false
     private var clickRevertItem: DispatchWorkItem?
 
     var idleTimeProvider: SystemIdleTimeProviding = CGEventSourceIdleTimeProvider()
@@ -264,9 +263,6 @@ final class PetController: NSObject, ObservableObject {
     }
 
     private func evaluateSleepinessNow() {
-        // Debug Force Sleepy/Sleeping holds the state; cleared on any
-        // click/drag interaction so natural sleepiness resumes afterwards.
-        guard !debugSleepOverride else { return }
         let idleSeconds = idleTimeProvider.secondsSinceLastUserActivity()
         switch SleepinessEvaluator.decision(
             state: stateMachine.state,
@@ -327,7 +323,11 @@ final class PetController: NSObject, ObservableObject {
     private func startFloatMotion() {
         let parameters = FloatParameters.random(using: &rng, tuning: personalityTuning)
         floatBaseFrame = windowController?.currentFrame
-        nextFloatEligibleAt = ProcessInfo.processInfo.systemUptime + personalityTuning.floatCooldown
+        let cooldown = RandomBounds.randomDelay(
+            in: personalityTuning.floatCooldownMin...personalityTuning.floatCooldownMax,
+            using: &rng
+        )
+        nextFloatEligibleAt = ProcessInfo.processInfo.systemUptime + cooldown
         guard let startFrame = floatBaseFrame, let windowController else { return }
         motionController.startFloat(
             from: startFrame,
@@ -359,7 +359,6 @@ final class PetController: NSObject, ObservableObject {
     // MARK: - Click
 
     func handleClick() {
-        debugSleepOverride = false
         guard stateMachine.state != .hop else { return }
         if stateMachine.state == .float {
             // Click interrupts the float: squash in place (no snap back to
@@ -410,7 +409,6 @@ final class PetController: NSObject, ObservableObject {
     // MARK: - Drag
 
     func handleDragBegan(grabVector: CGVector) {
-        debugSleepOverride = false
         clickRevertItem?.cancel()
         motionController.cancelMotion()
         hopProgress = 0
@@ -493,63 +491,5 @@ final class PetController: NSObject, ObservableObject {
         if deformation != dragDeformation {
             dragDeformation = deformation
         }
-    }
-
-    // MARK: - Developer controls
-    // Available only when DebugControls.isEnabled. Each force runs the
-    // actual production code path for the target state (same motion
-    // controller, curves, deformation, clamping, and interruption rules).
-
-    private func cancelAllMotionAndResets() {
-        clickRevertItem?.cancel()
-        motionController.cancelMotion()
-        dragDecayTimer?.invalidate()
-        dragDecayTimer = nil
-        hopProgress = 0
-        settleProgress = 0
-        floatProgress = 0
-        floatDeformation = .neutral
-        dragDeformation = .neutral
-        curiosityPose = .neutral
-        floatBaseFrame = nil
-        descentPending = false
-    }
-
-    @objc func forceHop() {
-        cancelAllMotionAndResets()
-        debugSleepOverride = false
-        stateMachine.forceTransition(to: .hop)
-        state = stateMachine.state
-        startHopMotion()
-    }
-
-    @objc func forceFloat() {
-        cancelAllMotionAndResets()
-        debugSleepOverride = false
-        stateMachine.forceTransition(to: .float)
-        state = stateMachine.state
-        startFloatMotion()
-    }
-
-    @objc func forceCurious() {
-        cancelAllMotionAndResets()
-        debugSleepOverride = false
-        curiosityDetector.forceEngage()
-        stateMachine.forceTransition(to: .curious)
-        state = stateMachine.state
-    }
-
-    @objc func forceSleepy() {
-        cancelAllMotionAndResets()
-        debugSleepOverride = true
-        stateMachine.forceTransition(to: .sleepy)
-        state = stateMachine.state
-    }
-
-    @objc func forceSleeping() {
-        cancelAllMotionAndResets()
-        debugSleepOverride = true
-        stateMachine.forceTransition(to: .sleeping)
-        state = stateMachine.state
     }
 }

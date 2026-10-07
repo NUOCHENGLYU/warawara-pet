@@ -15,11 +15,15 @@ struct PersonalityTuning {
     /// initial target and can be raised to 60 Hz for smoother tracking.
     var curiosityTrackingInterval: TimeInterval = 1.0 / 30.0
 
-    // Float — sustained drifting, clearly distinct from hop
-    var floatChance: Double = 0.2
-    /// Minimum time between floats. The scheduler keeps hopping normally;
-    /// floats only become eligible again after this cooldown.
-    var floatCooldown: TimeInterval = 75
+    // Float — sustained drifting, clearly distinct from hop.
+    // NOTE: floatChance and the cooldown range below are TEMPORARY high-
+    // frequency values for M1 Air tuning; revisit before the final build.
+    var floatChance: Double = 0.75
+    /// Minimum/maximum time between floats. The scheduler keeps hopping
+    /// normally; floats only become eligible again after this cooldown,
+    /// which is drawn randomly from the range at each float start.
+    var floatCooldownMin: TimeInterval = 20
+    var floatCooldownMax: TimeInterval = 35
     var floatDuration: TimeInterval = 6.5
     var floatLiftFraction: CGFloat = 0.29
     var floatHoverFraction: CGFloat = 0.43

@@ -93,10 +93,4 @@ struct PetStateMachine {
         state = newState
         return true
     }
-
-    /// Debug-only bypass of the transition table, used exclusively by the
-    /// Force developer controls. Never used by normal runtime logic.
-    mutating func forceTransition(to newState: PetState) {
-        state = newState
-    }
 }
