@@ -161,7 +161,7 @@ final class PetWindowController: NSObject {
 
     private func logMenuDebugSnapshot(_ stage: String) {
         let panel = self.panel
-        let app = NSApp
+        let app = NSApplication.shared
         let frame = panel.map { NSStringFromRect($0.frame) } ?? "nil"
         let windowNumber = panel?.windowNumber ?? -1
         let level = panel.map { $0.level.rawValue } ?? -1
