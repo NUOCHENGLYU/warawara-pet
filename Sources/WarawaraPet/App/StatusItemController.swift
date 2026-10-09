@@ -1,28 +1,28 @@
 import AppKit
 
-/// Owns the menu-bar status item that provides app-wide controls
-/// (currently just Quit). Completely independent of PetPanel,
-/// PetHostingView, and pet interaction state: opening or closing this
-/// menu never touches the pet window.
+/// Menu-bar status item that acts as a direct Quit button: a single
+/// left-click terminates the app immediately. No NSMenu is created or
+/// presented anywhere, because menu tracking made macOS hide the
+/// nonactivating pet panel when a menu closed.
 final class StatusItemController: NSObject {
     private var statusItem: NSStatusItem?
 
     override init() {
         super.init()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.title = "W"
-        item.button?.toolTip = "WarawaraPet"
-
-        let menu = NSMenu()
-        let quitItem = NSMenuItem(
-            title: "Quit WarawaraPet",
-            action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"
-        )
-        quitItem.target = NSApp
-        menu.addItem(quitItem)
-        item.menu = menu
-
+        if let button = item.button {
+            button.image = NSImage(
+                systemSymbolName: "xmark.circle",
+                accessibilityDescription: "Quit WarawaraPet"
+            )
+            button.toolTip = "Quit WarawaraPet"
+            button.target = self
+            button.action = #selector(quitApp)
+        }
         statusItem = item
+    }
+
+    @objc private func quitApp() {
+        NSApp.terminate(nil)
     }
 }

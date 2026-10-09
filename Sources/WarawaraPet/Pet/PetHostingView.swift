@@ -45,7 +45,6 @@ final class PetHostingView: NSHostingView<PetView> {
         interactionController?.mouseUp(at: event)
     }
 
-    // Right-click intentionally does nothing: presenting an NSMenu from the
-    // pet panel made macOS hide the panel on menu close, so Quit moved to a
-    // menu-bar status item instead (see StatusItemController).
+    // Right-click intentionally does nothing; the app presents no NSMenu
+    // anywhere. Quit is a direct-click status item (StatusItemController).
 }
