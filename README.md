@@ -4,22 +4,18 @@ A tiny native macOS desktop-pet application (private birthday gift, not for
 public distribution). The pet is a Warawara-like character that lives in a
 transparent, borderless floating window above the desktop.
 
-**Current status: Phase 2 — personality (curious/float/sleepy/sleeping),
-awaiting real-Mac validation.**
+**Current status: Phase 3 — multi-Warawara group behavior (candidate,
+awaiting real-Mac acceptance).**
 
 What exists today:
 
 - accessory app (no Dock icon), transparent borderless non-activating panel
   that can never become key/main — clicks never steal keyboard focus
 - placeholder pet (procedurally drawn blob — no copyrighted artwork)
-- gentle idle bob, randomized hops (6–14 s apart) with squash/stretch
-- rare soft floats: slow lift, buoyant sway, gentle return; drag or click
-  can interrupt at any time
-- curiosity: after the cursor dwells nearby the pet leans/stretches toward
-  it subtly (distance hysteresis — no flicker, no chasing); never engages
-  while hopping, floating, settling, dragged, or sleeping
-- sleep: after 4 min of system inactivity the pet gets sleepy, after 8 min
-  it sleeps (slow breathing, tiny Z); click or drag wakes it smoothly
+- gentle idle bob, randomized hops with squash/stretch
+- soft floats: slow lift, sustained hover with bob/sway, slow descent
+- curiosity: subtle lean/stretch toward a lingering cursor
+- sleep: sleepy after inactivity, sleeping with breathing and a tiny Z
 - click reaction (squash + rebound); quit via a single click on the
   menu-bar quit button
 - mouse dragging with soft-body-style deformation (Phase 1.6, M1-verified)
@@ -29,10 +25,15 @@ What exists today:
   the saved display no longer exists)
 - tight elliptical hit region around the pet body
 - `.stationary` collection behavior so the pet stays visible during Show
-  Desktop / Mission Control (unverified on a real Mac)
+  Desktop / Mission Control
+- **Phase 3:** a manually triggered companion group sequence — 3–5
+  temporary non-interactive Warawara appear around the main pet, gather
+  loosely, hover organically, ascend with gentle acceleration, and fade
+  out; clicking or dragging the main pet cancels the sequence instantly
 
-No group, gathering, ascent, or birthday behavior yet. No sprites, no
-sound, no network, no third-party dependencies.
+No group randomness in the scheduler yet, no birthday behavior, no final
+artwork, no sound, no network, no NSMenu (menu-bar quit is a direct
+button), no third-party dependencies.
 
 ---
 
@@ -175,6 +176,38 @@ real Mac. Key defaults:
 | `awarenessTickInterval` | 0.15 s | curiosity/inactivity sampling |
 
 For quick sleep testing set `sleepyTimeout = 15` and `sleepTimeout = 30`.
+
+## Phase 3 group sequence (test trigger)
+
+The companion group sequence is manually triggered only (not part of the
+random scheduler yet). To trigger one sequence at the next launch:
+
+```bash
+defaults write com.birthday.warawarapet warawarapet.forceGroupOnce -bool true
+```
+
+Then launch the app. The flag is consumed automatically: the app waits
+2–4 seconds, runs one group sequence, and resets the flag so normal
+launches are unaffected.
+
+Phase 3 real-Mac checklist:
+
+- [ ] companions appear staggered around the pet (not stacked, not
+      off-screen)
+- [ ] gathering is smooth and eased; companions end up loosely grouped,
+      not on one point
+- [ ] companions do not move identically (different scale/bob/drift)
+- [ ] hover looks organic (2–4 s, gentle bobbing)
+- [ ] ascent is slow and soft (3–5 s), companions leave through the top
+- [ ] all companion windows are gone after the sequence (zero leftovers)
+- [ ] the main pet stays in place and resumes normal idle behavior after
+- [ ] clicking the main pet during any phase cancels the sequence
+      immediately with no orphan windows
+- [ ] dragging the main pet during any phase cancels the sequence
+      immediately
+- [ ] keyboard focus remains with the previously active app
+- [ ] Show Desktop still works
+- [ ] menu-bar quit button still exits immediately
 
 ## Signing and notarization (future)
 
