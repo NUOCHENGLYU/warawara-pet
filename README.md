@@ -20,7 +20,7 @@ What exists today:
   while hopping, floating, settling, dragged, or sleeping
 - sleep: after 4 min of system inactivity the pet gets sleepy, after 8 min
   it sleeps (slow breathing, tiny Z); click or drag wakes it smoothly
-- click reaction (squash + rebound), right-click → Quit
+- click reaction (squash + rebound); quit via the menu-bar status item
 - mouse dragging with soft-body-style deformation (Phase 1.6, M1-verified)
 - position clamping inside the visible screen area (menu bar/Dock excluded),
   multi-display aware, re-clamps on display changes
@@ -77,8 +77,9 @@ macOS UI behavior works until it has been observed on a real Mac.
    If macOS still blocks it: System Settings → Privacy & Security →
    "Open Anyway".
 4. The pet appears near the bottom-right of the main display (or where it
-   was last left). Click it, drag it around, watch it hop. Right-click it →
-   "Quit WarawaraPet".
+   was last left). Click it, drag it around, watch it hop. To quit, use the
+   **WarawaraPet menu-bar item → Quit WarawaraPet** (right-clicking the
+   pet itself currently does nothing).
 
 ## Running from source on a Mac
 
@@ -214,10 +215,10 @@ sign with `codesign --options runtime`, staple, and notarize with
       no long oscillation) and the settle bounce still works
 - [ ] pet cannot be dragged or hop off-screen (menu bar/Dock respected)
 - [ ] pet stays put when dragged to a second display (if available)
-- [ ] right-click → Quit works
-- [ ] right-click menu: dismiss it without choosing anything → the pet
-      stays visible (repeat several times); the active app keeps keyboard
-      focus throughout menu interaction
+- [ ] menu-bar WarawaraPet item exists; open/close its menu repeatedly —
+      the pet stays visible and the active app keeps keyboard focus
+- [ ] Quit WarawaraPet from the menu-bar item exits normally
+- [ ] right-clicking the pet does nothing (no menu, no harm)
 - [ ] relaunch restores the last position (and falls back safely if that
       display was removed)
 - [ ] Curious: slow cursor approach engages subtly; hovering near the
