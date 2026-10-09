@@ -52,7 +52,10 @@ final class GroupMotionMathTests: XCTestCase {
         let clamped = GroupMotionMath.spawnPosition(
             mainCenter: center, offset: farAway, visibleFrame: frame, margin: 16
         )
-        XCTAssertTrue(frame.insetBy(dx: 16, dy: 16).contains(clamped))
+        XCTAssertGreaterThanOrEqual(clamped.x, frame.minX + 16)
+        XCTAssertLessThanOrEqual(clamped.x, frame.maxX - 16)
+        XCTAssertGreaterThanOrEqual(clamped.y, frame.minY + 16)
+        XCTAssertLessThanOrEqual(clamped.y, frame.maxY - 16)
         XCTAssertEqual(
             GroupMotionMath.spawnPosition(
                 mainCenter: center, offset: near, visibleFrame: frame, margin: 16
@@ -119,8 +122,10 @@ final class GroupMotionMathTests: XCTestCase {
     }
 
     func testCompanionPhaseOffsetsProduceDifferentMotion() {
-        let a = makeConfig(seed: 3, id: 0)
-        let b = makeConfig(seed: 3, id: 1)
+        // Configs are drawn from ONE rng stream, like production.
+        var rng = SeededRandomSource(seed: 3)
+        let a = CompanionConfig.make(id: 0, using: &rng, tuning: tuning)
+        let b = CompanionConfig.make(id: 1, using: &rng, tuning: tuning)
         XCTAssertNotEqual(a.bobPhase, b.bobPhase)
         var allIdentical = true
         for i in 0...100 {
