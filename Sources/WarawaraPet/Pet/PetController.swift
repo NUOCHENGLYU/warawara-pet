@@ -35,6 +35,13 @@ final class PetController: ObservableObject {
     var idleTimeProvider: SystemIdleTimeProviding = CGEventSourceIdleTimeProvider()
     var mouseLocationProvider: () -> CGPoint = { NSEvent.mouseLocation }
 
+    /// Notified whenever the user interacts with the main pet (click or
+    /// drag). The group sequence uses this to cancel itself immediately:
+    /// user interaction always wins.
+    var onUserInteraction: (() -> Void)?
+
+    private var groupSequenceActive = false
+
     var isInTransientMotion: Bool {
         stateMachine.state == .hop || stateMachine.state == .float || stateMachine.state == .dragged
     }
@@ -71,7 +78,13 @@ final class PetController: ObservableObject {
         guard state != oldState else { return }
         switch state {
         case .idle:
-            scheduleNextAutonomousAction()
+            if groupSequenceActive {
+                // A group sequence is running: keep autonomous hop/float
+                // paused until it ends.
+                cancelAutonomousTimer()
+            } else {
+                scheduleNextAutonomousAction()
+            }
             startAwarenessTimer()
             stopCuriosityTracker()
         case .curious:
@@ -86,6 +99,19 @@ final class PetController: ObservableObject {
             cancelAutonomousTimer()
             stopAwarenessTimer()
             stopCuriosityTracker()
+        }
+    }
+
+    /// Called by the group sequence when it starts (true) and fully ends
+    /// (false) so autonomous hop/float scheduling pauses during the
+    /// sequence and resumes afterwards.
+    func setGroupSequenceActive(_ active: Bool) {
+        guard active != groupSequenceActive else { return }
+        groupSequenceActive = active
+        if active {
+            cancelAutonomousTimer()
+        } else if stateMachine.state == .idle {
+            scheduleNextAutonomousAction()
         }
     }
 
@@ -359,6 +385,7 @@ final class PetController: ObservableObject {
     // MARK: - Click
 
     func handleClick() {
+        onUserInteraction?()
         guard stateMachine.state != .hop else { return }
         if stateMachine.state == .float {
             // Click interrupts the float: squash in place (no snap back to
@@ -409,6 +436,7 @@ final class PetController: ObservableObject {
     // MARK: - Drag
 
     func handleDragBegan(grabVector: CGVector) {
+        onUserInteraction?()
         clickRevertItem?.cancel()
         motionController.cancelMotion()
         hopProgress = 0

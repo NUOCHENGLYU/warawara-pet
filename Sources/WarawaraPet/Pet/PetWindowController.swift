@@ -12,6 +12,7 @@ final class PetWindowController: NSObject {
     private var interactionController: PetInteractionController?
     private var positionStore: PetPositionStore?
     private var screenObserver: NSObjectProtocol?
+    private var groupSequenceController: GroupSequenceController?
 
     var currentFrame: CGRect {
         panel?.frame ?? .zero
@@ -67,6 +68,25 @@ final class PetWindowController: NSObject {
         }
 
         petController.startAutonomousBehavior()
+        wireGroupSequence()
+    }
+
+    // MARK: - Group sequence (Phase 3)
+
+    private func wireGroupSequence() {
+        let sequence = GroupSequenceController(windowController: self)
+        sequence.onActiveChanged = { [weak self] active in
+            self?.controller?.setGroupSequenceActive(active)
+        }
+        controller?.onUserInteraction = { [weak self] in
+            // User interaction always wins: cancel the group sequence.
+            self?.groupSequenceController?.cancel()
+        }
+        groupSequenceController = sequence
+
+        GroupLaunchTrigger.startIfRequested { [weak self] in
+            self?.groupSequenceController?.start()
+        }
     }
 
     func saveCurrentPosition() {
