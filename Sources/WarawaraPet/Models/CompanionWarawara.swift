@@ -24,11 +24,11 @@ struct GroupTuning {
     var gatherMaxDuration: TimeInterval = 4.5
 
     // Loose formation slots (spacing / separation)
-    var formationRadius: CGFloat = 78
-    var formationRadiusVariation: CGFloat = 10
-    var preferredMainPetRadius: CGFloat = 70
+    var formationRadius: CGFloat = 115
+    var formationRadiusVariation: CGFloat = 12
+    var preferredMainPetRadius: CGFloat = 90
     var companionMinSpacing: CGFloat = 88
-    var separationStrength: CGFloat = 0.5
+    var separationStrength: CGFloat = 0.6
     var formationMargin: CGFloat = 24
 
     // Hover (position-continuous with gathering)
@@ -42,7 +42,7 @@ struct GroupTuning {
     var ascentRiseHeightMin: CGFloat = 700
     var ascentRiseHeightMax: CGFloat = 1100
     var ascentSpringStrength: CGFloat = 1.1
-    var ascentDamping: CGFloat = 0.7
+    var ascentDamping: CGFloat = 2.1
     var ascentSwayAmplitude: CGFloat = 10
     var ascentSwayPeriod: TimeInterval = 2.8
     var fanSpreadRange: ClosedRange<CGFloat> = 130...280

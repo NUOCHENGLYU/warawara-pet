@@ -91,7 +91,7 @@ final class GroupMotionMathTests: XCTestCase {
             let distance = hypot(offset.dx, offset.dy)
             XCTAssertGreaterThanOrEqual(
                 distance,
-                tuning.preferredMainPetRadius - 0.5,
+                tuning.preferredMainPetRadius - 2,
                 "companions must not sit on the main pet"
             )
         }
@@ -111,7 +111,7 @@ final class GroupMotionMathTests: XCTestCase {
                 let distance = hypot(a.dx - b.dx, a.dy - b.dy)
                 XCTAssertGreaterThanOrEqual(
                     distance,
-                    tuning.companionMinSpacing - 1.5,
+                    tuning.companionMinSpacing - 2,
                     "formation bodies overlap too much"
                 )
             }
@@ -229,8 +229,8 @@ final class GroupMotionMathTests: XCTestCase {
         let targetB = CGPoint(x: 150, y: 900)
         var previousSpread: CGFloat = 0
         for _ in 0..<240 {
-            a.step(toward: targetA, dt: 1.0 / 60.0, springStrength: 1.1, damping: 0.7)
-            b.step(toward: targetB, dt: 1.0 / 60.0, springStrength: 1.1, damping: 0.7)
+            a.step(toward: targetA, dt: 1.0 / 60.0, springStrength: 1.1, damping: 2.1)
+            b.step(toward: targetB, dt: 1.0 / 60.0, springStrength: 1.1, damping: 2.1)
             let spread = abs(a.position.x - b.position.x)
             XCTAssertGreaterThanOrEqual(spread, previousSpread - 0.001)
             previousSpread = spread

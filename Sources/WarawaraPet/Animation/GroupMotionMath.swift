@@ -124,7 +124,7 @@ enum GroupMotionMath {
 
         // Separation relaxation: pairwise spacing plus a repulsor at the
         // main pet center so companions keep their distance from it.
-        for _ in 0..<4 {
+        for _ in 0..<6 {
             positions = relaxSpacing(
                 positions: positions,
                 minSpacing: tuning.companionMinSpacing,
