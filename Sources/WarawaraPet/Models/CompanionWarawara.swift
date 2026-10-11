@@ -14,25 +14,47 @@ struct GroupTuning {
     var appearFadeDuration: TimeInterval = 0.6
     var spawnMargin: CGFloat = 16
 
-    // Gathering
-    var gatherMinDuration: TimeInterval = 1.6
-    var gatherDurationVariation: TimeInterval = 0.9
-    var gatherOffsetMinRadius: CGFloat = 30
-    var gatherOffsetMaxRadius: CGFloat = 70
+    // Inertial gathering (second-order spring/damper motion)
+    var gatherSpringStrength: CGFloat = 8
+    var gatherSpringVariation: CGFloat = 1.5
+    var gatherDamping: CGFloat = 5.5
+    var gatherDampingVariation: CGFloat = 1.0
+    var gatherSettleSpeed: CGFloat = 6
+    var gatherSettleDistance: CGFloat = 6
+    var gatherMaxDuration: TimeInterval = 4.5
 
-    // Hover
-    var hoverDuration: TimeInterval = 3.0
+    // Loose formation slots (spacing / separation)
+    var formationRadius: CGFloat = 78
+    var formationRadiusVariation: CGFloat = 10
+    var preferredMainPetRadius: CGFloat = 70
+    var companionMinSpacing: CGFloat = 88
+    var separationStrength: CGFloat = 0.5
+    var formationMargin: CGFloat = 24
+
+    // Hover (position-continuous with gathering)
+    var hoverDuration: TimeInterval = 2.8
+    var hoverRampInDuration: TimeInterval = 0.7
     var hoverBobAmplitude: CGFloat = 6
     var hoverBobPeriod: TimeInterval = 2.6
     var hoverDriftAmplitude: CGFloat = 10
 
-    // Ascent
-    var ascentDuration: TimeInterval = 4.0
-    var ascentBaseSpeed: CGFloat = 60
-    var ascentAcceleration: CGFloat = 22
-    var ascentWanderAmplitude: CGFloat = 14
+    // Ascent fan-out (per-companion exit trajectories)
+    var ascentRiseHeightMin: CGFloat = 700
+    var ascentRiseHeightMax: CGFloat = 1100
+    var ascentSpringStrength: CGFloat = 1.1
+    var ascentDamping: CGFloat = 0.7
+    var ascentSwayAmplitude: CGFloat = 10
+    var ascentSwayPeriod: TimeInterval = 2.8
+    var fanSpreadRange: ClosedRange<CGFloat> = 130...280
+    var fanAngleJitter: CGFloat = 0.25
+    var exitStaggerRange: ClosedRange<TimeInterval> = 0...0.5
+    var ascentMaxDuration: TimeInterval = 7
+    var exitFadeDuration: TimeInterval = 0.5
+    var exitFadeTopMargin: CGFloat = 60
+    var exitTopMargin: CGFloat = 40
+    var exitSideMargin: CGFloat = 60
 
-    // Fade
+    // Fade (cancellation)
     var fadeOutDuration: TimeInterval = 0.4
 
     // Companion visual variety
@@ -44,20 +66,28 @@ struct GroupTuning {
     static let `default` = GroupTuning()
 }
 
-/// Per-companion variation. All offsets are relative to the main pet's
-/// center. Generated deterministically from a random source + index.
+/// Per-companion variation, generated once per sequence. All spatial
+/// values are relative to the main pet's center and stay stable for the
+/// whole sequence (never re-randomized at phase boundaries).
 struct CompanionConfig: Equatable {
     let id: Int
     let spawnOffset: CGVector
-    let gatherOffset: CGVector
     let appearDelay: TimeInterval
-    let gatherDuration: TimeInterval
     let bobPhase: CGFloat
     let driftPhase: CGFloat
     let scale: CGFloat
+    let springStrength: CGFloat
+    let damping: CGFloat
+    /// Persistent fan-out trajectory for the ascent: horizontal direction
+    /// and magnitude plus vertical rise (with per-companion speed
+    /// variation baked into the rise height).
+    let exitTargetOffset: CGVector
+    let exitStagger: TimeInterval
 
     static func make(
         id: Int,
+        mainCenter: CGPoint,
+        visibleFrame: CGRect,
         using rng: inout some RandomSource,
         tuning: GroupTuning
     ) -> CompanionConfig {
@@ -75,35 +105,47 @@ struct CompanionConfig: Equatable {
             dy: sin(spawnAngle) * spawnRadius * 0.7 + spawnElevation
         )
 
-        let gatherAngle = spawnAngle
-            + .pi * (0.7 + CGFloat(id % 2) * 0.6)
-            + RandomBounds.randomCGFloat(in: -0.3...0.3, using: &rng)
-        let gatherRadius = RandomBounds.randomCGFloat(
-            in: tuning.gatherOffsetMinRadius...tuning.gatherOffsetMaxRadius, using: &rng
-        )
-        let gatherOffset = CGVector(
-            dx: cos(gatherAngle) * gatherRadius,
-            dy: sin(gatherAngle) * gatherRadius * 0.6
-                + RandomBounds.randomCGFloat(in: -12...18, using: &rng)
-        )
-
         let appearDelay = TimeInterval(id) * tuning.appearStagger
             + RandomBounds.randomDelay(in: 0...0.15, using: &rng)
-        let gatherDuration = tuning.gatherMinDuration
-            + RandomBounds.randomDelay(in: 0...tuning.gatherDurationVariation, using: &rng)
         let bobPhase = RandomBounds.randomCGFloat(in: 0...(2 * .pi), using: &rng)
         let driftPhase = RandomBounds.randomCGFloat(in: 0...(2 * .pi), using: &rng)
         let scale = RandomBounds.randomCGFloat(in: tuning.companionScaleRange, using: &rng)
+        let springStrength = tuning.gatherSpringStrength
+            + RandomBounds.randomCGFloat(in: -tuning.gatherSpringVariation...tuning.gatherSpringVariation, using: &rng)
+        let damping = tuning.gatherDamping
+            + RandomBounds.randomCGFloat(in: -tuning.gatherDampingVariation...tuning.gatherDampingVariation, using: &rng)
+
+        // Fan-out direction across the group: upper-left ... upper-right,
+        // jittered, with per-companion spread and rise variation.
+        let count = max(tuning.companionCount, 2)
+        let fanAngle = .pi * (0.15 + 0.7 * CGFloat(id) / CGFloat(count - 1))
+            + RandomBounds.randomCGFloat(in: -tuning.fanAngleJitter...tuning.fanAngleJitter, using: &rng)
+        let spread = RandomBounds.randomCGFloat(in: tuning.fanSpreadRange, using: &rng)
+        let rise = RandomBounds.randomCGFloat(
+            in: tuning.ascentRiseHeightMin...tuning.ascentRiseHeightMax, using: &rng
+        )
+        let exitStagger = RandomBounds.randomDelay(
+            in: tuning.exitStaggerRange, using: &rng
+        )
+        let rawExit = CGVector(dx: cos(fanAngle) * spread, dy: rise)
+        let exitTargetOffset = GroupMotionMath.clampExitOffset(
+            mainCenter: mainCenter,
+            offset: rawExit,
+            visibleFrame: visibleFrame,
+            sideMargin: tuning.exitSideMargin
+        )
 
         return CompanionConfig(
             id: id,
             spawnOffset: spawnOffset,
-            gatherOffset: gatherOffset,
             appearDelay: appearDelay,
-            gatherDuration: gatherDuration,
             bobPhase: bobPhase,
             driftPhase: driftPhase,
-            scale: scale
+            scale: scale,
+            springStrength: max(springStrength, 0.5),
+            damping: max(damping, 0.1),
+            exitTargetOffset: exitTargetOffset,
+            exitStagger: exitStagger
         )
     }
 }
@@ -113,23 +155,44 @@ struct CompanionWarawara: Equatable {
 }
 
 /// Pure model for the group sequence: explicit phase machine plus the
-/// companion set. The AppKit controller drives this model and maps
+/// companion set and the stable loose-formation targets generated once at
+/// sequence start. The AppKit controller drives this model and maps
 /// companions to panels; tests never need real windows.
 struct GroupSequenceModel {
     private(set) var machine = GroupSequenceStateMachine()
     private(set) var companions: [CompanionWarawara] = []
+    /// Stable formation offsets from the main pet's center, one per
+    /// companion, generated once for the whole sequence.
+    private(set) var formationOffsets: [CGVector] = []
 
     var state: GroupSequenceState { machine.state }
 
     @discardableResult
     mutating func begin(
+        mainCenter: CGPoint,
+        visibleFrame: CGRect,
         using rng: inout some RandomSource,
         tuning: GroupTuning
     ) -> Bool {
         guard machine.transition(to: .appearing) else { return false }
         companions = (0..<tuning.companionCount).map { id in
-            CompanionWarawara(config: CompanionConfig.make(id: id, using: &rng, tuning: tuning))
+            CompanionWarawara(
+                config: CompanionConfig.make(
+                    id: id,
+                    mainCenter: mainCenter,
+                    visibleFrame: visibleFrame,
+                    using: &rng,
+                    tuning: tuning
+                )
+            )
         }
+        formationOffsets = GroupMotionMath.formationOffsets(
+            count: tuning.companionCount,
+            mainCenter: mainCenter,
+            visibleFrame: visibleFrame,
+            using: &rng,
+            tuning: tuning
+        )
         return true
     }
 
