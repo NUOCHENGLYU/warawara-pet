@@ -36,7 +36,7 @@ struct PetView: View {
                     .offset(x: 22, y: 42)
             }
         }
-        .frame(width: 200, height: 200, alignment: .bottom)
+        .frame(width: 200, height: 226, alignment: .bottom)
         .animation(bobAnimation, value: bobbing)
         .onAppear {
             bobbing = true

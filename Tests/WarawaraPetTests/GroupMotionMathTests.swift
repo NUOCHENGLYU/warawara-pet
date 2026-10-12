@@ -269,44 +269,64 @@ final class GroupMotionMathTests: XCTestCase {
         XCTAssertGreaterThan(previousSpread, 100)
     }
 
-    func testSpatialExitRequiresEntireBodyBeyondTopEdge() {
+    func testSpatialExitRequiresEntireBodyBeyondVisibleTopEdge() {
         let panelSize = CompanionMetrics.size
+        let topY: CGFloat = 740  // visibleFrame.maxY of the test layout
         let onScreen = CGRect(x: 300, y: 600, width: panelSize, height: panelSize)
         XCTAssertFalse(
             GroupMotionMath.isFullyAboveTopEdge(
-                panelFrame: onScreen, physicalFrame: physicalFrame, margin: tuning.exitTopMargin
+                panelFrame: onScreen, topY: topY, margin: tuning.exitTopMargin
             )
         )
-        let crossing = CGRect(x: 300, y: 780, width: panelSize, height: panelSize)
+        // Body crossing: still partially visible -> not recyclable.
+        let crossing = CGRect(x: 300, y: 700, width: panelSize, height: panelSize)
         XCTAssertFalse(
             GroupMotionMath.isFullyAboveTopEdge(
-                panelFrame: crossing, physicalFrame: physicalFrame, margin: tuning.exitTopMargin
+                panelFrame: crossing, topY: topY, margin: tuning.exitTopMargin
             )
+        )
+        XCTAssertGreaterThan(
+            GroupMotionMath.fractionAboveTopEdge(panelFrame: crossing, topY: topY), 0
+        )
+        XCTAssertLessThan(
+            GroupMotionMath.fractionAboveTopEdge(panelFrame: crossing, topY: topY), 1
         )
         let gone = CGRect(x: 300, y: 900, width: panelSize, height: panelSize)
         XCTAssertTrue(
             GroupMotionMath.isFullyAboveTopEdge(
-                panelFrame: gone, physicalFrame: physicalFrame, margin: tuning.exitTopMargin
+                panelFrame: gone, topY: topY, margin: tuning.exitTopMargin
+            )
+        )
+        XCTAssertEqual(
+            GroupMotionMath.fractionAboveTopEdge(panelFrame: gone, topY: topY),
+            1,
+            accuracy: 0.0001
+        )
+    }
+
+    func testExitCompletionUsesVisibleTopNotPhysicalTop() {
+        // A body fully past the VISIBLE top but still inside the menu-bar
+        // band is invisible to the user and may be recycled.
+        let panelSize = CompanionMetrics.size
+        let topY: CGFloat = 740
+        let inMenuBarBand = CGRect(x: 300, y: 780, width: panelSize, height: panelSize)
+        XCTAssertTrue(
+            GroupMotionMath.isFullyAboveTopEdge(
+                panelFrame: inMenuBarBand, topY: topY, margin: tuning.exitTopMargin
             )
         )
     }
 
     func testExitSlowZonePredicate() {
-        let physical = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let topY: CGFloat = 740
         XCTAssertFalse(
-            GroupMotionMath.isInExitSlowZone(
-                bodyTopY: 500, physicalFrame: physical, zoneHeight: 120
-            )
+            GroupMotionMath.isInExitSlowZone(bodyTopY: 500, topY: topY, zoneHeight: 120)
         )
         XCTAssertTrue(
-            GroupMotionMath.isInExitSlowZone(
-                bodyTopY: 700, physicalFrame: physical, zoneHeight: 120
-            )
+            GroupMotionMath.isInExitSlowZone(bodyTopY: 660, topY: topY, zoneHeight: 120)
         )
         XCTAssertTrue(
-            GroupMotionMath.isInExitSlowZone(
-                bodyTopY: 810, physicalFrame: physical, zoneHeight: 120
-            )
+            GroupMotionMath.isInExitSlowZone(bodyTopY: 810, topY: topY, zoneHeight: 120)
         )
     }
 
@@ -314,10 +334,10 @@ final class GroupMotionMathTests: XCTestCase {
         // Simulate the slow exit zone: the body rises at a constant slow
         // speed and must pass through a stage where only part of it is
         // visible before being parked.
-        let physical = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let topY: CGFloat = 740
         let panelSize = CompanionMetrics.size
         let slowSpeed: CGFloat = 40
-        var centerY: CGFloat = 700
+        var centerY: CGFloat = 640
         var sawFullyVisible = false
         var sawPartiallyVisible = false
         var exited = false
@@ -329,15 +349,15 @@ final class GroupMotionMathTests: XCTestCase {
                 width: panelSize,
                 height: panelSize
             )
-            let body = CompanionMetrics.bodyFrame(panelFrame: panel)
-            if body.minY <= physical.maxY {
+            let fraction = GroupMotionMath.fractionAboveTopEdge(panelFrame: panel, topY: topY)
+            if fraction <= 0 {
                 sawFullyVisible = true
             }
-            if body.minY < physical.maxY && body.maxY > physical.maxY {
+            if fraction > 0 && fraction < 1 {
                 sawPartiallyVisible = true
             }
             if GroupMotionMath.isFullyAboveTopEdge(
-                panelFrame: panel, physicalFrame: physical, margin: 8
+                panelFrame: panel, topY: topY, margin: 8
             ) {
                 exited = true
                 break

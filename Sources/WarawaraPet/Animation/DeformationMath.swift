@@ -15,6 +15,7 @@ enum DeformationMath {
         tuning: DeformationTuning
     ) -> PetDeformation {
         let clampedGrab = clampedGrabVector(grabVector, tuning: tuning)
+        let anchor = blobClampedAnchor(grabVector)
         let speed = hypot(velocity.dx, velocity.dy)
         let amount = stretchAmount(forSpeed: speed, tuning: tuning)
         guard amount > 0 else {
@@ -23,7 +24,7 @@ enum DeformationMath {
                 stretchScale: 1,
                 perpendicularScale: 1,
                 rotation: 0,
-                anchor: clampedGrab
+                anchor: anchor
             )
         }
 
@@ -38,7 +39,7 @@ enum DeformationMath {
             stretchScale: stretchScale,
             perpendicularScale: perpendicularScale,
             rotation: rotation,
-            anchor: clampedGrab
+            anchor: anchor
         )
     }
 
@@ -77,6 +78,20 @@ enum DeformationMath {
         return CGVector(
             dx: min(max(grab.dx, -limit), limit),
             dy: min(max(grab.dy, -limit), limit)
+        )
+    }
+
+    /// Render-anchor clamp confined to the blob's extents (window-fraction
+    /// units), so deformation pivots never leave the body and the maximum
+    /// silhouette extension stays bounded regardless of window size.
+    /// Torque keeps the wider `grabAnchorLimit` clamp for unchanged
+    /// rotational strength.
+    static func blobClampedAnchor(_ grab: CGVector) -> CGVector {
+        let maxX = (PetMetrics.blobWidth / 2) / (PetMetrics.size.width / 2)
+        let maxY = (PetMetrics.blobHeight / 2) / (PetMetrics.size.height / 2)
+        return CGVector(
+            dx: min(max(grab.dx, -maxX), maxX),
+            dy: min(max(grab.dy, -maxY), maxY)
         )
     }
 }

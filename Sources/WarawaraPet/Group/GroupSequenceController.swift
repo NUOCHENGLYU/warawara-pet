@@ -327,16 +327,20 @@ final class GroupSequenceController {
                 damping: tuning.ascentDamping
             )
 
-            // Staged top-edge exit: once the body top is inside the slow
-            // zone, rise at a slow constant speed so the body visibly
-            // crosses the boundary in stages (top, half, lower portion).
+            // Staged exit across the VISIBLE top boundary: once the body
+            // top is inside the slow zone (measured against the usable
+            // desktop top, i.e. below the menu bar band), rise at a slow
+            // constant speed so the body visibly crosses the boundary in
+            // stages (top, half, lower portion). After the timeout the
+            // same slow progression is forced instead of hiding anything.
             let bodyHalfHeight = CompanionMetrics.blobHeight * config.scale / 2
             let bodyTopY = runtimes[index].kinematics.position.y + bodyHalfHeight
+            let exitTopY = visibleFrame.maxY
             if GroupMotionMath.isInExitSlowZone(
                 bodyTopY: bodyTopY,
-                physicalFrame: physicalFrame,
+                topY: exitTopY,
                 zoneHeight: tuning.exitSlowZoneHeight
-            ) {
+            ) || elapsed >= tuning.ascentMaxDuration {
                 runtimes[index].kinematics.position.y = beforeY + config.exitSlowSpeed * CGFloat(dt)
                 runtimes[index].kinematics.velocity.dy = config.exitSlowSpeed
             }
@@ -348,15 +352,18 @@ final class GroupSequenceController {
                 $0.setFrameOrigin(self.origin(for: position))
             }
 
+            // Recycle only after the ENTIRE rendered body has passed the
+            // visible top boundary. No deadline-based hiding: companions
+            // keep rising at the slow speed until fully out.
             let panelFrame = CGRect(
                 origin: origin(for: position),
                 size: CGSize(width: CompanionMetrics.size, height: CompanionMetrics.size)
             )
             if GroupMotionMath.isFullyAboveTopEdge(
                 panelFrame: panelFrame,
-                physicalFrame: physicalFrame,
+                topY: exitTopY,
                 margin: tuning.exitTopMargin
-            ) || elapsed >= tuning.ascentMaxDuration {
+            ) {
                 runtimes[index].exited = true
                 parkPanel(id: config.id)
             }

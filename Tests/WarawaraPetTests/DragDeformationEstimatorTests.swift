@@ -126,9 +126,12 @@ final class DragDeformationEstimatorTests: XCTestCase {
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 5))
         dragRight(&estimator, samples: 60, speed: 100)
+        // The render anchor is confined to the blob; torque keeps the
+        // wider clamp so rotation strength is unchanged.
+        let maxY = (PetMetrics.blobHeight / 2) / (PetMetrics.size.height / 2)
         XCTAssertEqual(
             estimator.deformation.anchor.dy,
-            tuning.grabAnchorLimit,
+            maxY,
             accuracy: 0.0001
         )
         XCTAssertEqual(
@@ -208,7 +211,8 @@ final class DragDeformationEstimatorTests: XCTestCase {
 
         XCTAssertEqual(after.anchor.dx, before.anchor.dx, accuracy: 0.0001)
         XCTAssertEqual(after.anchor.dy, before.anchor.dy, accuracy: 0.0001)
-        XCTAssertEqual(after.anchor.dy, tuning.grabAnchorLimit, accuracy: 0.0001)
+        let maxY = (PetMetrics.blobHeight / 2) / (PetMetrics.size.height / 2)
+        XCTAssertEqual(after.anchor.dy, maxY, accuracy: 0.0001)
     }
 
     func testMovementResumesSmoothlyAfterDecay() {

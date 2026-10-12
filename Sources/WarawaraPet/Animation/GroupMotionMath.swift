@@ -288,26 +288,37 @@ enum GroupMotionMath {
     }
 
     /// Exit predicate: the companion's ENTIRE rendered body (panel inset
-    /// by CompanionMetrics.padding) is above the physical screen's top
-    /// edge, so it has truly left the display and can be parked/released.
+    /// by CompanionMetrics.padding) is above the chosen visible upper
+    /// boundary (`topY`, normally `visibleFrame.maxY`), so the last
+    /// visible pixel has left the desktop and the panel can be recycled.
     static func isFullyAboveTopEdge(
         panelFrame: CGRect,
-        physicalFrame: CGRect,
+        topY: CGFloat,
         margin: CGFloat
     ) -> Bool {
         let body = CompanionMetrics.bodyFrame(panelFrame: panelFrame)
-        return body.minY > physicalFrame.maxY + margin
+        return body.minY >= topY + margin
+    }
+
+    /// Fraction of the rendered body that has passed above `topY`:
+    /// 0 = fully visible, 1 = fully beyond. Used to verify the staged
+    /// partial-body exit.
+    static func fractionAboveTopEdge(panelFrame: CGRect, topY: CGFloat) -> CGFloat {
+        let body = CompanionMetrics.bodyFrame(panelFrame: panelFrame)
+        let clamped = min(max((topY - body.minY) / max(body.height, 1), 0), 1)
+        return clamped
     }
 
     /// True when the companion's rendered body top is within the slow
-    /// exit zone below the physical top edge: from here on it should move
-    /// upward at a slow constant speed so the crossing is visibly staged.
+    /// exit zone below the visible upper boundary: from here on it should
+    /// move upward at a slow constant speed so the crossing is visibly
+    /// staged.
     static func isInExitSlowZone(
         bodyTopY: CGFloat,
-        physicalFrame: CGRect,
+        topY: CGFloat,
         zoneHeight: CGFloat
     ) -> Bool {
-        bodyTopY >= physicalFrame.maxY - zoneHeight
+        bodyTopY >= topY - zoneHeight
     }
 
     // MARK: - Fades

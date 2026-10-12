@@ -153,10 +153,16 @@ final class DeformationMathTests: XCTestCase {
 
     func testGrabAnchorIsClampedToInterior() {
         let d = deformation(velocity: CGVector(dx: 100, dy: 0), grab: CGVector(dx: 2, dy: 2))
-        XCTAssertEqual(d.anchor.dx, tuning.grabAnchorLimit, accuracy: 0.0001)
-        XCTAssertEqual(d.anchor.dy, tuning.grabAnchorLimit, accuracy: 0.0001)
 
-        // The clamped anchor is also the one used for torque.
+        // The RENDER anchor is confined to the blob's extents (window
+        // fractions) so deformation pivots never leave the body.
+        let maxY = (PetMetrics.blobHeight / 2) / (PetMetrics.size.height / 2)
+        let maxX = (PetMetrics.blobWidth / 2) / (PetMetrics.size.width / 2)
+        XCTAssertEqual(d.anchor.dx, maxX, accuracy: 0.0001)
+        XCTAssertEqual(d.anchor.dy, maxY, accuracy: 0.0001)
+
+        // Torque keeps the wider grab-anchor clamp, so rotational
+        // strength is unchanged.
         let expectedRotation = -tuning.grabAnchorLimit * 100 * tuning.rotationGain
         XCTAssertEqual(d.rotation, expectedRotation, accuracy: 0.0001)
     }

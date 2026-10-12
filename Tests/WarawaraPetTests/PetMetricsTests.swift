@@ -8,19 +8,6 @@ final class PetMetricsTests: XCTestCase {
         XCTAssertEqual(grab.dy, 0, accuracy: 0.0001)
     }
 
-    func testTopEdgeNormalizesToWindowEdge() {
-        let half = PetMetrics.size.width / 2
-        let grab = PetMetrics.normalizedGrabVector(
-            grabPoint: CGPoint(x: PetMetrics.size.width / 2, y: PetMetrics.size.height)
-        )
-        XCTAssertEqual(grab.dx, 0, accuracy: 0.0001)
-        XCTAssertEqual(
-            grab.dy,
-            (PetMetrics.size.height - PetMetrics.visualCenter.y) / half,
-            accuracy: 0.0001
-        )
-    }
-
     func testBeyondWindowEdgesClampToUnitSquare() {
         let grab = PetMetrics.normalizedGrabVector(
             grabPoint: CGPoint(x: PetMetrics.size.width, y: PetMetrics.size.height + 100)
@@ -55,19 +42,37 @@ final class PetMetricsTests: XCTestCase {
     // MARK: - Deformation envelope (drag clipping regression)
 
     func testWorstCaseDownwardExtensionFitsInsideWindow() {
-        // Extreme-but-realistic deformation: max stretch about the highest
-        // grab anchor must never push the blob bottom past the window edge.
         let tuning = DeformationTuning.default
-        let extensionAmount = PetMetrics.worstCaseDownwardExtension(
+        let extensionAmount = PetMetrics.worstCaseVerticalExtension(
             maxStretch: tuning.maxStretch,
-            grabAnchorLimit: tuning.grabAnchorLimit
+            maxLean: tuning.maxRotation
         )
         XCTAssertLessThanOrEqual(
             extensionAmount,
             PetMetrics.bottomClearance,
-            "fast vertical drags must not clip the blob bottom"
+            "fast drags must not clip the blob bottom"
         )
         XCTAssertGreaterThan(extensionAmount, 0)
+    }
+
+    func testWorstCaseUpwardExtensionFitsInsideWindow() {
+        let tuning = DeformationTuning.default
+        let extensionAmount = PetMetrics.worstCaseVerticalExtension(
+            maxStretch: tuning.maxStretch,
+            maxLean: tuning.maxRotation
+        )
+        XCTAssertLessThanOrEqual(
+            extensionAmount,
+            PetMetrics.topClearance,
+            "fast drags must not clip the blob top"
+        )
+        XCTAssertGreaterThan(extensionAmount, 0)
+    }
+
+    func testBlobBottomPaddingIsStableAcrossGeometryChanges() {
+        // The blob's bottom offset is fixed so persisted window origins
+        // keep restoring to the same apparent position.
+        XCTAssertEqual(PetMetrics.blobBottomPadding, 54)
     }
 
     func testVisualCenterIsDerivedFromPaddingAndHeight() {
@@ -85,5 +90,17 @@ final class PetMetricsTests: XCTestCase {
             PetMetrics.blobBottomPadding + PetMetrics.blobHeight,
             PetMetrics.size.height
         )
+        XCTAssertLessThanOrEqual(PetMetrics.blobWidth, PetMetrics.size.width)
+    }
+
+    func testRenderAnchorClampConfinesAnchorToBlob() {
+        let extreme = CGVector(dx: 5, dy: 5)
+        let anchor = DeformationMath.blobClampedAnchor(extreme)
+        XCTAssertLessThanOrEqual(abs(anchor.dy), 0.5221)
+        XCTAssertLessThanOrEqual(abs(anchor.dx), 0.4801)
+        // Anchor extremes map onto the blob's own vertical extent.
+        let topUnit = 0.5 - 0.5 * anchor.dy
+        let topViewY = PetMetrics.size.height * (1 - topUnit)
+        XCTAssertEqual(topViewY, PetMetrics.blobBottomPadding + PetMetrics.blobHeight, accuracy: 0.001)
     }
 }

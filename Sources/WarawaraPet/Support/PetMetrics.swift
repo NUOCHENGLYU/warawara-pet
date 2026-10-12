@@ -2,14 +2,22 @@ import Foundation
 
 /// Single source of truth for pet geometry shared by rendering, hit
 /// testing, and interaction. The window is sized so the maximum stretch
-/// deformation envelope (including grab-anchor torque) never clips the
-/// body silhouette, while the interaction hit region stays tight.
+/// deformation envelope (including grab-anchor torque and lean) never
+/// clips the body silhouette in EITHER direction, while the interaction
+/// hit region stays tight. The blob's bottom offset is fixed, so saved
+/// window origins keep restoring to the same apparent position.
 enum PetMetrics {
-    static let size = CGSize(width: 200, height: 200)
-
-    /// Resting bottom padding of the blob inside the window.
-    static let blobBottomPadding: CGFloat = 54
+    static let blobWidth: CGFloat = 96
     static let blobHeight: CGFloat = 118
+    /// Resting bottom padding of the blob inside the window. Kept stable
+    /// across geometry changes so persisted window origins stay visually
+    /// identical.
+    static let blobBottomPadding: CGFloat = 54
+
+    /// Symmetric clearance: bottom and top both cover the worst-case
+    /// deformation envelope.
+    static let size = CGSize(width: 200, height: 226)
+    static let topClearance = size.height - blobBottomPadding - blobHeight
 
     /// Visual center of the placeholder blob in pet space (bottom-left
     /// origin), matching EllipseHitRegion's default region.
@@ -18,17 +26,11 @@ enum PetMetrics {
     /// Clearance between the blob's resting bottom and the window edge.
     static var bottomClearance: CGFloat { blobBottomPadding }
 
-    /// Worst-case downward extension of the blob's bottom when stretched
-    /// by `maxStretch` about the highest possible grab anchor (anchored at
-    /// `grabAnchorLimit`). This must stay within `bottomClearance` so fast
-    /// drags never visually clip the body.
-    static func worstCaseDownwardExtension(
-        maxStretch: CGFloat,
-        grabAnchorLimit: CGFloat
-    ) -> CGFloat {
-        let anchorUnitY = 0.5 - 0.5 * grabAnchorLimit
-        let anchorTop = size.height * (1 - anchorUnitY)
-        return maxStretch * (anchorTop - blobBottomPadding)
+    /// Worst-case vertical extension of the blob silhouette in either
+    /// direction: full stretch about the farthest blob-internal anchor
+    /// plus the lean rotation's vertical contribution.
+    static func worstCaseVerticalExtension(maxStretch: CGFloat, maxLean: CGFloat) -> CGFloat {
+        maxStretch * blobHeight + (blobWidth / 2) * sin(maxLean)
     }
 
     /// Normalized grab vector: offset from the visual center divided by
