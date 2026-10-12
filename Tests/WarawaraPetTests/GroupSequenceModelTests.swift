@@ -4,27 +4,66 @@ import XCTest
 final class GroupSequenceModelTests: XCTestCase {
     private let tuning = GroupTuning.default
     private let mainCenter = CGPoint(x: 500, y: 300)
-    private let visibleFrame = CGRect(x: 0, y: 0, width: 1000, height: 800)
+    private let physicalFrame = CGRect(x: 0, y: 0, width: 1000, height: 800)
+    private let visibleFrame = CGRect(x: 0, y: 60, width: 1000, height: 740)
 
     func testBeginFromInactiveCreatesCompanionsAndFormation() {
         var model = GroupSequenceModel()
         var rng = SeededRandomSource(seed: 11)
         XCTAssertTrue(
-            model.begin(mainCenter: mainCenter, visibleFrame: visibleFrame, using: &rng, tuning: tuning)
+            model.begin(
+                mainCenter: mainCenter,
+                physicalFrame: physicalFrame,
+                visibleFrame: visibleFrame,
+                using: &rng,
+                tuning: tuning
+            )
         )
         XCTAssertEqual(model.state, .appearing)
         XCTAssertEqual(model.companions.count, tuning.companionCount)
         XCTAssertEqual(model.formationOffsets.count, tuning.companionCount)
     }
 
+    func testEntryPointsAreFullyOutsidePhysicalScreen() {
+        var model = GroupSequenceModel()
+        var rng = SeededRandomSource(seed: 40)
+        XCTAssertTrue(
+            model.begin(
+                mainCenter: mainCenter,
+                physicalFrame: physicalFrame,
+                visibleFrame: visibleFrame,
+                using: &rng,
+                tuning: tuning
+            )
+        )
+        for companion in model.companions {
+            XCTAssertTrue(
+                GroupMotionMath.isOutside(companion.config.entryPoint, frame: physicalFrame),
+                "every companion must start fully outside the physical screen"
+            )
+        }
+    }
+
     func testSecondSequenceIsRejectedWhileActive() {
         var model = GroupSequenceModel()
         var rng = SeededRandomSource(seed: 12)
         XCTAssertTrue(
-            model.begin(mainCenter: mainCenter, visibleFrame: visibleFrame, using: &rng, tuning: tuning)
+            model.begin(
+                mainCenter: mainCenter,
+                physicalFrame: physicalFrame,
+                visibleFrame: visibleFrame,
+                using: &rng,
+                tuning: tuning
+            )
         )
         XCTAssertFalse(
-            model.begin(mainCenter: mainCenter, visibleFrame: visibleFrame, using: &rng, tuning: tuning)
+            model.begin(
+                mainCenter: mainCenter,
+                physicalFrame: physicalFrame,
+                visibleFrame: visibleFrame,
+                using: &rng,
+                tuning: tuning
+            )
         )
         XCTAssertEqual(model.companions.count, tuning.companionCount)
     }
@@ -33,7 +72,13 @@ final class GroupSequenceModelTests: XCTestCase {
         var model = GroupSequenceModel()
         var rng = SeededRandomSource(seed: 13)
         XCTAssertTrue(
-            model.begin(mainCenter: mainCenter, visibleFrame: visibleFrame, using: &rng, tuning: tuning)
+            model.begin(
+                mainCenter: mainCenter,
+                physicalFrame: physicalFrame,
+                visibleFrame: visibleFrame,
+                using: &rng,
+                tuning: tuning
+            )
         )
         XCTAssertTrue(model.advance(to: .gathering))
         XCTAssertTrue(model.advance(to: .hovering))
@@ -50,7 +95,13 @@ final class GroupSequenceModelTests: XCTestCase {
             var model = GroupSequenceModel()
             var rng = SeededRandomSource(seed: 14)
             XCTAssertTrue(
-                model.begin(mainCenter: mainCenter, visibleFrame: visibleFrame, using: &rng, tuning: tuning)
+                model.begin(
+                    mainCenter: mainCenter,
+                    physicalFrame: physicalFrame,
+                    visibleFrame: visibleFrame,
+                    using: &rng,
+                    tuning: tuning
+                )
             )
             if phase != .appearing {
                 if phase == .gathering {
@@ -72,33 +123,77 @@ final class GroupSequenceModelTests: XCTestCase {
         }
     }
 
+    func testRepeatedCompletionAndCancellationAreHarmless() {
+        var model = GroupSequenceModel()
+        var rng = SeededRandomSource(seed: 41)
+        XCTAssertTrue(
+            model.begin(
+                mainCenter: mainCenter,
+                physicalFrame: physicalFrame,
+                visibleFrame: visibleFrame,
+                using: &rng,
+                tuning: tuning
+            )
+        )
+        XCTAssertTrue(model.advance(to: .gathering))
+        XCTAssertTrue(model.advance(to: .cancelled))
+        XCTAssertTrue(model.advance(to: .inactive))
+        // Repeated end-of-sequence bookkeeping is a no-op.
+        model.removeAllCompanions()
+        XCTAssertFalse(model.advance(to: .inactive))
+        XCTAssertFalse(model.advance(to: .cancelled))
+        XCTAssertEqual(model.companions.count, 0)
+        XCTAssertEqual(model.state, .inactive)
+        // And a new sequence can start cleanly afterwards.
+        XCTAssertTrue(
+            model.begin(
+                mainCenter: mainCenter,
+                physicalFrame: physicalFrame,
+                visibleFrame: visibleFrame,
+                using: &rng,
+                tuning: tuning
+            )
+        )
+        XCTAssertEqual(model.state, .appearing)
+    }
+
     func testCompanionConfigsAreDeterministicAndVaried() {
         var a = SeededRandomSource(seed: 20)
         var b = SeededRandomSource(seed: 20)
         let configsA = (0..<4).map {
-            CompanionConfig.make(id: $0, mainCenter: mainCenter, visibleFrame: visibleFrame, using: &a, tuning: tuning)
+            CompanionConfig.make(
+                id: $0, mainCenter: mainCenter,
+                physicalFrame: physicalFrame, visibleFrame: visibleFrame,
+                using: &a, tuning: tuning
+            )
         }
         let configsB = (0..<4).map {
-            CompanionConfig.make(id: $0, mainCenter: mainCenter, visibleFrame: visibleFrame, using: &b, tuning: tuning)
+            CompanionConfig.make(
+                id: $0, mainCenter: mainCenter,
+                physicalFrame: physicalFrame, visibleFrame: visibleFrame,
+                using: &b, tuning: tuning
+            )
         }
         XCTAssertEqual(configsA, configsB)
 
         let scales = Set(configsA.map(\.scale))
-        XCTAssertGreaterThan(scales.count, 1, "companions should vary in scale")
-        let spawnX = Set(configsA.map { $0.spawnOffset.dx })
-        XCTAssertGreaterThan(spawnX.count, 1, "spawn positions should differ")
+        XCTAssertGreaterThan(scales.count, 1)
+        let entryX = Set(configsA.map { $0.entryPoint.x })
+        XCTAssertGreaterThan(entryX.count, 1, "entry points should differ")
         let springs = Set(configsA.map(\.springStrength))
-        XCTAssertGreaterThan(springs.count, 1, "inertial parameters should vary")
+        XCTAssertGreaterThan(springs.count, 1)
     }
 
     func testConfigBoundsAreRespected() {
         var rng = SeededRandomSource(seed: 21)
         for id in 0..<20 {
             let config = CompanionConfig.make(
-                id: id, mainCenter: mainCenter, visibleFrame: visibleFrame, using: &rng, tuning: tuning
+                id: id, mainCenter: mainCenter,
+                physicalFrame: physicalFrame, visibleFrame: visibleFrame,
+                using: &rng, tuning: tuning
             )
             XCTAssertTrue(tuning.companionScaleRange.contains(config.scale))
-            XCTAssertGreaterThanOrEqual(config.appearDelay, TimeInterval(id) * tuning.appearStagger)
+            XCTAssertGreaterThanOrEqual(config.releaseDelay, TimeInterval(id) * tuning.releaseStagger)
             XCTAssertGreaterThan(config.springStrength, 0)
             XCTAssertGreaterThan(config.damping, 0)
             XCTAssertTrue(tuning.exitStaggerRange.contains(config.exitStagger))
@@ -110,12 +205,18 @@ final class GroupSequenceModelTests: XCTestCase {
         var model = GroupSequenceModel()
         var rng = SeededRandomSource(seed: 22)
         XCTAssertTrue(
-            model.begin(mainCenter: mainCenter, visibleFrame: visibleFrame, using: &rng, tuning: tuning)
+            model.begin(
+                mainCenter: mainCenter,
+                physicalFrame: physicalFrame,
+                visibleFrame: visibleFrame,
+                using: &rng,
+                tuning: tuning
+            )
         )
         let before = model.formationOffsets
         XCTAssertTrue(model.advance(to: .gathering))
         XCTAssertTrue(model.advance(to: .hovering))
-        XCTAssertEqual(model.formationOffsets, before, "formation must stay stable for the whole sequence")
+        XCTAssertEqual(model.formationOffsets, before)
     }
 }
 

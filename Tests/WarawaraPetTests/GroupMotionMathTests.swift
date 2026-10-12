@@ -3,13 +3,17 @@ import XCTest
 
 final class GroupMotionMathTests: XCTestCase {
     private let tuning = GroupTuning.default
+    private let physicalFrame = CGRect(x: 0, y: 0, width: 1000, height: 800)
+    private let visibleFrame = CGRect(x: 0, y: 60, width: 1000, height: 740)
+    private let mainCenter = CGPoint(x: 500, y: 200)
 
     private func makeConfig(seed: UInt64, id: Int) -> CompanionConfig {
         var rng = SeededRandomSource(seed: seed)
         return CompanionConfig.make(
             id: id,
-            mainCenter: CGPoint(x: 500, y: 200),
-            visibleFrame: CGRect(x: 0, y: 0, width: 1000, height: 800),
+            mainCenter: mainCenter,
+            physicalFrame: physicalFrame,
+            visibleFrame: visibleFrame,
             using: &rng,
             tuning: tuning
         )
@@ -27,11 +31,8 @@ final class GroupMotionMathTests: XCTestCase {
             speeds.append(kinematics.speed)
             if speeds[i] > speeds[peakIndex] { peakIndex = i }
         }
-        // Acceleration phase then deceleration: peak speed occurs strictly
-        // inside the travel (not at the very start), proving inertia.
         XCTAssertGreaterThan(peakIndex, 3)
         XCTAssertLessThan(peakIndex, speeds.count - 5)
-        // Soft settle near the target.
         XCTAssertEqual(kinematics.position.x, target.x, accuracy: 1.5)
         XCTAssertLessThan(kinematics.speed, 0.5)
     }
@@ -39,13 +40,8 @@ final class GroupMotionMathTests: XCTestCase {
     func testKinematicsIsNotLinearTranslation() {
         var kinematics = CompanionKinematics(position: CGPoint(x: 0, y: 0), velocity: .zero)
         let target = CGPoint(x: 300, y: 0)
-        let firstTick: CGFloat
         kinematics.step(toward: target, dt: 1.0 / 60.0, springStrength: 8, damping: 5.5)
-        firstTick = kinematics.position.x
-        // A linear mover with the same total travel would move much more in
-        // the first tick; the spring starts nearly from rest.
-        XCTAssertLessThan(firstTick, 2)
-        // Middle of the journey is much faster than the start.
+        XCTAssertLessThan(kinematics.position.x, 2)
         for _ in 0..<40 {
             kinematics.step(toward: target, dt: 1.0 / 60.0, springStrength: 8, damping: 5.5)
         }
@@ -73,8 +69,73 @@ final class GroupMotionMathTests: XCTestCase {
             kinematics.step(toward: target, dt: 1.0 / 60.0, springStrength: 8, damping: 3.2)
             maxX = max(maxX, kinematics.position.x)
         }
-        // Mild overshoot is allowed but must stay bounded and settle.
         XCTAssertLessThan(maxX, target.x + 30)
+        XCTAssertEqual(kinematics.position.x, target.x, accuracy: 1.5)
+    }
+
+    // MARK: - Entry from outside the physical screen
+
+    func testEntryPositionsAreFullyOutsidePhysicalFrame() {
+        for edge in [0, 1, 2] {
+            var rng = SeededRandomSource(seed: 30)
+            for _ in 0..<20 {
+                let position = GroupMotionMath.entryPosition(
+                    edge: edge,
+                    mainCenter: mainCenter,
+                    physicalFrame: physicalFrame,
+                    panelSize: tuning.companionPanelSize,
+                    using: &rng,
+                    tuning: tuning
+                )
+                XCTAssertTrue(
+                    GroupMotionMath.isOutside(position, frame: physicalFrame),
+                    "edge \(edge) entry must start outside the physical screen"
+                )
+            }
+        }
+    }
+
+    func testEntryEdgesAreScreenAware() {
+        var rng = SeededRandomSource(seed: 31)
+        let nearLeft = CGPoint(x: 40, y: 200)
+        for index in 0..<20 {
+            let edge = GroupMotionMath.entryEdge(
+                index: index, count: 4, mainCenter: nearLeft,
+                physicalFrame: physicalFrame, using: &rng, tuning: tuning
+            )
+            XCTAssertNotEqual(edge, 0, "companions near the left edge must not enter from the left")
+        }
+        var rng2 = SeededRandomSource(seed: 32)
+        let nearRight = CGPoint(x: 960, y: 200)
+        for index in 0..<20 {
+            let edge = GroupMotionMath.entryEdge(
+                index: index, count: 4, mainCenter: nearRight,
+                physicalFrame: physicalFrame, using: &rng2, tuning: tuning
+            )
+            XCTAssertNotEqual(edge, 1, "companions near the right edge must not enter from the right")
+        }
+    }
+
+    func testEntryMotionCrossesBoundaryContinuously() {
+        // A companion starting outside (left) springs toward an inside
+        // target: it must cross the boundary in small steps (no teleport).
+        var kinematics = CompanionKinematics(
+            position: CGPoint(x: -80, y: 200),
+            velocity: .zero
+        )
+        let target = CGPoint(x: 420, y: 200)
+        var sawInside = false
+        var previous = kinematics.position
+        for _ in 0..<300 {
+            kinematics.step(toward: target, dt: 1.0 / 60.0, springStrength: 8, damping: 5.5)
+            let step = kinematics.distance(to: previous)
+            XCTAssertLessThan(step, 30, "entry motion must be continuous")
+            previous = kinematics.position
+            if !GroupMotionMath.isOutside(kinematics.position, frame: physicalFrame) {
+                sawInside = true
+            }
+        }
+        XCTAssertTrue(sawInside, "entry must cross into the screen")
         XCTAssertEqual(kinematics.position.x, target.x, accuracy: 1.5)
     }
 
@@ -82,55 +143,42 @@ final class GroupMotionMathTests: XCTestCase {
 
     func testFormationTargetsKeepDistanceFromMainPet() {
         var rng = SeededRandomSource(seed: 7)
-        let mainCenter = CGPoint(x: 500, y: 300)
-        let frame = CGRect(x: 0, y: 0, width: 1000, height: 800)
         let offsets = GroupMotionMath.formationOffsets(
-            count: 4, mainCenter: mainCenter, visibleFrame: frame, using: &rng, tuning: tuning
+            count: 4, mainCenter: mainCenter, visibleFrame: visibleFrame, using: &rng, tuning: tuning
         )
         for offset in offsets {
             let distance = hypot(offset.dx, offset.dy)
-            XCTAssertGreaterThanOrEqual(
-                distance,
-                tuning.preferredMainPetRadius - 2,
-                "companions must not sit on the main pet"
-            )
+            XCTAssertGreaterThanOrEqual(distance, tuning.preferredMainPetRadius - 2)
         }
     }
 
     func testFormationTargetsMaintainMinimumSpacing() {
         var rng = SeededRandomSource(seed: 8)
-        let mainCenter = CGPoint(x: 500, y: 300)
-        let frame = CGRect(x: 0, y: 0, width: 1000, height: 800)
         let offsets = GroupMotionMath.formationOffsets(
-            count: 5, mainCenter: mainCenter, visibleFrame: frame, using: &rng, tuning: tuning
+            count: 5, mainCenter: mainCenter, visibleFrame: visibleFrame, using: &rng, tuning: tuning
         )
         for i in 0..<offsets.count {
             for j in (i + 1)..<offsets.count {
                 let a = offsets[i]
                 let b = offsets[j]
                 let distance = hypot(a.dx - b.dx, a.dy - b.dy)
-                XCTAssertGreaterThanOrEqual(
-                    distance,
-                    tuning.companionMinSpacing - 2,
-                    "formation bodies overlap too much"
-                )
+                XCTAssertGreaterThanOrEqual(distance, tuning.companionMinSpacing - 2)
             }
         }
     }
 
     func testFormationStaysVisibleNearScreenEdges() {
         var rng = SeededRandomSource(seed: 9)
-        let frame = CGRect(x: 0, y: 0, width: 1000, height: 800)
         let nearLeft = CGPoint(x: 30, y: 120)
         let offsets = GroupMotionMath.formationOffsets(
-            count: 4, mainCenter: nearLeft, visibleFrame: frame, using: &rng, tuning: tuning
+            count: 4, mainCenter: nearLeft, visibleFrame: visibleFrame, using: &rng, tuning: tuning
         )
         for offset in offsets {
             let target = CGPoint(x: nearLeft.x + offset.dx, y: nearLeft.y + offset.dy)
-            XCTAssertGreaterThanOrEqual(target.x, frame.minX + tuning.formationMargin - 0.5)
-            XCTAssertLessThanOrEqual(target.x, frame.maxX - tuning.formationMargin + 0.5)
-            XCTAssertGreaterThanOrEqual(target.y, frame.minY + tuning.formationMargin - 0.5)
-            XCTAssertLessThanOrEqual(target.y, frame.maxY - tuning.formationMargin + 0.5)
+            XCTAssertGreaterThanOrEqual(target.x, visibleFrame.minX + tuning.formationMargin - 0.5)
+            XCTAssertLessThanOrEqual(target.x, visibleFrame.maxX - tuning.formationMargin + 0.5)
+            XCTAssertGreaterThanOrEqual(target.y, visibleFrame.minY + tuning.formationMargin - 0.5)
+            XCTAssertLessThanOrEqual(target.y, visibleFrame.maxY - tuning.formationMargin + 0.5)
         }
     }
 
@@ -138,10 +186,7 @@ final class GroupMotionMathTests: XCTestCase {
         let positions = [CGPoint(x: 0, y: 0), CGPoint(x: 40, y: 0)]
         let targets = [CGPoint(x: 0, y: 0), CGPoint(x: 40, y: 0)]
         let adjusted = GroupMotionMath.separationAdjustedTargets(
-            positions: positions,
-            targets: targets,
-            minSpacing: 88,
-            strength: 0.5
+            positions: positions, targets: targets, minSpacing: 88, strength: 0.5
         )
         let distance = hypot(adjusted[0].x - adjusted[1].x, adjusted[0].y - adjusted[1].y)
         XCTAssertGreaterThan(distance, 40)
@@ -152,10 +197,7 @@ final class GroupMotionMathTests: XCTestCase {
     func testHoverOffsetIsExactlyZeroAtTransition() {
         let config = makeConfig(seed: 10, id: 0)
         let offset = GroupMotionMath.hoverOffset(
-            at: 0,
-            rampInDuration: tuning.hoverRampInDuration,
-            config: config,
-            tuning: tuning
+            at: 0, rampInDuration: tuning.hoverRampInDuration, config: config, tuning: tuning
         )
         XCTAssertEqual(offset.dx, 0, accuracy: 0.000001)
         XCTAssertEqual(offset.dy, 0, accuracy: 0.000001)
@@ -167,15 +209,11 @@ final class GroupMotionMathTests: XCTestCase {
         for i in 0...100 {
             let elapsed = TimeInterval(i) / 100 * 3
             let offset = GroupMotionMath.hoverOffset(
-                at: elapsed,
-                rampInDuration: tuning.hoverRampInDuration,
-                config: config,
-                tuning: tuning
+                at: elapsed, rampInDuration: tuning.hoverRampInDuration, config: config, tuning: tuning
             )
             let magnitude = hypot(offset.dx, offset.dy)
             XCTAssertLessThanOrEqual(
-                magnitude,
-                hypot(tuning.hoverBobAmplitude, tuning.hoverDriftAmplitude) + 0.001
+                magnitude, hypot(tuning.hoverBobAmplitude, tuning.hoverDriftAmplitude) + 0.001
             )
             if elapsed < tuning.hoverRampInDuration / 2 {
                 XCTAssertGreaterThanOrEqual(magnitude, previousMagnitude - 0.001)
@@ -186,11 +224,7 @@ final class GroupMotionMathTests: XCTestCase {
 
     func testAscentSwayIsExactlyZeroAtTransition() {
         let config = makeConfig(seed: 12, id: 2)
-        XCTAssertEqual(
-            GroupMotionMath.ascentSway(at: 0, config: config, tuning: tuning),
-            0,
-            accuracy: 0.000001
-        )
+        XCTAssertEqual(GroupMotionMath.ascentSway(at: 0, config: config, tuning: tuning), 0, accuracy: 0.000001)
         for i in 0...100 {
             let sway = GroupMotionMath.ascentSway(
                 at: TimeInterval(i) / 100 * 6, config: config, tuning: tuning
@@ -199,30 +233,27 @@ final class GroupMotionMathTests: XCTestCase {
         }
     }
 
-    // MARK: - Fan-out
+    // MARK: - Fan-out and spatial exit
 
     func testFanOutProducesDistinctExitTrajectories() {
         var rng = SeededRandomSource(seed: 13)
-        let mainCenter = CGPoint(x: 500, y: 200)
-        let frame = CGRect(x: 0, y: 0, width: 1000, height: 800)
         let configs = (0..<4).map {
             CompanionConfig.make(
-                id: $0, mainCenter: mainCenter, visibleFrame: frame, using: &rng, tuning: tuning
+                id: $0, mainCenter: mainCenter,
+                physicalFrame: physicalFrame, visibleFrame: visibleFrame,
+                using: &rng, tuning: tuning
             )
         }
         let exitXs = configs.map { mainCenter.x + $0.exitTargetOffset.dx }
         let spread = (exitXs.max() ?? 0) - (exitXs.min() ?? 0)
-        XCTAssertGreaterThan(spread, 40, "fan-out must spread companions apart")
-        XCTAssertGreaterThan(Set(exitXs).count, 2, "exit directions must differ")
-        // All exits are upward.
+        XCTAssertGreaterThan(spread, 40)
+        XCTAssertGreaterThan(Set(exitXs).count, 2)
         for config in configs {
             XCTAssertGreaterThan(config.exitTargetOffset.dy, 0)
         }
     }
 
     func testAscentSpreadIncreasesOverTime() {
-        // Two kinematic companions with far-apart targets diverge over
-        // time: spread grows monotonically toward the target separation.
         var a = CompanionKinematics(position: CGPoint(x: 0, y: 0), velocity: .zero)
         var b = CompanionKinematics(position: CGPoint(x: 0, y: 0), velocity: .zero)
         let targetA = CGPoint(x: -150, y: 900)
@@ -238,28 +269,38 @@ final class GroupMotionMathTests: XCTestCase {
         XCTAssertGreaterThan(previousSpread, 100)
     }
 
-    // MARK: - Individual exit
-
-    func testExitPredicatesAllowIndividualExit() {
-        let frame = CGRect(x: 0, y: 0, width: 1000, height: 800)
+    func testSpatialExitRequiresEntireBodyBeyondTopEdge() {
+        let panelSize = tuning.companionPanelSize
+        let onScreen = CGRect(x: 300, y: 600, width: panelSize, height: panelSize)
         XCTAssertFalse(
-            GroupMotionMath.isAboveExitFadeZone(panelTopY: 500, visibleFrame: frame, margin: 60)
+            GroupMotionMath.isFullyAboveTopEdge(
+                panelFrame: onScreen, physicalFrame: physicalFrame, margin: tuning.exitTopMargin
+            )
         )
-        XCTAssertTrue(
-            GroupMotionMath.isAboveExitFadeZone(panelTopY: 780, visibleFrame: frame, margin: 60)
+        let crossing = CGRect(x: 300, y: 780, width: panelSize, height: panelSize)
+        XCTAssertFalse(
+            GroupMotionMath.isFullyAboveTopEdge(
+                panelFrame: crossing, physicalFrame: physicalFrame, margin: tuning.exitTopMargin
+            )
         )
+        let gone = CGRect(x: 300, y: 900, width: panelSize, height: panelSize)
         XCTAssertTrue(
-            GroupMotionMath.isFullyAboveScreen(panelTopY: 900, visibleFrame: frame, margin: 40)
+            GroupMotionMath.isFullyAboveTopEdge(
+                panelFrame: gone, physicalFrame: physicalFrame, margin: tuning.exitTopMargin
+            )
         )
     }
 
     func testCompanionPhaseOffsetsProduceDifferentMotion() {
-        // Configs are drawn from ONE rng stream, like production.
         var rng = SeededRandomSource(seed: 14)
-        let frame = CGRect(x: 0, y: 0, width: 1000, height: 800)
-        let center = CGPoint(x: 500, y: 200)
-        let a = CompanionConfig.make(id: 0, mainCenter: center, visibleFrame: frame, using: &rng, tuning: tuning)
-        let b = CompanionConfig.make(id: 1, mainCenter: center, visibleFrame: frame, using: &rng, tuning: tuning)
+        let a = CompanionConfig.make(
+            id: 0, mainCenter: mainCenter, physicalFrame: physicalFrame,
+            visibleFrame: visibleFrame, using: &rng, tuning: tuning
+        )
+        let b = CompanionConfig.make(
+            id: 1, mainCenter: mainCenter, physicalFrame: physicalFrame,
+            visibleFrame: visibleFrame, using: &rng, tuning: tuning
+        )
         XCTAssertNotEqual(a.bobPhase, b.bobPhase)
         var allIdentical = true
         for i in 0...100 {
@@ -275,39 +316,7 @@ final class GroupMotionMathTests: XCTestCase {
         XCTAssertFalse(allIdentical, "companions must not move identically")
     }
 
-    // MARK: - Appearance / fade / spawn
-
-    func testSpawnPositionIsClampedIntoVisibleFrame() {
-        let frame = CGRect(x: 0, y: 0, width: 1000, height: 800)
-        let farAway = CGVector(dx: 5000, dy: -5000)
-        let near = CGVector(dx: 10, dy: 10)
-        let center = CGPoint(x: 500, y: 400)
-        let clamped = GroupMotionMath.spawnPosition(
-            mainCenter: center, offset: farAway, visibleFrame: frame, margin: 16
-        )
-        XCTAssertGreaterThanOrEqual(clamped.x, frame.minX + 16)
-        XCTAssertLessThanOrEqual(clamped.x, frame.maxX - 16)
-        XCTAssertGreaterThanOrEqual(clamped.y, frame.minY + 16)
-        XCTAssertLessThanOrEqual(clamped.y, frame.maxY - 16)
-        XCTAssertEqual(
-            GroupMotionMath.spawnPosition(
-                mainCenter: center, offset: near, visibleFrame: frame, margin: 16
-            ),
-            CGPoint(x: 510, y: 410)
-        )
-    }
-
-    func testAppearAlphaRampsWithinValidRange() {
-        for i in 0...100 {
-            let elapsed = TimeInterval(i) / 100 * 3
-            let alpha = GroupMotionMath.appearAlpha(at: elapsed, delay: 0.5, duration: 0.6)
-            XCTAssertGreaterThanOrEqual(alpha, 0)
-            XCTAssertLessThanOrEqual(alpha, 1)
-        }
-        XCTAssertEqual(GroupMotionMath.appearAlpha(at: 0.4, delay: 0.5, duration: 0.6), 0)
-        XCTAssertEqual(GroupMotionMath.appearAlpha(at: 0.5, delay: 0.5, duration: 0.6), 0)
-        XCTAssertEqual(GroupMotionMath.appearAlpha(at: 1.1, delay: 0.5, duration: 0.6), 1, accuracy: 0.0001)
-    }
+    // MARK: - Cancellation fade
 
     func testFadeAlphaDecreasesMonotonicallyToZero() {
         var previous = CGFloat.greatestFiniteMagnitude
@@ -324,17 +333,16 @@ final class GroupMotionMathTests: XCTestCase {
         XCTAssertEqual(GroupMotionMath.fadeAlpha(at: 0.4, duration: 0.4), 0, accuracy: 0.0001)
     }
 
-    func testAppearPhaseDurationUsesLastCompanion() {
+    func testReleasePhaseDurationUsesLastCompanion() {
         var rng = SeededRandomSource(seed: 15)
-        let frame = CGRect(x: 0, y: 0, width: 1000, height: 800)
-        let center = CGPoint(x: 500, y: 200)
         let configs = (0..<4).map {
-            CompanionConfig.make(id: $0, mainCenter: center, visibleFrame: frame, using: &rng, tuning: tuning)
+            CompanionConfig.make(
+                id: $0, mainCenter: mainCenter, physicalFrame: physicalFrame,
+                visibleFrame: visibleFrame, using: &rng, tuning: tuning
+            )
         }
-        let duration = GroupMotionMath.appearPhaseDuration(
-            configs: configs, fadeDuration: tuning.appearFadeDuration
-        )
-        let maxDelay = configs.map(\.appearDelay).max() ?? 0
-        XCTAssertEqual(duration, maxDelay + tuning.appearFadeDuration, accuracy: 0.0001)
+        let duration = GroupMotionMath.releasePhaseDuration(configs: configs)
+        let maxDelay = configs.map(\.releaseDelay).max() ?? 0
+        XCTAssertEqual(duration, maxDelay, accuracy: 0.0001)
     }
 }

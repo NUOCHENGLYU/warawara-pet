@@ -198,4 +198,42 @@ final class PetControllerPersonalityTests: XCTestCase {
         }
         XCTAssertEqual(controller.curiosityPose, .neutral)
     }
+
+    // MARK: - Group sequence scheduling suppression
+
+    func testGroupSequenceSuppressesAutonomousSchedulingAndResumes() {
+        let controller = makeController()
+        controller.startAutonomousBehavior()
+        XCTAssertTrue(controller.isAutonomousScheduled)
+
+        controller.setGroupSequenceActive(true)
+        XCTAssertFalse(controller.isAutonomousScheduled)
+
+        // Awareness ticks (far cursor) must NOT reschedule while the
+        // group sequence is active.
+        controller.mouseLocationProvider = { CGPoint(x: 5000, y: 5000) }
+        for k in 1...10 {
+            controller.awarenessTick(at: 100 + 0.15 * Double(k), evaluateSleepiness: false)
+            XCTAssertFalse(controller.isAutonomousScheduled)
+        }
+
+        controller.setGroupSequenceActive(false)
+        XCTAssertTrue(controller.isAutonomousScheduled)
+
+        // Re-enabling is idempotent and does not double-schedule.
+        controller.setGroupSequenceActive(false)
+        XCTAssertTrue(controller.isAutonomousScheduled)
+        controller.setGroupSequenceActive(true)
+        XCTAssertFalse(controller.isAutonomousScheduled)
+    }
+
+    func testRepeatedGroupActiveToggleIsHarmless() {
+        let controller = makeController()
+        controller.setGroupSequenceActive(true)
+        controller.setGroupSequenceActive(true)   // idempotent
+        controller.setGroupSequenceActive(false)
+        XCTAssertTrue(controller.isAutonomousScheduled)
+        // Pet state machine is untouched by the toggle.
+        XCTAssertEqual(controller.state, .idle)
+    }
 }
