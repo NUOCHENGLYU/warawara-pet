@@ -1,16 +1,17 @@
-import AppKit
+﻿import AppKit
 import SwiftUI
 
 /// Orchestrates the temporary companion group sequence with persistent,
 /// per-companion kinematic state so motion carries inertia and phase
-/// transitions are exactly position-continuous.
+/// transitions are exactly position-continuous. Companions also carry a
+/// velocity-responsive soft-body pose (CompanionPoseEstimator) rendered
+/// through CompanionPoseModel.
 ///
 /// Lifecycle invariant: companion panels are POOLED, never closed or
 /// ordered out while the app runs. They enter from fully off-screen,
-/// travel through the choreography, exit spatially beyond the physical
-/// top edge, and are parked off-screen (invisible) until the next
-/// sequence. This guarantees the main pet panel is never affected by
-/// window-close window-server maintenance and always remains visible.
+/// travel through the choreography, exit through the top edge in a slow
+/// staged crossing, and are parked off-screen (invisible) until the next
+/// sequence. The main pet panel is never affected.
 final class GroupSequenceController {
     private struct CompanionRuntime {
         let config: CompanionConfig
@@ -19,6 +20,8 @@ final class GroupSequenceController {
         var ascentStart = CGPoint.zero
         var released = false
         var exited = false
+        let poseModel = CompanionPoseModel()
+        var poseEstimator = CompanionPoseEstimator()
     }
 
     private weak var windowController: PetWindowController?
@@ -83,8 +86,8 @@ final class GroupSequenceController {
     /// (they ignore mouse events anyway).
     private var restingPosition: CGPoint {
         CGPoint(
-            x: physicalFrame.minX + tuning.companionPanelSize,
-            y: physicalFrame.minY - tuning.companionPanelSize - 60
+            x: physicalFrame.minX + CompanionMetrics.size,
+            y: physicalFrame.minY - CompanionMetrics.size - 60
         )
     }
 
@@ -93,49 +96,39 @@ final class GroupSequenceController {
             let panel: CompanionPetPanel
             if let pooled = panelPool.popLast() {
                 panel = pooled
-                let hosting = NSHostingView(
-                    rootView: CompanionPetView(scale: companion.config.scale)
-                )
-                hosting.frame = NSRect(
-                    origin: .zero,
-                    size: CGSize(
-                        width: tuning.companionPanelSize,
-                        height: tuning.companionPanelSize
-                    )
-                )
-                panel.contentView = hosting
             } else {
-                panel = CompanionPetPanel(size: tuning.companionPanelSize)
-                let hosting = NSHostingView(
-                    rootView: CompanionPetView(scale: companion.config.scale)
-                )
-                hosting.frame = NSRect(
-                    origin: .zero,
-                    size: CGSize(
-                        width: tuning.companionPanelSize,
-                        height: tuning.companionPanelSize
-                    )
-                )
-                panel.contentView = hosting
+                panel = CompanionPetPanel(size: CompanionMetrics.size)
             }
+            let runtime = CompanionRuntime(
+                config: companion.config,
+                kinematics: CompanionKinematics(
+                    position: companion.config.entryPoint,
+                    velocity: .zero
+                )
+            )
+            let hosting = NSHostingView(
+                rootView: CompanionPetView(scale: companion.config.scale, pose: runtime.poseModel)
+            )
+            hosting.frame = NSRect(
+                origin: .zero,
+                size: CGSize(width: CompanionMetrics.size, height: CompanionMetrics.size)
+            )
+            panel.contentView = hosting
             panel.alphaValue = 1
             panel.setFrameOrigin(origin(for: companion.config.entryPoint))
             panel.orderFrontRegardless()
             panels[companion.config.id] = panel
-            runtimes.append(
-                CompanionRuntime(
-                    config: companion.config,
-                    kinematics: CompanionKinematics(
-                        position: companion.config.entryPoint,
-                        velocity: .zero
-                    )
-                )
-            )
+            runtimes.append(runtime)
         }
     }
 
     private func parkPanel(id: Int) {
         guard let panel = panels.removeValue(forKey: id) else { return }
+        if let index = runtimes.firstIndex(where: { $0.config.id == id }) {
+            runtimes[index].poseModel.deformation = .neutral
+            runtimes[index].poseModel.breathing = 1
+            runtimes[index].poseEstimator.reset()
+        }
         panel.alphaValue = 0
         panel.setFrameOrigin(restingPosition)
         panelPool.append(panel)
@@ -184,6 +177,7 @@ final class GroupSequenceController {
                         springStrength: config.springStrength,
                         damping: config.damping
                     )
+                    updatePose(index: index, now: now)
                     updatePanel(id: config.id) {
                         $0.setFrameOrigin(self.origin(for: self.runtimes[index].kinematics.position))
                     }
@@ -194,7 +188,7 @@ final class GroupSequenceController {
             }
         case .gathering:
             let elapsed = Date().timeIntervalSince(phaseStart)
-            stepGathering(dt: dt)
+            stepGathering(dt: dt, now: now)
             let settled = runtimes.allSatisfy { runtime in
                 let target = formationTarget(for: runtime.config.id)
                 return runtime.kinematics.speed < tuning.gatherSettleSpeed
@@ -208,7 +202,8 @@ final class GroupSequenceController {
             }
         case .hovering:
             let elapsed = Date().timeIntervalSince(phaseStart)
-            for runtime in runtimes {
+            for index in runtimes.indices {
+                let runtime = runtimes[index]
                 let offset = GroupMotionMath.hoverOffset(
                     at: elapsed,
                     rampInDuration: tuning.hoverRampInDuration,
@@ -218,6 +213,10 @@ final class GroupSequenceController {
                 let position = CGPoint(
                     x: runtime.hoverBase.x + offset.dx,
                     y: runtime.hoverBase.y + offset.dy
+                )
+                runtime.poseModel.deformation = .neutral
+                runtime.poseModel.breathing = CompanionPoseEstimator.breathingScale(
+                    at: elapsed, config: runtime.config, tuning: tuning
                 )
                 updatePanel(id: runtime.config.id) {
                     $0.alphaValue = 1
@@ -246,7 +245,7 @@ final class GroupSequenceController {
             }
         case .ascending:
             let elapsed = Date().timeIntervalSince(phaseStart)
-            stepAscent(dt: dt, elapsed: elapsed)
+            stepAscent(dt: dt, elapsed: elapsed, now: now)
             if runtimes.allSatisfy(\.exited) || runtimes.isEmpty {
                 transition(to: .finishing)
                 cleanup()
@@ -265,7 +264,14 @@ final class GroupSequenceController {
 
     // MARK: - Motion steps
 
-    private func stepGathering(dt: TimeInterval) {
+    private func updatePose(index: Int, now: TimeInterval) {
+        let velocity = runtimes[index].kinematics.velocity
+        runtimes[index].poseEstimator.update(velocity: velocity, at: now)
+        runtimes[index].poseModel.deformation = runtimes[index].poseEstimator.pose
+        runtimes[index].poseModel.breathing = 1
+    }
+
+    private func stepGathering(dt: TimeInterval, now: TimeInterval) {
         let positions = runtimes.map(\.kinematics.position)
         var targets = runtimes.map { formationTarget(for: $0.config.id) }
         targets = GroupMotionMath.separationAdjustedTargets(
@@ -282,6 +288,7 @@ final class GroupSequenceController {
                 springStrength: config.springStrength,
                 damping: config.damping
             )
+            updatePose(index: index, now: now)
             updatePanel(id: config.id) {
                 $0.alphaValue = 1
                 $0.setFrameOrigin(self.origin(for: self.runtimes[index].kinematics.position))
@@ -289,7 +296,7 @@ final class GroupSequenceController {
         }
     }
 
-    private func stepAscent(dt: TimeInterval, elapsed: TimeInterval) {
+    private func stepAscent(dt: TimeInterval, elapsed: TimeInterval, now: TimeInterval) {
         let activeIndices = runtimes.indices.filter { !runtimes[$0].exited }
 
         let positions = runtimes.map(\.kinematics.position)
@@ -312,24 +319,38 @@ final class GroupSequenceController {
 
         for index in activeIndices {
             let config = runtimes[index].config
+            let beforeY = runtimes[index].kinematics.position.y
             runtimes[index].kinematics.step(
                 toward: adjusted[index],
                 dt: dt,
                 springStrength: tuning.ascentSpringStrength,
                 damping: tuning.ascentDamping
             )
+
+            // Staged top-edge exit: once the body top is inside the slow
+            // zone, rise at a slow constant speed so the body visibly
+            // crosses the boundary in stages (top, half, lower portion).
+            let bodyHalfHeight = CompanionMetrics.blobHeight * config.scale / 2
+            let bodyTopY = runtimes[index].kinematics.position.y + bodyHalfHeight
+            if GroupMotionMath.isInExitSlowZone(
+                bodyTopY: bodyTopY,
+                physicalFrame: physicalFrame,
+                zoneHeight: tuning.exitSlowZoneHeight
+            ) {
+                runtimes[index].kinematics.position.y = beforeY + config.exitSlowSpeed * CGFloat(dt)
+                runtimes[index].kinematics.velocity.dy = config.exitSlowSpeed
+            }
+
+            updatePose(index: index, now: now)
             let position = runtimes[index].kinematics.position
             updatePanel(id: config.id) {
                 $0.alphaValue = 1
                 $0.setFrameOrigin(self.origin(for: position))
             }
 
-            // Individual spatial exit: park only once the ENTIRE panel
-            // body is beyond the physical top edge. The emergency timeout
-            // parks even if still on screen (should not normally fire).
             let panelFrame = CGRect(
                 origin: origin(for: position),
-                size: CGSize(width: tuning.companionPanelSize, height: tuning.companionPanelSize)
+                size: CGSize(width: CompanionMetrics.size, height: CompanionMetrics.size)
             )
             if GroupMotionMath.isFullyAboveTopEdge(
                 panelFrame: panelFrame,
@@ -382,6 +403,6 @@ final class GroupSequenceController {
     }
 
     private func origin(for center: CGPoint) -> CGPoint {
-        CGPoint(x: center.x - tuning.companionPanelSize / 2, y: center.y - tuning.companionPanelSize / 2)
+        CGPoint(x: center.x - CompanionMetrics.size / 2, y: center.y - CompanionMetrics.size / 2)
     }
 }

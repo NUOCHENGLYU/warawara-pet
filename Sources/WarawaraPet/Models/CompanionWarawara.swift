@@ -4,7 +4,6 @@ import Foundation
 /// initial values; they will be tuned on a real Mac later.
 struct GroupTuning {
     var companionCount: Int = 4
-    var companionPanelSize: CGFloat = 96
 
     // Appearance: companions enter from outside the physical screen
     var entryMargin: CGFloat = 24
@@ -36,6 +35,15 @@ struct GroupTuning {
     var hoverBobPeriod: TimeInterval = 2.6
     var hoverDriftAmplitude: CGFloat = 10
 
+    // Velocity-responsive companion pose
+    var poseTimeConstant: TimeInterval = 0.18
+    var poseMaxGapDuration: TimeInterval = 1.0
+    var poseVelocityAtMax: CGFloat = 300
+    var poseMinSpeed: CGFloat = 15
+    var poseMaxStretch: CGFloat = 0.14
+    var poseMaxLean: CGFloat = 0.07
+    var poseBreathingPeriod: TimeInterval = 3.2
+
     // Ascent fan-out (per-companion exit trajectories)
     var ascentRiseHeightMin: CGFloat = 700
     var ascentRiseHeightMax: CGFloat = 1100
@@ -46,10 +54,15 @@ struct GroupTuning {
     var fanSpreadRange: ClosedRange<CGFloat> = 130...280
     var fanAngleJitter: CGFloat = 0.25
     var exitStaggerRange: ClosedRange<TimeInterval> = 0...0.5
+    /// Staged top-edge exit: within this distance of the top, companions
+    /// switch to a slow constant upward speed so their body visibly
+    /// crosses the boundary in stages.
+    var exitSlowZoneHeight: CGFloat = 120
+    var exitSlowSpeedRange: ClosedRange<CGFloat> = 35...55
     /// Emergency fallback only: a companion still on screen after this
     /// long is parked off-screen. Normal exits happen spatially first.
-    var ascentMaxDuration: TimeInterval = 10
-    var exitTopMargin: CGFloat = 24
+    var ascentMaxDuration: TimeInterval = 14
+    var exitTopMargin: CGFloat = 8
     var exitSideMargin: CGFloat = 60
 
     // Fade (cancellation)
@@ -82,6 +95,9 @@ struct CompanionConfig: Equatable {
     /// variation baked into the rise height).
     let exitTargetOffset: CGVector
     let exitStagger: TimeInterval
+    /// Constant upward speed used while crossing the top edge (staged,
+    /// gradual exit).
+    let exitSlowSpeed: CGFloat
 
     static func make(
         id: Int,
@@ -103,7 +119,7 @@ struct CompanionConfig: Equatable {
             edge: edge,
             mainCenter: mainCenter,
             physicalFrame: physicalFrame,
-            panelSize: tuning.companionPanelSize,
+            panelSize: CompanionMetrics.size,
             using: &rng,
             tuning: tuning
         )
@@ -130,6 +146,9 @@ struct CompanionConfig: Equatable {
         let exitStagger = RandomBounds.randomDelay(
             in: tuning.exitStaggerRange, using: &rng
         )
+        let exitSlowSpeed = RandomBounds.randomCGFloat(
+            in: tuning.exitSlowSpeedRange, using: &rng
+        )
         let rawExit = CGVector(dx: cos(fanAngle) * spread, dy: rise)
         let exitTargetOffset = GroupMotionMath.clampExitOffset(
             mainCenter: mainCenter,
@@ -148,7 +167,8 @@ struct CompanionConfig: Equatable {
             springStrength: max(springStrength, 0.5),
             damping: max(damping, 0.1),
             exitTargetOffset: exitTargetOffset,
-            exitStagger: exitStagger
+            exitStagger: exitStagger,
+            exitSlowSpeed: exitSlowSpeed
         )
     }
 }

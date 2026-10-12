@@ -287,15 +287,27 @@ enum GroupMotionMath {
             * sin(2 * .pi * e / CGFloat(tuning.ascentSwayPeriod) + config.driftPhase)
     }
 
-    /// Exit predicate: the companion's ENTIRE panel body is above the
-    /// physical screen's top edge (plus a small margin), so it has truly
-    /// left the display and can be parked/released.
+    /// Exit predicate: the companion's ENTIRE rendered body (panel inset
+    /// by CompanionMetrics.padding) is above the physical screen's top
+    /// edge, so it has truly left the display and can be parked/released.
     static func isFullyAboveTopEdge(
         panelFrame: CGRect,
         physicalFrame: CGRect,
         margin: CGFloat
     ) -> Bool {
-        panelFrame.minY > physicalFrame.maxY + margin
+        let body = CompanionMetrics.bodyFrame(panelFrame: panelFrame)
+        return body.minY > physicalFrame.maxY + margin
+    }
+
+    /// True when the companion's rendered body top is within the slow
+    /// exit zone below the physical top edge: from here on it should move
+    /// upward at a slow constant speed so the crossing is visibly staged.
+    static func isInExitSlowZone(
+        bodyTopY: CGFloat,
+        physicalFrame: CGRect,
+        zoneHeight: CGFloat
+    ) -> Bool {
+        bodyTopY >= physicalFrame.maxY - zoneHeight
     }
 
     // MARK: - Fades

@@ -197,6 +197,7 @@ final class GroupSequenceModelTests: XCTestCase {
             XCTAssertGreaterThan(config.springStrength, 0)
             XCTAssertGreaterThan(config.damping, 0)
             XCTAssertTrue(tuning.exitStaggerRange.contains(config.exitStagger))
+            XCTAssertTrue(tuning.exitSlowSpeedRange.contains(config.exitSlowSpeed))
             XCTAssertGreaterThan(config.exitTargetOffset.dy, 0)
         }
     }

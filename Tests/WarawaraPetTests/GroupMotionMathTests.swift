@@ -83,7 +83,7 @@ final class GroupMotionMathTests: XCTestCase {
                     edge: edge,
                     mainCenter: mainCenter,
                     physicalFrame: physicalFrame,
-                    panelSize: tuning.companionPanelSize,
+                    panelSize: CompanionMetrics.size,
                     using: &rng,
                     tuning: tuning
                 )
@@ -270,7 +270,7 @@ final class GroupMotionMathTests: XCTestCase {
     }
 
     func testSpatialExitRequiresEntireBodyBeyondTopEdge() {
-        let panelSize = tuning.companionPanelSize
+        let panelSize = CompanionMetrics.size
         let onScreen = CGRect(x: 300, y: 600, width: panelSize, height: panelSize)
         XCTAssertFalse(
             GroupMotionMath.isFullyAboveTopEdge(
@@ -289,6 +289,63 @@ final class GroupMotionMathTests: XCTestCase {
                 panelFrame: gone, physicalFrame: physicalFrame, margin: tuning.exitTopMargin
             )
         )
+    }
+
+    func testExitSlowZonePredicate() {
+        let physical = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        XCTAssertFalse(
+            GroupMotionMath.isInExitSlowZone(
+                bodyTopY: 500, physicalFrame: physical, zoneHeight: 120
+            )
+        )
+        XCTAssertTrue(
+            GroupMotionMath.isInExitSlowZone(
+                bodyTopY: 700, physicalFrame: physical, zoneHeight: 120
+            )
+        )
+        XCTAssertTrue(
+            GroupMotionMath.isInExitSlowZone(
+                bodyTopY: 810, physicalFrame: physical, zoneHeight: 120
+            )
+        )
+    }
+
+    func testStagedTopEdgeCrossingShowsPartialVisibility() {
+        // Simulate the slow exit zone: the body rises at a constant slow
+        // speed and must pass through a stage where only part of it is
+        // visible before being parked.
+        let physical = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let panelSize = CompanionMetrics.size
+        let slowSpeed: CGFloat = 40
+        var centerY: CGFloat = 700
+        var sawFullyVisible = false
+        var sawPartiallyVisible = false
+        var exited = false
+        for _ in 0..<120 {
+            centerY += slowSpeed / 60
+            let panel = CGRect(
+                x: 300,
+                y: centerY - panelSize / 2,
+                width: panelSize,
+                height: panelSize
+            )
+            let body = CompanionMetrics.bodyFrame(panelFrame: panel)
+            if body.minY <= physical.maxY {
+                sawFullyVisible = true
+            }
+            if body.minY < physical.maxY && body.maxY > physical.maxY {
+                sawPartiallyVisible = true
+            }
+            if GroupMotionMath.isFullyAboveTopEdge(
+                panelFrame: panel, physicalFrame: physical, margin: 8
+            ) {
+                exited = true
+                break
+            }
+        }
+        XCTAssertTrue(sawFullyVisible)
+        XCTAssertTrue(sawPartiallyVisible, "body must be partially visible while crossing the top edge")
+        XCTAssertTrue(exited, "companion must exit after the slow staged crossing")
     }
 
     func testCompanionPhaseOffsetsProduceDifferentMotion() {
