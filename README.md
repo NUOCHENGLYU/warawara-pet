@@ -27,9 +27,12 @@ What exists today:
 - `.stationary` collection behavior so the pet stays visible during Show
   Desktop / Mission Control
 - **Phase 3:** a manually triggered companion group sequence — 3–5
-  temporary non-interactive Warawara appear around the main pet, gather
-  loosely, hover organically, ascend with gentle acceleration, and fade
-  out; clicking or dragging the main pet cancels the sequence instantly
+  temporary non-interactive Warawara enter from outside the display,
+  gather loosely with spring inertia, hover organically, ascend with
+  gentle acceleration along individual fan-out paths, physically cross
+  the top edge, and park off-screen (panels are pooled, never closed
+  mid-session, so the main pet panel can never be affected); clicking or
+  dragging the main pet cancels the sequence instantly
 
 No group randomness in the scheduler yet, no birthday behavior, no final
 artwork, no sound, no network, no NSMenu (menu-bar quit is a direct
@@ -192,19 +195,25 @@ launches are unaffected.
 
 Phase 3 real-Mac checklist:
 
-- [ ] companions appear staggered around the pet (not stacked, not
-      off-screen)
+- [ ] companions start fully OUTSIDE the display and enter by physically
+      crossing the screen boundary (left/right/bottom edges), staggered
+- [ ] entry motion is soft and inertial, no teleporting, no opacity-only
+      appearance
 - [ ] gathering is smooth and eased; companions end up loosely grouped,
       not on one point
 - [ ] companions do not move identically (different scale/bob/drift)
 - [ ] hover looks organic (2–4 s, gentle bobbing)
-- [ ] ascent is slow and soft (3–5 s), companions leave through the top
-- [ ] all companion windows are gone after the sequence (zero leftovers)
-- [ ] the main pet stays in place and resumes normal idle behavior after
+- [ ] ascent is slow and soft; each companion physically moves beyond the
+      top display edge and only then disappears, independently
+- [ ] all companion windows are parked/gone after the sequence (zero
+      visible leftovers)
+- [ ] the main pet NEVER disappears during or after the sequence and
+      resumes normal idle behavior after
 - [ ] clicking the main pet during any phase cancels the sequence
-      immediately with no orphan windows
+      immediately with no orphan windows and no pet disappearance
 - [ ] dragging the main pet during any phase cancels the sequence
       immediately
+- [ ] fast vertical/horizontal drags never clip the pet's bottom silhouette
 - [ ] keyboard focus remains with the previously active app
 - [ ] Show Desktop still works
 - [ ] menu-bar quit button still exits immediately
