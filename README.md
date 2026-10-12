@@ -28,11 +28,13 @@ What exists today:
   Desktop / Mission Control
 - **Phase 3:** a manually triggered companion group sequence — 3–5
   temporary non-interactive Warawara enter from outside the display,
-  gather loosely with spring inertia, hover organically, ascend with
-  gentle acceleration along individual fan-out paths, physically cross
-  the top edge, and park off-screen (panels are pooled, never closed
-  mid-session, so the main pet panel can never be affected); clicking or
-  dragging the main pet cancels the sequence instantly
+  gather loosely with spring inertia and velocity-responsive soft-body
+  stretch/lean, hover organically with subtle breathing, ascend with
+  gentle acceleration along individual fan-out paths, slow to a staged
+  crossing at the top edge (body visibly passes out of view), and park
+  off-screen (panels are pooled, never closed mid-session, so the main
+  pet panel can never be affected); clicking or dragging the main pet
+  cancels the sequence instantly
 
 No group randomness in the scheduler yet, no birthday behavior, no final
 artwork, no sound, no network, no NSMenu (menu-bar quit is a direct
@@ -203,8 +205,12 @@ Phase 3 real-Mac checklist:
       not on one point
 - [ ] companions do not move identically (different scale/bob/drift)
 - [ ] hover looks organic (2–4 s, gentle bobbing)
-- [ ] ascent is slow and soft; each companion physically moves beyond the
-      top display edge and only then disappears, independently
+- [ ] ascent is slow and soft; near the top each companion slows to a
+      staged crossing — upper body, then half, then the last visible
+      portion slides out of view — and only then disappears, independently
+- [ ] companions visibly stretch/lean while moving and relax smoothly
+      when stopping (moderate, softer than the main pet's drag)
+- [ ] companion bodies never appear clipped while moving or deformed
 - [ ] all companion windows are parked/gone after the sequence (zero
       visible leftovers)
 - [ ] the main pet NEVER disappears during or after the sequence and
