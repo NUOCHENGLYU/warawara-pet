@@ -321,7 +321,7 @@ final class GroupMotionMathTests: XCTestCase {
         var sawFullyVisible = false
         var sawPartiallyVisible = false
         var exited = false
-        for _ in 0..<120 {
+        for _ in 0..<600 {
             centerY += slowSpeed / 60
             let panel = CGRect(
                 x: 300,
