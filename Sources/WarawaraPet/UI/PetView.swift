@@ -36,7 +36,7 @@ struct PetView: View {
                     .offset(x: 22, y: 42)
             }
         }
-        .frame(width: 160, height: 160, alignment: .bottom)
+        .frame(width: 200, height: 200, alignment: .bottom)
         .animation(bobAnimation, value: bobbing)
         .onAppear {
             bobbing = true
@@ -91,7 +91,7 @@ struct PetView: View {
             )
             .frame(width: 96, height: 118)
             .overlay(Capsule().stroke(Color(white: 0.55), lineWidth: 1.5))
-            .padding(.bottom, 6)
+            .padding(.bottom, PetMetrics.blobBottomPadding)
     }
 
     private var eyes: some View {
@@ -99,7 +99,7 @@ struct PetView: View {
             EyeView()
             EyeView()
         }
-        .offset(y: 34)
+        .offset(y: 62)
     }
 
     private var bobOffset: CGFloat {

@@ -15,7 +15,7 @@ struct EllipseHitRegion {
         EllipseHitRegion(
             center: PetMetrics.visualCenter,
             radiusX: 55,
-            radiusY: 62
+            radiusY: 64
         )
     }
 }
