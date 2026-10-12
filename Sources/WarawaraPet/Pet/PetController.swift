@@ -214,7 +214,9 @@ final class PetController: ObservableObject {
                 curiosityPoseEstimator.reset()
                 guard stateMachine.transition(to: .curious) else { return }
                 state = stateMachine.state
-            } else if autonomousTimer == nil {
+            } else if autonomousTimer == nil && !groupSequenceActive {
+                // Do not reschedule while a group sequence is running:
+                // autonomous actions stay paused for its duration.
                 scheduleNextAutonomousAction()
             }
         case .curious:

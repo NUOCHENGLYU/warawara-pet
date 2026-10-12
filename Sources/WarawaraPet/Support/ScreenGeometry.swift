@@ -32,6 +32,17 @@ enum ScreenGeometry {
         NSScreen.screens.map(\.visibleFrame)
     }
 
+    /// The PHYSICAL screen frame (includes menu bar / Dock areas) of the
+    /// screen containing `frame`'s center. Used for off-screen entry/exit
+    /// choreography, where companions must genuinely leave the display.
+    static func physicalFrame(for frame: CGRect) -> CGRect {
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        for screen in NSScreen.screens where screen.frame.contains(center) {
+            return screen.frame
+        }
+        return NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1280, height: 800)
+    }
+
     static func visibleFrame(for frame: CGRect) -> CGRect {
         let center = CGPoint(x: frame.midX, y: frame.midY)
         return visibleFrame(containing: center, candidates: screenVisibleFrames())

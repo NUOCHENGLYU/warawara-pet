@@ -6,13 +6,11 @@ struct GroupTuning {
     var companionCount: Int = 4
     var companionPanelSize: CGFloat = 96
 
-    // Appearance
-    var spawnMinRadius: CGFloat = 90
-    var spawnMaxRadius: CGFloat = 170
-    var spawnElevationRange: ClosedRange<CGFloat> = -20...70
-    var appearStagger: TimeInterval = 0.35
-    var appearFadeDuration: TimeInterval = 0.6
-    var spawnMargin: CGFloat = 16
+    // Appearance: companions enter from outside the physical screen
+    var entryMargin: CGFloat = 24
+    var entryJitterRange: ClosedRange<CGFloat> = 0...80
+    var releaseStagger: TimeInterval = 0.35
+    var releaseDelayJitter: TimeInterval = 0.15
 
     // Inertial gathering (second-order spring/damper motion)
     var gatherSpringStrength: CGFloat = 8
@@ -48,10 +46,10 @@ struct GroupTuning {
     var fanSpreadRange: ClosedRange<CGFloat> = 130...280
     var fanAngleJitter: CGFloat = 0.25
     var exitStaggerRange: ClosedRange<TimeInterval> = 0...0.5
-    var ascentMaxDuration: TimeInterval = 7
-    var exitFadeDuration: TimeInterval = 0.5
-    var exitFadeTopMargin: CGFloat = 60
-    var exitTopMargin: CGFloat = 40
+    /// Emergency fallback only: a companion still on screen after this
+    /// long is parked off-screen. Normal exits happen spatially first.
+    var ascentMaxDuration: TimeInterval = 10
+    var exitTopMargin: CGFloat = 24
     var exitSideMargin: CGFloat = 60
 
     // Fade (cancellation)
@@ -66,13 +64,14 @@ struct GroupTuning {
     static let `default` = GroupTuning()
 }
 
-/// Per-companion variation, generated once per sequence. All spatial
-/// values are relative to the main pet's center and stay stable for the
-/// whole sequence (never re-randomized at phase boundaries).
+/// Per-companion variation, generated once per sequence. Entry points are
+/// absolute positions fully outside the physical screen frame; exit
+/// targets are offsets from the companion's ascent start. Everything stays
+/// stable for the whole sequence (never re-randomized at phase boundaries).
 struct CompanionConfig: Equatable {
     let id: Int
-    let spawnOffset: CGVector
-    let appearDelay: TimeInterval
+    let entryPoint: CGPoint
+    let releaseDelay: TimeInterval
     let bobPhase: CGFloat
     let driftPhase: CGFloat
     let scale: CGFloat
@@ -87,26 +86,30 @@ struct CompanionConfig: Equatable {
     static func make(
         id: Int,
         mainCenter: CGPoint,
+        physicalFrame: CGRect,
         visibleFrame: CGRect,
         using rng: inout some RandomSource,
         tuning: GroupTuning
     ) -> CompanionConfig {
-        let goldenAngle: CGFloat = 2.399963229728653
-        let spawnAngle = CGFloat(id) * goldenAngle
-            + RandomBounds.randomCGFloat(in: -0.4...0.4, using: &rng)
-        let spawnRadius = RandomBounds.randomCGFloat(
-            in: tuning.spawnMinRadius...tuning.spawnMaxRadius, using: &rng
+        let edge = GroupMotionMath.entryEdge(
+            index: id,
+            count: tuning.companionCount,
+            mainCenter: mainCenter,
+            physicalFrame: physicalFrame,
+            using: &rng,
+            tuning: tuning
         )
-        let spawnElevation = RandomBounds.randomCGFloat(
-            in: tuning.spawnElevationRange, using: &rng
-        )
-        let spawnOffset = CGVector(
-            dx: cos(spawnAngle) * spawnRadius,
-            dy: sin(spawnAngle) * spawnRadius * 0.7 + spawnElevation
+        let entryPoint = GroupMotionMath.entryPosition(
+            edge: edge,
+            mainCenter: mainCenter,
+            physicalFrame: physicalFrame,
+            panelSize: tuning.companionPanelSize,
+            using: &rng,
+            tuning: tuning
         )
 
-        let appearDelay = TimeInterval(id) * tuning.appearStagger
-            + RandomBounds.randomDelay(in: 0...0.15, using: &rng)
+        let releaseDelay = TimeInterval(id) * tuning.releaseStagger
+            + RandomBounds.randomDelay(in: 0...tuning.releaseDelayJitter, using: &rng)
         let bobPhase = RandomBounds.randomCGFloat(in: 0...(2 * .pi), using: &rng)
         let driftPhase = RandomBounds.randomCGFloat(in: 0...(2 * .pi), using: &rng)
         let scale = RandomBounds.randomCGFloat(in: tuning.companionScaleRange, using: &rng)
@@ -131,14 +134,14 @@ struct CompanionConfig: Equatable {
         let exitTargetOffset = GroupMotionMath.clampExitOffset(
             mainCenter: mainCenter,
             offset: rawExit,
-            visibleFrame: visibleFrame,
+            visibleFrame: physicalFrame,
             sideMargin: tuning.exitSideMargin
         )
 
         return CompanionConfig(
             id: id,
-            spawnOffset: spawnOffset,
-            appearDelay: appearDelay,
+            entryPoint: entryPoint,
+            releaseDelay: releaseDelay,
             bobPhase: bobPhase,
             driftPhase: driftPhase,
             scale: scale,
@@ -170,6 +173,7 @@ struct GroupSequenceModel {
     @discardableResult
     mutating func begin(
         mainCenter: CGPoint,
+        physicalFrame: CGRect,
         visibleFrame: CGRect,
         using rng: inout some RandomSource,
         tuning: GroupTuning
@@ -180,6 +184,7 @@ struct GroupSequenceModel {
                 config: CompanionConfig.make(
                     id: id,
                     mainCenter: mainCenter,
+                    physicalFrame: physicalFrame,
                     visibleFrame: visibleFrame,
                     using: &rng,
                     tuning: tuning

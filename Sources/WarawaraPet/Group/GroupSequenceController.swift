@@ -3,16 +3,22 @@ import SwiftUI
 
 /// Orchestrates the temporary companion group sequence with persistent,
 /// per-companion kinematic state so motion carries inertia and phase
-/// transitions are exactly position-continuous. Companions are
-/// lightweight non-interactive panels; the main pet's core state model is
-/// never touched.
+/// transitions are exactly position-continuous.
+///
+/// Lifecycle invariant: companion panels are POOLED, never closed or
+/// ordered out while the app runs. They enter from fully off-screen,
+/// travel through the choreography, exit spatially beyond the physical
+/// top edge, and are parked off-screen (invisible) until the next
+/// sequence. This guarantees the main pet panel is never affected by
+/// window-close window-server maintenance and always remains visible.
 final class GroupSequenceController {
     private struct CompanionRuntime {
         let config: CompanionConfig
         var kinematics: CompanionKinematics
         var hoverBase = CGPoint.zero
         var ascentStart = CGPoint.zero
-        var fadeElapsed: TimeInterval?
+        var released = false
+        var exited = false
     }
 
     private weak var windowController: PetWindowController?
@@ -20,13 +26,14 @@ final class GroupSequenceController {
     private let tuning = GroupTuning.default
     private var model = GroupSequenceModel()
     private var rng = SystemRandomSource()
+    private var panelPool: [CompanionPetPanel] = []
     private var panels: [Int: CompanionPetPanel] = [:]
     private var runtimes: [CompanionRuntime] = []
     private var timer: Timer?
     private var phaseStart = Date()
     private var lastTickTime = ProcessInfo.processInfo.systemUptime
     private var fadeStart = Date()
-    private var appearPhaseTotal: TimeInterval = 1
+    private var releasePhaseTotal: TimeInterval = 1
 
     /// Called when the sequence becomes active (true) and when it fully
     /// ends (false); the main pet uses this to pause/resume autonomous
@@ -45,16 +52,16 @@ final class GroupSequenceController {
         guard model.state == .inactive else { return }
         guard model.begin(
             mainCenter: mainCenter,
+            physicalFrame: physicalFrame,
             visibleFrame: visibleFrame,
             using: &rng,
             tuning: tuning
         ) else { return }
         onActiveChanged?(true)
-        appearPhaseTotal = GroupMotionMath.appearPhaseDuration(
-            configs: model.companions.map(\.config),
-            fadeDuration: tuning.appearFadeDuration
+        releasePhaseTotal = GroupMotionMath.releasePhaseDuration(
+            configs: model.companions.map(\.config)
         )
-        createPanels()
+        preparePanels()
         lastTickTime = ProcessInfo.processInfo.systemUptime
         phaseStart = Date()
         startTimer()
@@ -69,32 +76,74 @@ final class GroupSequenceController {
         }
     }
 
-    // MARK: - Lifecycle internals
+    // MARK: - Panel lifecycle (pooling; never closes mid-session)
 
-    private func createPanels() {
+    /// Off-screen parking spot below the physical screen, far enough that
+    /// parked panels are entirely invisible and never intercept input
+    /// (they ignore mouse events anyway).
+    private var restingPosition: CGPoint {
+        CGPoint(
+            x: physicalFrame.minX + tuning.companionPanelSize,
+            y: physicalFrame.minY - tuning.companionPanelSize - 60
+        )
+    }
+
+    private func preparePanels() {
         for companion in model.companions {
-            let panel = CompanionPetPanel(size: tuning.companionPanelSize)
-            let hosting = NSHostingView(rootView: CompanionPetView(scale: companion.config.scale))
-            hosting.frame = NSRect(
-                origin: .zero,
-                size: CGSize(width: tuning.companionPanelSize, height: tuning.companionPanelSize)
-            )
-            panel.contentView = hosting
-            let spawn = GroupMotionMath.spawnPosition(
-                mainCenter: mainCenter,
-                offset: companion.config.spawnOffset,
-                visibleFrame: visibleFrame,
-                margin: tuning.spawnMargin
-            )
-            panel.setFrameOrigin(origin(for: spawn))
+            let panel: CompanionPetPanel
+            if let pooled = panelPool.popLast() {
+                panel = pooled
+                let hosting = NSHostingView(
+                    rootView: CompanionPetView(scale: companion.config.scale)
+                )
+                hosting.frame = NSRect(
+                    origin: .zero,
+                    size: CGSize(
+                        width: tuning.companionPanelSize,
+                        height: tuning.companionPanelSize
+                    )
+                )
+                panel.contentView = hosting
+            } else {
+                panel = CompanionPetPanel(size: tuning.companionPanelSize)
+                let hosting = NSHostingView(
+                    rootView: CompanionPetView(scale: companion.config.scale)
+                )
+                hosting.frame = NSRect(
+                    origin: .zero,
+                    size: CGSize(
+                        width: tuning.companionPanelSize,
+                        height: tuning.companionPanelSize
+                    )
+                )
+                panel.contentView = hosting
+            }
+            panel.alphaValue = 1
+            panel.setFrameOrigin(origin(for: companion.config.entryPoint))
             panel.orderFrontRegardless()
             panels[companion.config.id] = panel
             runtimes.append(
                 CompanionRuntime(
                     config: companion.config,
-                    kinematics: CompanionKinematics(position: spawn, velocity: .zero)
+                    kinematics: CompanionKinematics(
+                        position: companion.config.entryPoint,
+                        velocity: .zero
+                    )
                 )
             )
+        }
+    }
+
+    private func parkPanel(id: Int) {
+        guard let panel = panels.removeValue(forKey: id) else { return }
+        panel.alphaValue = 0
+        panel.setFrameOrigin(restingPosition)
+        panelPool.append(panel)
+    }
+
+    private func parkAllPanels() {
+        for id in Array(panels.keys) {
+            parkPanel(id: id)
         }
     }
 
@@ -123,15 +172,24 @@ final class GroupSequenceController {
             break
         case .appearing:
             let elapsed = Date().timeIntervalSince(phaseStart)
-            for runtime in runtimes {
-                let alpha = GroupMotionMath.appearAlpha(
-                    at: elapsed,
-                    delay: runtime.config.appearDelay,
-                    duration: tuning.appearFadeDuration
-                )
-                updatePanel(id: runtime.config.id) { $0.alphaValue = alpha }
+            for index in runtimes.indices {
+                let config = runtimes[index].config
+                if !runtimes[index].released, elapsed >= config.releaseDelay {
+                    runtimes[index].released = true
+                }
+                if runtimes[index].released {
+                    runtimes[index].kinematics.step(
+                        toward: formationTarget(for: config.id),
+                        dt: dt,
+                        springStrength: config.springStrength,
+                        damping: config.damping
+                    )
+                    updatePanel(id: config.id) {
+                        $0.setFrameOrigin(self.origin(for: self.runtimes[index].kinematics.position))
+                    }
+                }
             }
-            if elapsed >= appearPhaseTotal {
+            if elapsed >= releasePhaseTotal {
                 transition(to: .gathering)
             }
         case .gathering:
@@ -189,8 +247,7 @@ final class GroupSequenceController {
         case .ascending:
             let elapsed = Date().timeIntervalSince(phaseStart)
             stepAscent(dt: dt, elapsed: elapsed)
-            if runtimes.allSatisfy({ $0.fadeElapsed != nil && ($0.fadeElapsed ?? 0) >= tuning.exitFadeDuration })
-                || runtimes.isEmpty {
+            if runtimes.allSatisfy(\.exited) || runtimes.isEmpty {
                 transition(to: .finishing)
                 cleanup()
             }
@@ -209,7 +266,7 @@ final class GroupSequenceController {
     // MARK: - Motion steps
 
     private func stepGathering(dt: TimeInterval) {
-        var positions = runtimes.map(\.kinematics.position)
+        let positions = runtimes.map(\.kinematics.position)
         var targets = runtimes.map { formationTarget(for: $0.config.id) }
         targets = GroupMotionMath.separationAdjustedTargets(
             positions: positions,
@@ -225,22 +282,17 @@ final class GroupSequenceController {
                 springStrength: config.springStrength,
                 damping: config.damping
             )
-            let position = runtimes[index].kinematics.position
-            positions[index] = position
             updatePanel(id: config.id) {
                 $0.alphaValue = 1
-                $0.setFrameOrigin(self.origin(for: position))
+                $0.setFrameOrigin(self.origin(for: self.runtimes[index].kinematics.position))
             }
         }
     }
 
     private func stepAscent(dt: TimeInterval, elapsed: TimeInterval) {
-        var activeIndices: [Int] = []
-        for index in runtimes.indices where runtimes[index].fadeElapsed == nil {
-            activeIndices.append(index)
-        }
+        let activeIndices = runtimes.indices.filter { !runtimes[$0].exited }
 
-        var positions = runtimes.map(\.kinematics.position)
+        let positions = runtimes.map(\.kinematics.position)
         var targets = runtimes.map(\.ascentStart)
         for index in activeIndices {
             let config = runtimes[index].config
@@ -251,7 +303,7 @@ final class GroupSequenceController {
             targets[index].x += config.exitTargetOffset.dx + sway
             targets[index].y += config.exitTargetOffset.dy
         }
-        targets = GroupMotionMath.separationAdjustedTargets(
+        let adjusted = GroupMotionMath.separationAdjustedTargets(
             positions: positions,
             targets: targets,
             minSpacing: tuning.companionMinSpacing,
@@ -261,52 +313,42 @@ final class GroupSequenceController {
         for index in activeIndices {
             let config = runtimes[index].config
             runtimes[index].kinematics.step(
-                toward: targets[index],
+                toward: adjusted[index],
                 dt: dt,
                 springStrength: tuning.ascentSpringStrength,
                 damping: tuning.ascentDamping
             )
             let position = runtimes[index].kinematics.position
-            positions[index] = position
-            let topY = position.y + tuning.companionPanelSize / 2
             updatePanel(id: config.id) {
                 $0.alphaValue = 1
                 $0.setFrameOrigin(self.origin(for: position))
             }
 
-            // Individual exit: fade near the top edge and remove once
-            // fully gone — companions leave one by one.
-            if runtimes[index].fadeElapsed == nil {
-                if GroupMotionMath.isAboveExitFadeZone(
-                    panelTopY: topY, visibleFrame: visibleFrame, margin: tuning.exitFadeTopMargin
-                ) || elapsed >= tuning.ascentMaxDuration {
-                    runtimes[index].fadeElapsed = 0
-                }
-            }
-        }
-
-        for index in runtimes.indices {
-            guard var fade = runtimes[index].fadeElapsed else { continue }
-            fade += dt
-            runtimes[index].fadeElapsed = fade
-            let alpha = GroupMotionMath.fadeAlpha(
-                at: fade, duration: tuning.exitFadeDuration
+            // Individual spatial exit: park only once the ENTIRE panel
+            // body is beyond the physical top edge. The emergency timeout
+            // parks even if still on screen (should not normally fire).
+            let panelFrame = CGRect(
+                origin: origin(for: position),
+                size: CGSize(width: tuning.companionPanelSize, height: tuning.companionPanelSize)
             )
-            panels[runtimes[index].config.id]?.alphaValue = alpha
-            if fade >= tuning.exitFadeDuration {
-                panels[runtimes[index].config.id]?.close()
-                panels.removeValue(forKey: runtimes[index].config.id)
+            if GroupMotionMath.isFullyAboveTopEdge(
+                panelFrame: panelFrame,
+                physicalFrame: physicalFrame,
+                margin: tuning.exitTopMargin
+            ) || elapsed >= tuning.ascentMaxDuration {
+                runtimes[index].exited = true
+                parkPanel(id: config.id)
             }
         }
     }
 
+    /// Idempotent: parks every remaining companion panel (never closes),
+    /// clears runtime state, ends the sequence, and resumes scheduling
+    /// exactly once.
     private func cleanup() {
         timer?.invalidate()
         timer = nil
-        for panel in panels.values {
-            panel.close()
-        }
-        panels.removeAll()
+        parkAllPanels()
         runtimes.removeAll()
         model.removeAllCompanions()
         _ = model.advance(to: .inactive)
@@ -327,6 +369,10 @@ final class GroupSequenceController {
 
     private var visibleFrame: CGRect {
         ScreenGeometry.visibleFrame(for: windowController?.currentFrame ?? .zero)
+    }
+
+    private var physicalFrame: CGRect {
+        ScreenGeometry.physicalFrame(for: windowController?.currentFrame ?? .zero)
     }
 
     private func formationTarget(for id: Int) -> CGPoint {

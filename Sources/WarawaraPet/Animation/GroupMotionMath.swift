@@ -46,21 +46,67 @@ enum GroupMotionMath {
         min(max(t, 0), 1)
     }
 
-    // MARK: - Spawn
+    // MARK: - Entry (from outside the physical screen)
 
-    /// Spawn position: main-pet center plus the companion's spawn offset,
-    /// kept fully inside the visible frame (with margin) so companions
-    /// never appear off-screen.
-    static func spawnPosition(
+    /// Chooses a screen-aware entry edge: 0 = left, 1 = right, 2 = bottom.
+    /// When the main pet sits near an edge, that edge is avoided so
+    /// companions do not appear "behind" the pet's side of the display.
+    static func entryEdge(
+        index: Int,
+        count: Int,
         mainCenter: CGPoint,
-        offset: CGVector,
-        visibleFrame: CGRect,
-        margin: CGFloat
+        physicalFrame: CGRect,
+        using rng: inout some RandomSource,
+        tuning: GroupTuning
+    ) -> Int {
+        var edges: [Int] = [0, 1, 2]
+        let leftZone = physicalFrame.minX + physicalFrame.width * 0.35
+        let rightZone = physicalFrame.maxX - physicalFrame.width * 0.35
+        if mainCenter.x < leftZone { edges.removeAll { $0 == 0 } }
+        if mainCenter.x > rightZone { edges.removeAll { $0 == 1 } }
+        guard !edges.isEmpty else { return index % 3 }
+        let chosen = edges[index % edges.count]
+        if rng.nextUnit() < 0.25, edges.count > 1 {
+            return edges[Int(rng.nextUnit() * Double(edges.count)) % edges.count]
+        }
+        return chosen
+    }
+
+    /// An entry position whose entire panel body lies outside the physical
+    /// screen frame, along the chosen edge and vertically near the main
+    /// pet's row (left/right) or below it (bottom).
+    static func entryPosition(
+        edge: Int,
+        mainCenter: CGPoint,
+        physicalFrame: CGRect,
+        panelSize: CGFloat,
+        using rng: inout some RandomSource,
+        tuning: GroupTuning
     ) -> CGPoint {
-        let desired = CGPoint(x: mainCenter.x + offset.dx, y: mainCenter.y + offset.dy)
-        let x = min(max(desired.x, visibleFrame.minX + margin), visibleFrame.maxX - margin)
-        let y = min(max(desired.y, visibleFrame.minY + margin), visibleFrame.maxY - margin)
-        return CGPoint(x: x, y: y)
+        let jitter = RandomBounds.randomCGFloat(in: tuning.entryJitterRange, using: &rng)
+        let half = panelSize / 2 + tuning.entryMargin
+        switch edge {
+        case 0: // left
+            return CGPoint(
+                x: physicalFrame.minX - half - jitter,
+                y: mainCenter.y + (jitter - tuning.entryJitterRange.upperBound / 2) * 0.6
+            )
+        case 1: // right
+            return CGPoint(
+                x: physicalFrame.maxX + half + jitter,
+                y: mainCenter.y + (jitter - tuning.entryJitterRange.upperBound / 2) * 0.6
+            )
+        default: // bottom
+            return CGPoint(
+                x: mainCenter.x + (jitter - tuning.entryJitterRange.upperBound / 2) * 0.8,
+                y: physicalFrame.minY - half - jitter
+            )
+        }
+    }
+
+    /// True when the point lies strictly outside the given frame.
+    static func isOutside(_ point: CGPoint, frame: CGRect) -> Bool {
+        !frame.contains(point)
     }
 
     /// Clamp an exit-target offset so the fan-out destination stays within
@@ -241,50 +287,31 @@ enum GroupMotionMath {
             * sin(2 * .pi * e / CGFloat(tuning.ascentSwayPeriod) + config.driftPhase)
     }
 
-    /// Exit predicates: each companion leaves independently once its own
-    /// top edge passes the fade zone / fully leaves the screen.
-    static func isAboveExitFadeZone(
-        panelTopY: CGFloat,
-        visibleFrame: CGRect,
+    /// Exit predicate: the companion's ENTIRE panel body is above the
+    /// physical screen's top edge (plus a small margin), so it has truly
+    /// left the display and can be parked/released.
+    static func isFullyAboveTopEdge(
+        panelFrame: CGRect,
+        physicalFrame: CGRect,
         margin: CGFloat
     ) -> Bool {
-        panelTopY > visibleFrame.maxY - margin
-    }
-
-    static func isFullyAboveScreen(
-        panelTopY: CGFloat,
-        visibleFrame: CGRect,
-        margin: CGFloat
-    ) -> Bool {
-        panelTopY > visibleFrame.maxY + margin
+        panelFrame.minY > physicalFrame.maxY + margin
     }
 
     // MARK: - Fades
 
-    /// Fade-in for the staggered appearance: 0 before the delay, 1 after
-    /// delay + duration, clamped in between.
-    static func appearAlpha(
-        at elapsed: TimeInterval,
-        delay: TimeInterval,
-        duration: TimeInterval
-    ) -> CGFloat {
-        let local = elapsed - delay
-        guard local > 0 else { return 0 }
-        return clamped(CGFloat(local / max(duration, 0.001)))
-    }
-
-    /// Fade-out (cancellation, finishing, and per-companion exit): 1 -> 0.
+    /// Fade-out used only for user cancellation: 1 -> 0.
     static func fadeAlpha(at elapsed: TimeInterval, duration: TimeInterval) -> CGFloat {
         let t = clamped(CGFloat(elapsed / max(duration, 0.001)))
         return 1 - smoothstep(t)
     }
 
-    /// Total duration of the appearance phase (last companion fully faded
-    /// in) for a given set of configs.
-    static func appearPhaseDuration(
+    /// Total duration of the staggered release (last companion begins
+    /// moving) for a given set of configs.
+    static func releasePhaseDuration(
         configs: [CompanionConfig],
-        fadeDuration: TimeInterval
+        fadeDuration: TimeInterval = 0
     ) -> TimeInterval {
-        (configs.map(\.appearDelay).max() ?? 0) + fadeDuration
+        (configs.map(\.releaseDelay).max() ?? 0) + fadeDuration
     }
 }
