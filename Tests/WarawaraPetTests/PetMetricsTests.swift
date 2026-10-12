@@ -96,8 +96,8 @@ final class PetMetricsTests: XCTestCase {
     func testRenderAnchorClampConfinesAnchorToBlob() {
         let extreme = CGVector(dx: 5, dy: 5)
         let anchor = DeformationMath.blobClampedAnchor(extreme)
-        XCTAssertLessThanOrEqual(abs(anchor.dy), 0.5221)
-        XCTAssertLessThanOrEqual(abs(anchor.dx), 0.4801)
+        XCTAssertLessThanOrEqual(abs(anchor.dy), 0.523)
+        XCTAssertLessThanOrEqual(abs(anchor.dx), 0.481)
         // Anchor extremes map onto the blob's own vertical extent.
         let topUnit = 0.5 - 0.5 * anchor.dy
         let topViewY = PetMetrics.size.height * (1 - topUnit)

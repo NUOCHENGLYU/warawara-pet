@@ -49,12 +49,13 @@ final class PetControllerDragDecayTests: XCTestCase {
         // Ticks during the pause: monotonic relaxation toward neutral with
         // the grab anchor staying fixed.
         var previous = controller.dragDeformation
+        let blobMaxY = (PetMetrics.blobHeight / 2) / (PetMetrics.size.height / 2)
         for k in 1...12 {
             controller.dragTick(at: t + 0.1 * Double(k))
             let current = controller.dragDeformation
             XCTAssertLessThanOrEqual(current.stretchScale, previous.stretchScale)
             XCTAssertLessThanOrEqual(abs(current.rotation), abs(previous.rotation))
-            XCTAssertEqual(current.anchor.dy, 0.84, accuracy: 0.0001)
+            XCTAssertEqual(current.anchor.dy, blobMaxY, accuracy: 0.0001)
             previous = current
         }
         XCTAssertEqual(controller.dragDeformation.stretchScale, 1, accuracy: 0.001)

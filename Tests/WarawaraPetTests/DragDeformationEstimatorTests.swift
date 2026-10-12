@@ -163,7 +163,10 @@ final class DragDeformationEstimatorTests: XCTestCase {
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
         dragRight(&estimator, samples: 90, speed: 400)
         XCTAssertEqual(estimator.deformation.stretchScale, 1.2, accuracy: 0.01)
-        XCTAssertEqual(estimator.deformation.anchor.dy, 0.5, accuracy: 0.0001)
+        // The render anchor is blob-confined regardless of tuning; torque
+        // respects the custom grab-anchor limit.
+        let maxY = (PetMetrics.blobHeight / 2) / (PetMetrics.size.height / 2)
+        XCTAssertEqual(estimator.deformation.anchor.dy, maxY, accuracy: 0.0001)
         // torque = -0.5 * 400 -> rotation = -200 * gain = -0.1, capped at -0.05
         XCTAssertEqual(estimator.deformation.rotation, -0.05, accuracy: 0.005)
     }

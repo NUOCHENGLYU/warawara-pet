@@ -305,8 +305,8 @@ enum GroupMotionMath {
     /// partial-body exit.
     static func fractionAboveTopEdge(panelFrame: CGRect, topY: CGFloat) -> CGFloat {
         let body = CompanionMetrics.bodyFrame(panelFrame: panelFrame)
-        let clamped = min(max((topY - body.minY) / max(body.height, 1), 0), 1)
-        return clamped
+        let fraction = (body.maxY - topY) / max(body.height, 1)
+        return min(max(fraction, 0), 1)
     }
 
     /// True when the companion's rendered body top is within the slow
