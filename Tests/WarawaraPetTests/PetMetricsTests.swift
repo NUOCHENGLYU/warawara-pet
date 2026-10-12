@@ -8,20 +8,31 @@ final class PetMetricsTests: XCTestCase {
         XCTAssertEqual(grab.dy, 0, accuracy: 0.0001)
     }
 
-    func testTopEdgeClampsToOne() {
+    func testTopEdgeNormalizesToWindowEdge() {
+        let half = PetMetrics.size.width / 2
         let grab = PetMetrics.normalizedGrabVector(
             grabPoint: CGPoint(x: PetMetrics.size.width / 2, y: PetMetrics.size.height)
         )
         XCTAssertEqual(grab.dx, 0, accuracy: 0.0001)
-        XCTAssertEqual(grab.dy, 1, accuracy: 0.0001)
+        XCTAssertEqual(
+            grab.dy,
+            (PetMetrics.size.height - PetMetrics.visualCenter.y) / half,
+            accuracy: 0.0001
+        )
     }
 
-    func testCornerClampsToUnitSquare() {
+    func testBeyondWindowEdgesClampToUnitSquare() {
         let grab = PetMetrics.normalizedGrabVector(
-            grabPoint: CGPoint(x: PetMetrics.size.width, y: PetMetrics.size.height)
+            grabPoint: CGPoint(x: PetMetrics.size.width, y: PetMetrics.size.height + 100)
         )
         XCTAssertEqual(grab.dx, 1, accuracy: 0.0001)
         XCTAssertEqual(grab.dy, 1, accuracy: 0.0001)
+
+        let left = PetMetrics.normalizedGrabVector(
+            grabPoint: CGPoint(x: -100, y: PetMetrics.visualCenter.y)
+        )
+        XCTAssertEqual(left.dx, -1, accuracy: 0.0001)
+        XCTAssertEqual(left.dy, 0, accuracy: 0.0001)
     }
 
     func testLeftOfCenterMapsToNegativeX() {
