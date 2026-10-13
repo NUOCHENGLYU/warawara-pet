@@ -1,0 +1,58 @@
+{
+  "version": "phase5a-art-handoff-v1",
+  "origin": "Phase 4B approved transparent PNG, face separated from approved source using local reconstruction",
+  "canvas": [
+    1024,
+    1024
+  ],
+  "coordinate_system": "top-left pixel origin, fixed full canvas",
+  "body_bounds_alpha_bbox": [
+    104,
+    92,
+    919,
+    931
+  ],
+  "eye_centers_px": [
+    [
+      353,
+      442
+    ],
+    [
+      665,
+      442
+    ]
+  ],
+  "mouth_center_px": [
+    507,
+    522
+  ],
+  "preferred_defaults": {
+    "body": "body_base.png",
+    "eyes": "eyes_open.png",
+    "mouth": "mouth_neutral.png"
+  },
+  "variants": {
+    "eyes": [
+      "open",
+      "focused",
+      "half",
+      "closed",
+      "pressed"
+    ],
+    "mouth": [
+      "soft",
+      "neutral",
+      "relaxed",
+      "open",
+      "pressed",
+      "sleepy"
+    ],
+    "optional_mouth": [
+      "o_extra"
+    ]
+  },
+  "validation": {
+    "recomposition_mean_absolute_rgb_diff": 0.023,
+    "recomposition_p95_pixel_max_rgb_diff": 0.0
+  }
+}

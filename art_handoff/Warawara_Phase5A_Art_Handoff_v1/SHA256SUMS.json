@@ -1,0 +1,15 @@
+{
+  "mouth_soft.png": "ffc943ecf3b25703151f26aa220abea30765ad6314ff16906746a312b8657c69",
+  "mouth_neutral.png": "8dbceabe87ec4251d784242f70a444ceebae1d12d4cf3a23a41d1d0772903348",
+  "mouth_pressed.png": "e007db13652fc817551ddfb5ec4f6b41603fe37874b5bed6fc18576794e198ee",
+  "eyes_focused.png": "ed18d1eaf14e5306966d6958d1d1bee167dee7b3194c350002b9d3067c7444c7",
+  "mouth_open.png": "361d8a0c54279e65a9b4b293e7b2151e78ecb3470fb596807ffa75af589ef61b",
+  "mouth_sleepy.png": "22e979880b577d7952ed975f7235957124ef8064d16e4700db4029f146cf9674",
+  "mouth_o_extra.png": "d528d5d36b0db225863ae21da8226accf0ea8dcf7f7a4b6ff4ecd7c1536d11fa",
+  "eyes_pressed.png": "93bbbf443c3ab4828b6ee74b2c56636445850c45d065fb677505e2915b54632d",
+  "eyes_closed.png": "b25b52f43c4b7a9c4e2ddbbbdadfbebce5b409e9d180c2e3a3be8964e71ec90e",
+  "eyes_open.png": "c15276cf46cb898e824f9dcf1dca9d1d59d02174afe9c4039ac391644b93ba5c",
+  "body_base.png": "bdf74d9b3ae083ea6ea2722a861575373be1d82dd7660443030185b4bd59de78",
+  "mouth_relaxed.png": "d5a5084b209d81dbd4cbf98b031652d8da5f67f7e14040a0ae929a46231aa478",
+  "eyes_half.png": "a1637e17361ea2bc03829c6182c661b58533b4e54924847efdb77dc654d79fe6"
+}

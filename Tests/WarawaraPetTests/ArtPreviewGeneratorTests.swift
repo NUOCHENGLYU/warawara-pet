@@ -513,7 +513,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
                 HStack(spacing: 28) {
                     ForEach(samples.indices, id: \.self) { index in
                         VStack(spacing: 4) {
-                            rigView(rig, rigLoader, samples[index].1, renderSize)
+                            self.rigView(rig, rigLoader, samples[index].1, renderSize)
                             Text(samples[index].0).font(.caption)
                         }
                     }
@@ -639,7 +639,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
     ) throws {
         let samples: [(String, WarawaraPerformanceParameters)] = [1.0, 0.7, 0.45, 0.2, 0.05].map { openness in
-            var p = idleParameters()
+            var p = self.idleParameters()
             p.eyeOpenness = openness
             p.mouthStyle = .relaxed
             return ("\(Int(openness * 100))%", p)
