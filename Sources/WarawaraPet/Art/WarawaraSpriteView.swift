@@ -72,20 +72,21 @@ struct PlaceholderWarawaraView: View {
 
 /// Renders one sprite frame with its manifest layout: the image is drawn
 /// inside the logical canvas, positioned so the manifest anchor maps onto
-/// the view's center.
+/// the view's center. `renderSize` is the canvas scaled to the character's
+/// target body height (main pet or companion).
 struct WarawaraSpriteFrameView: View {
     let image: NSImage
-    let canvas: CGSize
+    let renderSize: CGSize
     let anchor: CGPoint
 
     var body: some View {
         Image(nsImage: image)
             .resizable()
             .interpolation(.high)
-            .frame(width: canvas.width, height: canvas.height)
+            .frame(width: renderSize.width, height: renderSize.height)
             .offset(
-                x: canvas.width / 2 - anchor.x * canvas.width,
-                y: canvas.height / 2 - anchor.y * canvas.height
+                x: renderSize.width / 2 - anchor.x * renderSize.width,
+                y: renderSize.height / 2 - anchor.y * renderSize.height
             )
     }
 }
@@ -101,9 +102,32 @@ struct WarawaraCharacterView: View {
     var scale: CGFloat = 1
     var placeholderSizeClass: PlaceholderWarawaraView.SizeClass = .main
 
+    /// The manifest canvas scaled so the artwork's body height matches
+    /// the character's target body height (main 118 pt, companion 74 pt,
+    /// times `scale`). Keeps sprite artwork correctly sized inside both
+    /// window classes without clipping.
+    private var spriteRenderSize: CGSize? {
+        guard let manifest = loader.manifest else { return nil }
+        let bodyHeightInCanvas = manifest.layout.bodyBounds.height * manifest.layout.canvas.height
+        guard bodyHeightInCanvas > 0 else { return nil }
+        let targetBodyHeight: CGFloat
+        switch placeholderSizeClass {
+        case .main:
+            targetBodyHeight = PetMetrics.blobHeight * scale
+        case .companion:
+            targetBodyHeight = CompanionMetrics.blobHeight * scale
+        }
+        return WarawaraAnimationMapper.renderSize(
+            canvas: manifest.layout.canvas,
+            bodyHeightInCanvas: bodyHeightInCanvas,
+            targetBodyHeight: targetBodyHeight
+        )
+    }
+
     var body: some View {
         if let baseURL = baseURL ?? WarawaraSpriteLoader.defaultResourceURL,
            let animation = loader.animation(named: WarawaraAnimationMapper.animationKey(for: visualState)),
+           let renderSize = spriteRenderSize,
            let firstFrame = loader.image(forRelativePath: animation.frames[0], baseURL: baseURL) {
             TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
                 let index = WarawaraAnimationMapper.frameIndex(
@@ -114,7 +138,7 @@ struct WarawaraCharacterView: View {
                     ?? firstFrame
                 WarawaraSpriteFrameView(
                     image: image,
-                    canvas: loader.manifest?.layout.canvas ?? CGSize(width: 100, height: 100),
+                    renderSize: renderSize,
                     anchor: loader.manifest?.layout.anchor ?? CGPoint(x: 0.5, y: 0.5)
                 )
             }

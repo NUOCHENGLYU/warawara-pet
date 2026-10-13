@@ -135,4 +135,21 @@ final class WarawaraAnimationMapperTests: XCTestCase {
         XCTAssertEqual(size.height, 113, accuracy: 0.01)
         XCTAssertEqual(size.width, 100, accuracy: 0.01)
     }
+
+    func testSpriteRenderSizesForMainAndCompanionBodyHeights() {
+        // The character view scales the manifest canvas so the artwork's
+        // body height matches each character class: main 118 pt,
+        // companion 74 pt.
+        let canvas = CGSize(width: 200, height: 226)
+        let mainSize = WarawaraAnimationMapper.renderSize(
+            canvas: canvas, bodyHeightInCanvas: 118, targetBodyHeight: PetMetrics.blobHeight
+        )
+        XCTAssertEqual(mainSize.height, 226, accuracy: 0.01)
+        XCTAssertEqual(mainSize.width, 200, accuracy: 0.01)
+
+        let companionSize = WarawaraAnimationMapper.renderSize(
+            canvas: canvas, bodyHeightInCanvas: 118, targetBodyHeight: CompanionMetrics.blobHeight
+        )
+        XCTAssertEqual(companionSize.height, 226 * 74 / 118, accuracy: 0.01)
+    }
 }

@@ -1,0 +1,170 @@
+# Asset Handoff — WarawaraPet sprites (Phase 4)
+
+The sprite pipeline is implemented and CI-green. This document tells the
+asset author exactly what to produce and how to install it — no Swift code
+changes required.
+
+## 1. Required filenames and directory paths
+
+Everything lives under (SPM resource root, copied into the app bundle):
+
+```
+Sources/WarawaraPet/Resources/Sprites/
+├── sprites.json                  (required manifest)
+├── idle/idle_00.png, idle_01.png ...
+├── hop/hop_00.png ...
+├── float/float_00.png ...
+├── curious/curious_00.png ...
+├── clicked/clicked_00.png ...
+├── dragged/dragged_00.png ...
+├── settling/settling_00.png ...
+├── sleepy/sleepy_00.png ...
+├── sleeping/sleeping_00.png ...
+└── wake/wake_00.png ...
+```
+
+Frame file names inside the manifest are arbitrary (they are listed per
+animation); the directory convention above is only a suggestion. The
+`sprites.json` path is fixed: it must sit next to the animation folders.
+
+## 2. PNG dimensions, transparency, Retina
+
+- Format: transparent PNG (RGBA). Any pixel size.
+- All frames of one animation must share one logical canvas aspect; the
+  canvas size is declared in `sprites.json` (see §4) and does not need to
+  match the pixel size — the renderer scales by body height.
+- Retina: provide artwork at ≥ 2× the logical canvas so it stays crisp;
+  `Image(nsImage:).resizable()` + high interpolation handles scaling.
+- Recommended reference: logical canvas 200 × 226 with artwork drawn at
+  2× (e.g., 400 × 452 pixels) for the main pet. The exact numbers only
+  need to agree with the manifest.
+
+## 3. Coordinate system, pivot, body anchor, bounds
+
+- Canvas coordinate origin: **top-left**, X right, Y down (image
+  convention; the view converts to AppKit's bottom-left internally).
+- `anchor`: normalized (0…1) point inside the canvas. This is the
+  character's pivot — the view offsets the image so this exact point maps
+  onto the center of the character slot. For a centered character use
+  `{ "x": 0.5, "y": 0.5 }`; for a ground-standing character whose feet
+  matter, place the anchor at the body center.
+- `bodyBounds`: normalized rect (0…1, top-left origin) covering the
+  artwork's opaque body. Used for size mapping and future deformation
+  envelopes. Must be strictly inside the unit rect and have positive size.
+- Sizing: the renderer scales the canvas so the artwork body height
+  (`bodyBounds.height × canvas.height`) equals 118 pt for the main pet
+  and 74 pt for companions (each further multiplied by the companion's
+  per-instance scale 0.85–1.15).
+
+## 4. Manifest schema + minimal example
+
+```json
+{
+  "version": 1,
+  "layout": {
+    "canvas": { "width": 200, "height": 226 },
+    "anchor": { "x": 0.5, "y": 0.5 },
+    "bodyBounds": { "x": 0.26, "y": 0.24, "width": 0.48, "height": 0.52 }
+  },
+  "animations": {
+    "idle": {
+      "frames": ["idle/idle_00.png", "idle/idle_01.png"],
+      "frameDuration": 0.5,
+      "loop": true
+    },
+    "clicked": {
+      "frames": ["clicked/clicked_00.png"],
+      "frameDuration": 0.1,
+      "loop": false
+    }
+  }
+}
+```
+
+Validation rules (invalid → placeholder fallback, no crash):
+
+- `version` must be 1
+- `canvas` width/height > 0
+- `anchor` inside 0…1
+- `bodyBounds` inside the unit rect with positive size
+- at least one animation, each with ≥ 1 frame and `frameDuration` > 0
+- `loop: true` cycles frames forever; `loop: false` holds the last frame
+
+## 5. Required artwork per pet state
+
+| Pet state | Manifest key | Frames needed |
+|---|---|---|
+| idle | `idle` | 2+ (breathing cycle) |
+| hop | `hop` | 2+ (compress, air, land squash) |
+| float | `float` | 2+ (lift/hover/descend) |
+| curious | `curious` | 1+ (attention pose) |
+| clicked | `clicked` | 1+ (squash) |
+| dragged | `dragged` | 1+ (neutral stretched; deformation is applied by code) |
+| settling | `settling` | 1+ |
+| sleepy | `sleepy` | 1+ |
+| sleeping | `sleeping` | 1+ (closed eyes if source-supported) |
+| wake (transition) | `wake` | 1+ |
+
+Rules:
+
+- Use only source-supported expressions. If a film reference for an
+  expression is missing, reuse the nearest canonical frame — do NOT
+  invent facial features.
+- Deformation (drag stretch/lean, hop squash, float elongation) is
+  applied by the existing pose pipeline OUTSIDE the artwork; provide
+  clean neutral body artwork and let code deform it.
+
+## 6. Main pet vs companions
+
+The SAME manifest, PNGs, and animation mapping serve both. Companions
+render the identical artwork scaled to a 74 pt body height inside their
+128 pt panels; the main pet renders at 118 pt inside its 200 × 226
+window. No separate companion asset set is needed or expected.
+
+## 7. Current fallback state
+
+Until `sprites.json` + valid PNGs are installed, every state renders the
+procedural placeholder blob (main and companion). Today:
+
+- **All pet states and companions use the placeholder.**
+- The sprite path activates automatically once a valid manifest with
+  loadable frames is present — no code change.
+
+## 8. Installing assets without touching Swift
+
+1. Add PNG frames under `Sources/WarawaraPet/Resources/Sprites/`.
+2. Write/update `sprites.json` (same directory).
+3. Rebuild / rerun CI. Done. (The loader decodes and caches images once;
+   missing/invalid assets fall back per-animation.)
+
+## 9. Regenerating previews and the packaged app
+
+CI does it automatically on every push:
+
+```bash
+swift build -c release --arch arm64 --arch x86_64
+swift test                                          # all unit tests
+ART_PREVIEW_OUT=dist/art-preview swift test --filter ArtPreviewGeneratorTests
+bash Scripts/package-app.sh                         # dist/WarawaraPet.zip
+```
+
+Locally the same commands work; `ART_PREVIEW_OUT` is optional (previews
+are skipped when unset).
+
+## 10. Which artifact holds the previews
+
+GitHub → Actions → latest green run → artifact **`WarawaraPet-Art-Preview`**
+(contains `01-neutral-main.png`, `01-neutral-main-4x.png`,
+`02-contact-idle.png`, `03-contact-hop.png`, `04-contact-float.png`,
+`05-states.png`, `06-drag-extremes.png`, `07-group.png`,
+`08-actual-size.png`, `09-comparison-note.png`, `README.txt`).
+The app zip is **`WarawaraPet-macOS`**. Reference stills are never
+bundled — compare against `docs/art/WARAWARA_REFERENCE_SPEC.md` locally.
+
+## Fidelity rules (repeat)
+
+- The film design is the sole visual authority; candidates must be
+  originally created and approved by the user.
+- No film frames, thumbnails, or unlicensed material in the repo or
+  artifacts.
+- Never mark artwork accepted without the user's visual approval.
