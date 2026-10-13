@@ -97,6 +97,9 @@ final class WarawaraSpriteLoaderTests: XCTestCase {
         _ = loader.image(forRelativePath: "idle_00.png", baseURL: baseURL)
         loader.reset()
         XCTAssertFalse(loader.hasSprites)
-        XCTAssertNil(loader.image(forRelativePath: "idle_00.png", baseURL: baseURL))
+        XCTAssertNil(loader.manifest)
+        XCTAssertNil(loader.animation(named: "idle"))
+        // image() re-loads on demand after a reset — that is intentional.
+        XCTAssertNotNil(loader.image(forRelativePath: "idle_00.png", baseURL: baseURL))
     }
 }
