@@ -91,6 +91,46 @@ struct WarawaraSpriteFrameView: View {
     }
 }
 
+/// What `WarawaraCharacterView` will draw for a given state. Extracted
+/// from the view body so the real rendering decision is unit-testable
+/// without instantiating SwiftUI views.
+enum WarawaraCharacterContent {
+    case sprite(
+        firstFrame: NSImage,
+        animation: WarawaraSpriteManifest.Animation,
+        renderSize: CGSize,
+        anchor: CGPoint
+    )
+    case placeholder
+
+    static func resolve(
+        visualState: WarawaraVisualState,
+        loader: WarawaraSpriteLoader,
+        baseURL: URL?,
+        placeholderSizeClass: PlaceholderWarawaraView.SizeClass,
+        scale: CGFloat
+    ) -> WarawaraCharacterContent {
+        let resolvedBaseURL = baseURL ?? loader.loadedBaseURL ?? WarawaraSpriteLoader.defaultResourceURL
+        guard let resolvedBaseURL,
+              let manifest = loader.manifest,
+              let animation = loader.animation(named: WarawaraAnimationMapper.animationKey(for: visualState)),
+              let renderSize = WarawaraCharacterView.spriteRenderSize(
+                manifest: manifest,
+                placeholderSizeClass: placeholderSizeClass,
+                scale: scale
+              ),
+              let firstFrame = loader.image(forRelativePath: animation.frames[0], baseURL: resolvedBaseURL) else {
+            return .placeholder
+        }
+        return .sprite(
+            firstFrame: firstFrame,
+            animation: animation,
+            renderSize: renderSize,
+            anchor: manifest.layout.anchor
+        )
+    }
+}
+
 /// The character content used by BOTH the main pet and companions:
 /// sprite frames when assets exist, the procedural placeholder otherwise.
 /// All deformation transforms stay OUTSIDE this view, applied by the
@@ -106,8 +146,11 @@ struct WarawaraCharacterView: View {
     /// the character's target body height (main 118 pt, companion 74 pt,
     /// times `scale`). Keeps sprite artwork correctly sized inside both
     /// window classes without clipping.
-    private var spriteRenderSize: CGSize? {
-        guard let manifest = loader.manifest else { return nil }
+    static func spriteRenderSize(
+        manifest: WarawaraSpriteManifest,
+        placeholderSizeClass: PlaceholderWarawaraView.SizeClass,
+        scale: CGFloat
+    ) -> CGSize? {
         let bodyHeightInCanvas = manifest.layout.bodyBounds.height * manifest.layout.canvas.height
         guard bodyHeightInCanvas > 0 else { return nil }
         let targetBodyHeight: CGFloat
@@ -125,30 +168,66 @@ struct WarawaraCharacterView: View {
     }
 
     var body: some View {
-        if let baseURL = baseURL ?? WarawaraSpriteLoader.defaultResourceURL,
-           let animation = loader.animation(named: WarawaraAnimationMapper.animationKey(for: visualState)),
-           let renderSize = spriteRenderSize,
-           let firstFrame = loader.image(forRelativePath: animation.frames[0], baseURL: baseURL) {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                let index = WarawaraAnimationMapper.frameIndex(
-                    at: context.date.timeIntervalSinceReferenceDate,
-                    animation: animation
-                )
-                let image = loader.image(forRelativePath: animation.frames[index], baseURL: baseURL)
-                    ?? firstFrame
-                WarawaraSpriteFrameView(
-                    image: image,
-                    renderSize: renderSize,
-                    anchor: loader.manifest?.layout.anchor ?? CGPoint(x: 0.5, y: 0.5)
-                )
-                // Keep the artwork's body center on the established
-                // visual center so window origins, ground position and
-                // the hit region stay aligned for any canvas aspect.
-                .padding(.bottom, spriteBottomLift(renderSize: renderSize))
-            }
-        } else {
-            PlaceholderWarawaraView(sizeClass: placeholderSizeClass, scale: scale)
+        let content = WarawaraCharacterContent.resolve(
+            visualState: visualState,
+            loader: loader,
+            baseURL: baseURL,
+            placeholderSizeClass: placeholderSizeClass,
+            scale: scale
+        )
+        switch content {
+        case .sprite(let firstFrame, let animation, let renderSize, let anchor):
+            spriteView(
+                firstFrame: firstFrame,
+                animation: animation,
+                renderSize: renderSize,
+                anchor: anchor
+            )
+        case .placeholder:
+            placeholderView
         }
+    }
+
+    private func spriteView(
+        firstFrame: NSImage,
+        animation: WarawaraSpriteManifest.Animation,
+        renderSize: CGSize,
+        anchor: CGPoint
+    ) -> some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+            let baseURL = self.baseURL ?? loader.loadedBaseURL ?? WarawaraSpriteLoader.defaultResourceURL
+            let index = WarawaraAnimationMapper.frameIndex(
+                at: context.date.timeIntervalSinceReferenceDate,
+                animation: animation
+            )
+            let image = baseURL.flatMap { loader.image(forRelativePath: animation.frames[index], baseURL: $0) }
+                ?? firstFrame
+            WarawaraSpriteFrameView(
+                image: image,
+                renderSize: renderSize,
+                anchor: anchor
+            )
+            // Keep the artwork's body center on the established
+            // visual center so window origins, ground position and
+            // the hit region stay aligned for any canvas aspect.
+            .padding(.bottom, spriteBottomLift(renderSize: renderSize))
+        }
+    }
+
+    /// The procedural fallback is kept for resilience, but a failed
+    /// sprite load must never be silent: a small amber badge marks the
+    /// placeholder whenever the loader recorded an error.
+    private var placeholderView: some View {
+        PlaceholderWarawaraView(sizeClass: placeholderSizeClass, scale: scale)
+            .overlay(alignment: .topTrailing) {
+                if loader.lastErrorDescription != nil {
+                    Circle()
+                        .fill(Color.orange)
+                        .frame(width: 8, height: 8)
+                        .padding(4)
+                        .accessibilityLabel("sprite-load-error")
+                }
+            }
     }
 
     /// Lifts the sprite so its body center lands on the pet's visual

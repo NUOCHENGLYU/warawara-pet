@@ -28,9 +28,14 @@ are intentionally deferred:
 
 4. **All characters now use the installed neutral artwork (Phase 4B).**
    `warawara_neutral.png` is referenced by every state; motion comes from
-   the pose pipeline. The procedural placeholder blob remains only as the
-   automatic fallback for missing/invalid assets, and the Phase 4A
-   candidate frames are kept on disk for rollback (see
+   the pose pipeline. `WarawaraSpriteLoader.loadDefaultResources()` is
+   called from app startup before the first render (AppDelegate); a
+   failed load is logged via NSLog and the placeholder fallback is marked
+   with a small amber badge — never a silent fallback. CI additionally
+   runs the packaged `.app` binary with `--verify-sprites` to prove the
+   release bundle resolves. The procedural placeholder blob remains only
+   as the fallback for missing/invalid assets, and the Phase 4A candidate
+   frames are kept on disk for rollback (see
    `Sources/WarawaraPet/Resources/Sprites/README.md`).
 
 5. **Drag deformation envelope: worst-case corner overshoot.**

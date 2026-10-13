@@ -14,6 +14,11 @@ final class WarawaraSpriteLoader {
     private var imageCache: [String: NSImage] = [:]
     /// Human-readable last failure (diagnostics only).
     private(set) var lastErrorDescription: String?
+    /// Base URLs tried by the last `loadDefaultResources()` call.
+    private(set) var attemptedBaseURLs: [URL] = []
+    /// The base URL whose sprites.json actually loaded. Frame paths are
+    /// resolved relative to THIS root, not to a re-derived default.
+    private(set) var loadedBaseURL: URL?
 
     /// Loads sprites.json from the given base URL (the bundle resource
     /// root). Returns true when a valid manifest was loaded.
@@ -23,6 +28,7 @@ final class WarawaraSpriteLoader {
         guard let data = try? Data(contentsOf: manifestURL) else {
             lastErrorDescription = "cannot read \(manifestURL.path)"
             manifest = nil
+            loadedBaseURL = nil
             return false
         }
         guard let decoded: WarawaraSpriteManifest = {
@@ -33,15 +39,39 @@ final class WarawaraSpriteLoader {
             }
         }() else {
             manifest = nil
+            loadedBaseURL = nil
             return false
         }
         guard let validated = WarawaraSpriteManifest.validated(decoded) else {
             lastErrorDescription = "invalid manifest at \(manifestURL.path)"
             manifest = nil
+            loadedBaseURL = nil
             return false
         }
         manifest = validated
+        loadedBaseURL = baseURL
         return true
+    }
+
+    /// Candidate base URLs in the order the app probes them. Covers both
+    /// `swift run`/`swift test` (SPM build directory bundle) and the
+    /// packaged `.app` (Contents/Resources/WarawaraPet_WarawaraPet.bundle),
+    /// so the same startup call works in development and release.
+    static func candidateBaseURLs() -> [URL] {
+        var urls: [URL] = []
+        let add: (URL?) -> Void = { candidate in
+            guard let candidate else { return }
+            let standardized = candidate.standardizedFileURL
+            guard !urls.contains(standardized) else { return }
+            urls.append(standardized)
+        }
+        #if SWIFT_PACKAGE
+        add(Bundle.module.resourceURL)
+        #endif
+        add(Bundle.main.resourceURL)
+        add(Bundle.main.resourceURL?.appendingPathComponent("WarawaraPet_WarawaraPet.bundle"))
+        add(Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/WarawaraPet_WarawaraPet.bundle"))
+        return urls
     }
 
     /// The default bundle resource root: the SPM resource bundle when
@@ -55,6 +85,30 @@ final class WarawaraSpriteLoader {
     }
 
     var hasSprites: Bool { manifest != nil }
+
+    /// Loads the default sprite resources once. The app calls this from
+    /// startup BEFORE the first pet render; it is idempotent and safe to
+    /// call again. On failure the attempted paths and reason are recorded
+    /// and logged — the UI must never fall back to the placeholder
+    /// silently.
+    @discardableResult
+    func loadDefaultResources(candidateBaseURLs candidates: [URL]? = nil) -> Bool {
+        if hasSprites { return true }
+        let urls = candidates ?? Self.candidateBaseURLs()
+        attemptedBaseURLs = urls
+        var failures: [String] = []
+        for url in urls {
+            if loadManifest(from: url) {
+                lastErrorDescription = nil
+                return true
+            }
+            failures.append("\(url.path): \(lastErrorDescription ?? "unknown error")")
+        }
+        let summary = failures.joined(separator: "; ")
+        lastErrorDescription = summary
+        NSLog("[WarawaraPet] sprite resources failed to load — %@", summary)
+        return false
+    }
 
     func animation(named key: String) -> WarawaraSpriteManifest.Animation? {
         manifest?.animations[key]
@@ -100,5 +154,7 @@ final class WarawaraSpriteLoader {
         manifest = nil
         imageCache.removeAll()
         lastErrorDescription = nil
+        attemptedBaseURLs = []
+        loadedBaseURL = nil
     }
 }
