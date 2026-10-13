@@ -12,7 +12,9 @@ let package = Package(
             path: "Sources/WarawaraPet",
             resources: [
                 .process("Resources/Sprites"),
-                .process("Resources/Assets")
+                // Rig resources are copied verbatim so the declared layer
+                // paths (body/, eyes/, mouth/) survive packaging.
+                .copy("Resources/Assets")
             ]
         ),
         .testTarget(
