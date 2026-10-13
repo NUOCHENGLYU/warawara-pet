@@ -62,24 +62,31 @@ final class WarawaraSpriteLoader {
 
     /// Cached image for a manifest frame path. Decodes via NSImage first,
     /// then falls back to ImageIO (CGImageSource) for PNG variants that
-    /// NSImage rejects.
+    /// NSImage rejects. The manifest path may contain subdirectories; the
+    /// flat basename is also tried because SwiftPM flattens resource
+    /// subdirectories into the bundle root.
     func image(forRelativePath path: String, baseURL: URL) -> NSImage? {
         if let cached = imageCache[path] { return cached }
-        let url = baseURL.appendingPathComponent(path)
-        var image = NSImage(contentsOf: url)
-        if image == nil, let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-           let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) {
-            image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        let candidates = [
+            baseURL.appendingPathComponent(path),
+            baseURL.appendingPathComponent((path as NSString).lastPathComponent)
+        ]
+        var image: NSImage?
+        for url in candidates where FileManager.default.fileExists(atPath: url.path) {
+            image = NSImage(contentsOf: url)
+            if image == nil, let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+               let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+                image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+            }
+            if image != nil { break }
         }
         if image == nil {
             var detail = "cannot decode \(path)"
-            if !FileManager.default.fileExists(atPath: url.path) {
-                detail += "; file missing at \(url.path)"
-            } else if let source = CGImageSourceCreateWithURL(url as CFURL, nil) {
-                let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
-                detail += "; ImageIO opened source, props: \(String(describing: props))"
+            let exists = candidates.contains { FileManager.default.fileExists(atPath: $0.path) }
+            if !exists {
+                detail += "; no file at \(candidates.map(\.path).joined(separator: " or "))"
             } else {
-                detail += "; ImageIO cannot open source at \(url.path)"
+                detail += "; decoders failed"
             }
             lastErrorDescription = detail
             return nil

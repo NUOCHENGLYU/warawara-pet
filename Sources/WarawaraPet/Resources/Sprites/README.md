@@ -47,6 +47,11 @@ Frames are transparent PNGs. The loader decodes and caches images once;
 missing or invalid assets fall back to the procedural placeholder — the
 app never crashes on missing art.
 
+Subdirectory paths in `frames` (e.g. `idle/idle_00.png`) match the source
+tree here. SwiftPM flattens resource subdirectories when it copies files
+into the app bundle, so the loader also tries the file's basename
+(`idle_00.png`) — keep filenames unique across directories.
+
 ## Asset rules
 
 - No film frames, thumbnails, or unlicensed material may be committed or

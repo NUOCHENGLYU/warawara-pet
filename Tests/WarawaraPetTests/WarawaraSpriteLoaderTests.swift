@@ -82,6 +82,18 @@ final class WarawaraSpriteLoaderTests: XCTestCase {
         XCTAssertNil(loader.image(forRelativePath: "missing.png", baseURL: baseURL))
     }
 
+    func testFlatBundleLayoutResolvesSubdirectoryPaths() throws {
+        // SwiftPM flattens resource subdirectories into the bundle root,
+        // so "idle/idle_00.png" in the manifest must resolve to a flat
+        // "idle_00.png" on disk.
+        try writeTestPNG(named: "idle_00.png")
+        try writeManifest()
+        let loader = WarawaraSpriteLoader()
+        XCTAssertTrue(loader.loadManifest(from: baseURL))
+        let image = loader.image(forRelativePath: "idle/idle_00.png", baseURL: baseURL)
+        XCTAssertNotNil(image, "flat fallback failed: \(loader.lastErrorDescription ?? "")")
+    }
+
     func testInvalidManifestFileFallsBack() throws {
         try Data("[not json".utf8).write(to: baseURL.appendingPathComponent("sprites.json"))
         let loader = WarawaraSpriteLoader()
