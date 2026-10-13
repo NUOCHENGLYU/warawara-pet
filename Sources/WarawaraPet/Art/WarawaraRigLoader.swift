@@ -115,6 +115,7 @@ final class WarawaraRigLoader {
             lastErrorDescription = "cannot decode rig image \(path) under \(baseURL.path)"
             return nil
         }
+        lastErrorDescription = nil
         imageCache[path] = image
         return image
     }

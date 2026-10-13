@@ -145,6 +145,7 @@ final class WarawaraSpriteLoader {
             lastErrorDescription = detail
             return nil
         }
+        lastErrorDescription = nil
         imageCache[path] = image
         return image
     }
