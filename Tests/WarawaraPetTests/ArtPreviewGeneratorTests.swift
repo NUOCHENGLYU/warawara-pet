@@ -7,6 +7,7 @@ import XCTest
 /// renders inspectable PNG contact sheets into that directory using the
 /// real placeholder views and pose math. All output uses the procedural
 /// PLACEHOLDER artwork — it is not a fidelity claim.
+@MainActor
 final class ArtPreviewGeneratorTests: XCTestCase {
     private let mainCanvas = CGSize(width: 200, height: 226)
 
@@ -89,7 +90,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
             HStack(spacing: 24) {
                 ForEach(offsets, id: \.self) { offset in
                     VStack {
-                        placeholderMain.offset(y: offset)
+                        self.placeholderMain.offset(y: offset)
                         Text("bob \(Int(offset))").font(.caption)
                     }
                 }
@@ -111,7 +112,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
                         let squash = HopCurve.squashAtLanding(at: t)
                         let sx = 1 - 0.08 * stretch + 0.15 * squash
                         let sy = 1 + 0.12 * stretch - 0.3 * squash
-                        placeholderMain
+                        self.placeholderMain
                             .scaleEffect(x: sx, y: sy, anchor: .bottom)
                             .offset(y: -HopCurve.offsetY(at: t, height: 80))
                         Text(String(format: "t=%.2f", t)).font(.caption)
@@ -131,8 +132,8 @@ final class ArtPreviewGeneratorTests: XCTestCase {
             HStack(spacing: 24) {
                 ForEach(samples, id: \.self) { t in
                     VStack {
-                        let stretch = FloatCurve.liftStretch(at: t)
-                        placeholderMain
+                        let stretch = sin(.pi * t)
+                        self.placeholderMain
                             .scaleEffect(x: 1 - 0.05 * stretch, y: 1 + 0.08 * stretch, anchor: .bottom)
                             .offset(y: -FloatCurve.offsetY(at: t, height: 100, tuning: PersonalityTuning.default))
                         Text(String(format: "t=%.2f", t)).font(.caption)
