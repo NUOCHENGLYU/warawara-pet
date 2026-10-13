@@ -49,6 +49,16 @@ are intentionally deferred:
    tuning was deliberately left unchanged; revisit only after real-Mac
    testing if visible clipping occurs.
 
+6. **Phase 5A layered rig is built but inactive until rig assets exist.**
+   The layered character system (continuous performance parameters,
+   state->parameter mapper, easing animator, body/eyes/mouth renderer,
+   rig loader) is implemented and tested, but no rig artwork is committed
+   yet, so the app still renders the single-sprite pipeline (this is
+   logged at startup). The blink pattern is a deterministic two-period
+   placeholder awaiting real tuning. Activation requires dropping the
+   rig under `Sources/WarawaraPet/Resources/Assets/WarawaraRig/` (see its
+   README) — no code changes.
+
 ## Platform
 
 5. **NSMenu is intentionally absent.** An unresolved AppKit interaction

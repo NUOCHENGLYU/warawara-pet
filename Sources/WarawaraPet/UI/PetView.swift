@@ -55,7 +55,8 @@ struct PetView: View {
         WarawaraCharacterView(
             visualState: WarawaraVisualState.state(for: controller.state),
             loader: .shared,
-            placeholderSizeClass: .main
+            placeholderSizeClass: .main,
+            expressionInputs: expressionInputs
         )
         .modifier(PoseEffect(
             deformation: controller.dragDeformation,
@@ -83,6 +84,19 @@ struct PetView: View {
 
     private var bobOffset: CGFloat {
         controller.state == .idle ? (bobbing ? -6 : 6) : 0
+    }
+
+    /// Continuous expression inputs for the layered character system:
+    /// state, smoothed cursor direction, live drag deformation and motion
+    /// progress. The expression driver adds time-derived breath/blink.
+    private var expressionInputs: WarawaraExpressionInputs {
+        WarawaraExpressionInputs(
+            state: controller.state,
+            gaze: controller.curiosityDirection,
+            dragDeformation: controller.dragDeformation,
+            hopProgress: controller.hopProgress,
+            floatProgress: controller.floatProgress
+        )
     }
 
     private var breathingScale: CGFloat {

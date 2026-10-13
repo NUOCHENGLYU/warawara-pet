@@ -95,6 +95,7 @@ struct WarawaraSpriteFrameView: View {
 /// from the view body so the real rendering decision is unit-testable
 /// without instantiating SwiftUI views.
 enum WarawaraCharacterContent {
+    case layered(rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize)
     case sprite(
         firstFrame: NSImage,
         animation: WarawaraSpriteManifest.Animation,
@@ -106,10 +107,23 @@ enum WarawaraCharacterContent {
     static func resolve(
         visualState: WarawaraVisualState,
         loader: WarawaraSpriteLoader,
+        rigLoader: WarawaraRigLoader = .shared,
         baseURL: URL?,
         placeholderSizeClass: PlaceholderWarawaraView.SizeClass,
         scale: CGFloat
     ) -> WarawaraCharacterContent {
+        // Resolution order: layered rig (primary direction) -> single
+        // sprite pipeline -> procedural placeholder (+ error badge).
+        if let rig = rigLoader.rig {
+            let targetBodyHeight: CGFloat
+            switch placeholderSizeClass {
+            case .main: targetBodyHeight = PetMetrics.blobHeight * scale
+            case .companion: targetBodyHeight = CompanionMetrics.blobHeight * scale
+            }
+            if let renderSize = WarawaraExpressionDriver.renderSize(rig: rig, targetBodyHeight: targetBodyHeight) {
+                return .layered(rig: rig, rigLoader: rigLoader, renderSize: renderSize)
+            }
+        }
         let resolvedBaseURL = baseURL ?? loader.loadedBaseURL ?? WarawaraSpriteLoader.defaultResourceURL
         guard let resolvedBaseURL,
               let manifest = loader.manifest,
@@ -138,9 +152,13 @@ enum WarawaraCharacterContent {
 struct WarawaraCharacterView: View {
     let visualState: WarawaraVisualState
     let loader: WarawaraSpriteLoader
+    var rigLoader: WarawaraRigLoader = .shared
     var baseURL: URL?
     var scale: CGFloat = 1
     var placeholderSizeClass: PlaceholderWarawaraView.SizeClass = .main
+    /// App-level expression inputs (state, gaze, drag, progress). Only
+    /// consumed by the layered rig branch.
+    var expressionInputs: WarawaraExpressionInputs = .neutral
 
     /// The manifest canvas scaled so the artwork's body height matches
     /// the character's target body height (main 118 pt, companion 74 pt,
@@ -171,11 +189,20 @@ struct WarawaraCharacterView: View {
         let content = WarawaraCharacterContent.resolve(
             visualState: visualState,
             loader: loader,
+            rigLoader: rigLoader,
             baseURL: baseURL,
             placeholderSizeClass: placeholderSizeClass,
             scale: scale
         )
         switch content {
+        case .layered(let rig, let rigLoader, let renderSize):
+            WarawaraExpressionDriverView(
+                rig: rig,
+                rigLoader: rigLoader,
+                inputs: expressionInputs,
+                renderSize: renderSize
+            )
+            .padding(.bottom, spriteBottomLift(renderSize: renderSize))
         case .sprite(let firstFrame, let animation, let renderSize, let anchor):
             spriteView(
                 firstFrame: firstFrame,

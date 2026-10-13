@@ -11,6 +11,9 @@ final class PetController: ObservableObject {
     @Published private(set) var floatDeformation: PetDeformation = .neutral
     @Published private(set) var dragDeformation: PetDeformation = .neutral
     @Published private(set) var curiosityPose: PetDeformation = .neutral
+    /// Smoothed cursor direction while curious; feeds the layered
+    /// expression system's continuous gaze. Zero otherwise.
+    @Published private(set) var curiosityDirection: CGVector = .zero
 
     let personalityTuning = PersonalityTuning.default
 
@@ -226,6 +229,7 @@ final class PetController: ObservableObject {
                 guard stateMachine.transition(to: .idle) else { return }
                 state = stateMachine.state
                 curiosityPose = .neutral
+                curiosityDirection = .zero
             }
         default:
             break
@@ -280,6 +284,9 @@ final class PetController: ObservableObject {
             dwellProgress: 1,
             at: timestamp
         )
+        if curiosityPoseEstimator.direction != curiosityDirection {
+            curiosityDirection = curiosityPoseEstimator.direction
+        }
         publishCuriosityPoseIfChanged()
     }
 
@@ -448,6 +455,7 @@ final class PetController: ObservableObject {
         floatBaseFrame = nil
         descentPending = false
         curiosityPose = .neutral
+        curiosityDirection = .zero
         guard stateMachine.transition(to: .dragged) else { return }
         state = stateMachine.state
         dragEstimator.beginDrag(grabVector: grabVector)

@@ -433,9 +433,275 @@ final class ArtPreviewGeneratorTests: XCTestCase {
                    to: dir.appendingPathComponent("08-actual-size.png"))
     }
 
+    // MARK: - Phase 5A layered rig previews (development verification)
+
+    /// Renders representative layered-rig state sheets (idle, curious,
+    /// sleepy, sleeping, pressed) using the layered renderer with
+    /// mapper-produced parameters. The eye/mouth layers here are
+    /// PROCEDURAL PREVIEW SCAFFOLDING generated inside this test — they
+    /// are never shipped and are replaced by user-provided rig art.
+    func testGenerateRigStatePreviews() throws {
+        guard let outputPath = ProcessInfo.processInfo.environment["ART_PREVIEW_OUT"] else {
+            throw XCTSkip("ART_PREVIEW_OUT not set; skipping preview generation")
+        }
+        let outputDir = URL(fileURLWithPath: outputPath)
+        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
+
+        let rigDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RigPreview-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: rigDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rigDir) }
+
+        let rig = try buildPreviewRig(at: rigDir)
+        let rigLoader = WarawaraRigLoader()
+        guard rigLoader.loadManifest(from: rigDir) else {
+            throw XCTSkip("could not build preview rig: \(rigLoader.lastErrorDescription ?? "")")
+        }
+        guard let renderSize = WarawaraExpressionDriver.renderSize(
+            rig: rig, targetBodyHeight: PetMetrics.blobHeight
+        ) else {
+            throw XCTSkip("preview rig has no render size")
+        }
+
+        let states: [(String, WarawaraExpressionContext)] = [
+            ("idle", WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(state: .idle), breathPhase: 0.25)),
+            ("curious", WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(state: .curious, gaze: CGVector(dx: 0.7, dy: 0.2)),
+                breathPhase: 0.1)),
+            ("sleepy", WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(state: .sleepy), breathPhase: 0.5)),
+            ("sleeping", WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(state: .sleeping), breathPhase: 0.75)),
+            ("pressed", WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(state: .clicked), breathPhase: 0.25))
+        ]
+
+        for (index, (name, context)) in states.enumerated() {
+            let parameters = WarawaraExpressionMapper.targetParameters(for: context)
+            let content = ZStack {
+                CheckerboardBackground()
+                WarawaraLayeredCharacterView(
+                    rig: rig,
+                    rigLoader: rigLoader,
+                    parameters: parameters,
+                    renderSize: renderSize
+                )
+                VStack {
+                    HStack {
+                        Text("rig preview: \(name)")
+                            .font(.headline)
+                            .padding(4)
+                            .background(Color.white.opacity(0.8))
+                        Spacer()
+                    }
+                    Spacer()
+                }
+            }
+            let sheetName = "\(18 + index)-rig-\(name).png"
+            try render(content, size: mainCanvas, scale: 2,
+                       to: outputDir.appendingPathComponent(sheetName))
+        }
+
+        for name in ["18-rig-idle.png", "19-rig-curious.png", "20-rig-sleepy.png",
+                     "21-rig-sleeping.png", "22-rig-pressed.png"] {
+            XCTAssertTrue(
+                FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
+                "missing rig preview \(name)"
+            )
+        }
+    }
+
+    /// Builds an in-memory rig: the committed neutral artwork as the body
+    /// layer plus procedurally drawn eye/mouth layers (PREVIEW ONLY —
+    /// clearly not shipped artwork, replaced by the user's rig assets).
     @MainActor
-    private func renderComparisonNote(to dir: URL) throws {
-        let content = ZStack {
+    private func buildPreviewRig(at dir: URL) throws -> WarawaraRigManifest {
+        let repoPNG = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/WarawaraPet/Resources/Sprites/warawara_neutral.png")
+        guard FileManager.default.fileExists(atPath: repoPNG.path) else {
+            throw XCTSkip("committed neutral artwork missing; cannot build preview rig")
+        }
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("body"), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(
+            at: repoPNG, to: dir.appendingPathComponent("body/base.png")
+        )
+        try writePreviewEyesLayer(at: dir.appendingPathComponent("eyes"))
+        try writePreviewMouthLayer(at: dir.appendingPathComponent("mouth"))
+
+        return WarawaraRigManifest(
+            version: 1,
+            canvas: CGSize(width: 1024, height: 1024),
+            anchor: CGPoint(x: 0.5, y: 0.5),
+            bodyBounds: CGRect(x: 0.10, y: 0.09, width: 0.80, height: 0.82),
+            layers: [
+                "body": .init(
+                    kind: .body,
+                    images: ["base": "body/base.png"],
+                    anchor: CGPoint(x: 0.5, y: 0.5),
+                    gazeRange: nil
+                ),
+                "eyes": .init(
+                    kind: .eyes,
+                    images: ["open": "eyes/open.png", "closed": "eyes/closed.png"],
+                    anchor: CGPoint(x: 0.5, y: 0.41),
+                    gazeRange: CGSize(width: 0.06, height: 0.03)
+                ),
+                "mouth": .init(
+                    kind: .mouth,
+                    images: [
+                        "soft": "mouth/soft.png",
+                        "neutral": "mouth/neutral.png",
+                        "relaxed": "mouth/relaxed.png",
+                        "open": "mouth/open.png",
+                        "pressed": "mouth/pressed.png",
+                        "sleepy": "mouth/sleepy.png"
+                    ],
+                    anchor: CGPoint(x: 0.5, y: 0.50),
+                    gazeRange: nil
+                )
+            ],
+            optionalLayers: ["limbs"]
+        )
+    }
+
+    /// Two dark eye dots + closed-eye arcs, drawn on transparent 256x256
+    /// canvases so the rig renderer has real layers to compose. PREVIEW
+    /// SCAFFOLDING ONLY.
+    @MainActor
+    private func writePreviewEyesLayer(at dir: URL) throws {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let size = 256
+        let open = try previewBitmap(size: size) { ctx in
+            let eyeRadius = CGFloat(20)
+            let centerY = CGFloat(size) * 0.59 // 1 - 0.41 anchor
+            let gap = CGFloat(44)
+            for x in [CGFloat(size) / 2 - gap, CGFloat(size) / 2 + gap] {
+                NSColor(calibratedWhite: 0.12, alpha: 1).setFill()
+                NSBezierPath(
+                    ovalIn: NSRect(x: x - eyeRadius, y: centerY - eyeRadius,
+                                   width: eyeRadius * 2, height: eyeRadius * 2)
+                ).fill()
+            }
+        }
+        let closed = try previewBitmap(size: size) { ctx in
+            let width = CGFloat(44)
+            let centerY = CGFloat(size) * 0.59
+            let gap = CGFloat(44)
+            NSColor(calibratedWhite: 0.12, alpha: 1).setStroke()
+            let pen = NSBezierPath()
+            pen.lineWidth = 7
+            pen.lineCapStyle = .round
+            for x in [CGFloat(size) / 2 - gap, CGFloat(size) / 2 + gap] {
+                pen.appendArc(
+                    withCenter: NSPoint(x: x, y: centerY - 4),
+                    radius: width / 2, startAngle: 200, endAngle: 340
+                )
+            }
+            pen.stroke()
+        }
+        try open.write(to: dir.appendingPathComponent("open.png"))
+        try closed.write(to: dir.appendingPathComponent("closed.png"))
+    }
+
+    /// Simple mouth style shapes. PREVIEW SCAFFOLDING ONLY.
+    @MainActor
+    private func writePreviewMouthLayer(at dir: URL) throws {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let size = 256
+        let centerX = CGFloat(size) / 2
+        let centerY = CGFloat(size) * 0.5 // 1 - 0.50 anchor
+        let color = NSColor(calibratedWhite: 0.12, alpha: 1)
+
+        let styles: [(String, (NSGraphicsContext) -> Void)] = [
+            ("soft", { ctx in
+                color.setStroke()
+                let path = NSBezierPath()
+                path.lineWidth = 8
+                path.lineCapStyle = .round
+                path.move(to: NSPoint(x: centerX - 34, y: centerY - 2))
+                path.curve(to: NSPoint(x: centerX + 34, y: centerY - 2),
+                           controlPoint1: NSPoint(x: centerX - 12, y: centerY + 14),
+                           controlPoint2: NSPoint(x: centerX + 12, y: centerY + 14))
+                path.stroke()
+            }),
+            ("neutral", { ctx in
+                color.setStroke()
+                let path = NSBezierPath()
+                path.lineWidth = 8
+                path.lineCapStyle = .round
+                path.move(to: NSPoint(x: centerX - 26, y: centerY))
+                path.line(to: NSPoint(x: centerX + 26, y: centerY))
+                path.stroke()
+            }),
+            ("relaxed", { ctx in
+                color.setFill()
+                NSBezierPath(
+                    ovalIn: NSRect(x: centerX - 20, y: centerY - 10, width: 40, height: 18)
+                ).fill()
+            }),
+            ("open", { ctx in
+                color.setFill()
+                NSBezierPath(
+                    ovalIn: NSRect(x: centerX - 24, y: centerY - 18, width: 48, height: 34)
+                ).fill()
+            }),
+            ("pressed", { ctx in
+                color.setStroke()
+                let path = NSBezierPath()
+                path.lineWidth = 9
+                path.lineCapStyle = .round
+                path.move(to: NSPoint(x: centerX - 30, y: centerY))
+                path.line(to: NSPoint(x: centerX + 30, y: centerY))
+                path.stroke()
+            }),
+            ("sleepy", { ctx in
+                color.setFill()
+                NSBezierPath(
+                    ovalIn: NSRect(x: centerX - 10, y: centerY - 8, width: 20, height: 16)
+                ).fill()
+            })
+        ]
+        for (name, draw) in styles {
+            let image = try previewBitmap(size: size, draw: draw)
+            try image.write(to: dir.appendingPathComponent("\(name).png"))
+        }
+    }
+
+    @MainActor
+    private func previewBitmap(
+        size: Int,
+        draw: (NSGraphicsContext) -> Void
+    ) throws -> Data {
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: size,
+            pixelsHigh: size,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: size * 4,
+            bitsPerPixel: 32
+        ) else { throw NSError(domain: "preview", code: 1) }
+        NSGraphicsContext.saveGraphicsState()
+        guard let context = NSGraphicsContext(bitmapImageRep: rep) else {
+            NSGraphicsContext.restoreGraphicsState()
+            throw NSError(domain: "preview", code: 2)
+        }
+        NSGraphicsContext.current = context
+        draw(context)
+        context.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+        guard let png = rep.representation(using: .png, properties: [:]) else {
+            throw NSError(domain: "preview", code: 3)
+        }
+        return png
+    }
+
+    @MainActor
+    private func renderComparisonNote(to dir: URL) throws {        let content = ZStack {
             CheckerboardBackground()
             VStack(spacing: 14) {
                 placeholderMain

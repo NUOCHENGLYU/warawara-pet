@@ -14,10 +14,11 @@ enum WarawaraPetMain {
             // resources and reports the result. No window is created.
             let loader = WarawaraSpriteLoader.shared
             let loaded = loader.loadDefaultResources()
+            let rigLoaded = WarawaraRigLoader.shared.loadDefaultRig()
             if loaded {
                 let animationCount = loader.manifest?.animations.count ?? 0
                 let basePath = loader.loadedBaseURL?.path ?? "unknown"
-                print("SPRITES_OK animations=\(animationCount) base=\(basePath)")
+                print("SPRITES_OK animations=\(animationCount) base=\(basePath) rig=\(rigLoaded ? "loaded" : "absent")")
                 exit(0)
             }
             print("SPRITES_FAIL \(loader.lastErrorDescription ?? "unknown error")")

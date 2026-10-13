@@ -9,6 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // character view draws the artwork instead of the placeholder.
         // Failures are recorded and logged; the UI marks the fallback.
         WarawaraSpriteLoader.shared.loadDefaultResources()
+        // The layered rig is the primary rendering direction; when
+        // absent this logs clearly and the single-sprite pipeline runs.
+        WarawaraRigLoader.shared.loadDefaultRig()
 
         // The status item is created once and held strongly for the
         // lifetime of the app.

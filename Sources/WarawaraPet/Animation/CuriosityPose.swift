@@ -37,6 +37,9 @@ struct CuriosityPoseEstimator {
     var tuning: PersonalityTuning
 
     private(set) var pose: PetDeformation = .neutral
+    /// Smoothed signed cursor direction (-1...1 each axis); consumed by
+    /// the layered expression system for continuous gaze.
+    private(set) var direction: CGVector = .zero
     private var smoothedDirection = CGVector.zero
     private var lastTimestamp: TimeInterval?
 
@@ -59,6 +62,7 @@ struct CuriosityPoseEstimator {
             // Long gap between samples: re-anchor instead of spiking.
             smoothedDirection = direction
         }
+        self.direction = smoothedDirection
         pose = CuriosityPoseMath.pose(
             direction: smoothedDirection,
             dwellProgress: dwellProgress,
@@ -68,6 +72,7 @@ struct CuriosityPoseEstimator {
 
     mutating func reset() {
         pose = .neutral
+        direction = .zero
         smoothedDirection = .zero
         lastTimestamp = nil
     }
