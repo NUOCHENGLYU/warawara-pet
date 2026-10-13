@@ -453,6 +453,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: rigDir) }
 
         let rig = try buildPreviewRig(at: rigDir)
+        try JSONEncoder().encode(rig).write(to: rigDir.appendingPathComponent("manifest.json"))
         let rigLoader = WarawaraRigLoader()
         guard rigLoader.loadManifest(from: rigDir) else {
             throw XCTSkip("could not build preview rig: \(rigLoader.lastErrorDescription ?? "")")
