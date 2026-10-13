@@ -1,32 +1,31 @@
-# Warawara rig assets (Phase 5A)
+# Warawara rig assets (Phase 5B)
 
-This directory is the future home of the **layered character rig**. When
-`manifest.json` is present the app renders the layered character (body +
-eyes + mouth, limbs reserved); when absent the app logs that clearly and
-continues with the single-sprite pipeline — no code changes needed to
-activate the rig.
+The layered character rig is **installed and active**. When the app
+launches, `WarawaraRigLoader` loads `manifest.json` and the layered
+renderer (body + eyes + mouth) takes over; `--verify-sprites` on the
+packaged app must report `rig=loaded`. The Phase 4B single-sprite
+pipeline remains the automatic fallback for missing/invalid rig
+resources.
 
-## Directory convention
+## Installed tree
 
 ```
 Assets/WarawaraRig/
 ├── manifest.json
-├── body/base.png
-├── eyes/open.png
-├── eyes/closed.png
-└── mouth/{soft,neutral,relaxed,open,pressed,sleepy}.png
+├── body/body_base.png
+├── eyes/eyes_open.png   eyes_half.png  eyes_closed.png
+│      eyes_focused.png  eyes_pressed.png
+└── mouth/mouth_soft.png   mouth_neutral.png  mouth_relaxed.png
+         mouth_open.png    mouth_pressed.png  mouth_sleepy.png
 ```
 
-All layer images must share ONE canvas aspect (declare the canvas size in
-`manifest.json`; the renderer scales by body height exactly like the
-sprite pipeline). Transparent PNGs. Retina: provide >= 2x the logical
-canvas.
+All 12 PNGs are the ChatGPT-supplied handoff layers
+(`art_handoff/Warawara_Phase5A_Art_Handoff_v1/`), copied byte-for-byte
+(SHA256SUMS verified), each a registered transparent 1024 × 1024 canvas.
+`mouth_o_extra.png` is intentionally not installed (no role in the
+current schema).
 
-> SwiftPM flattens resource subdirectories into the bundle root, so every
-> filename must be unique across all rig folders (the loader tries the
-> declared path and then the flat basename).
-
-## manifest.json format
+## manifest.json format (implemented contract)
 
 ```json
 {
@@ -35,19 +34,23 @@ canvas.
   "anchor": [0.5, 0.5],
   "bodyBounds": [[0.10, 0.09], [0.80, 0.82]],
   "layers": {
-    "body":  { "kind": "body",  "images": { "base": "body/base.png" },
+    "body":  { "kind": "body",  "images": { "base": "body/body_base.png" },
                "anchor": [0.5, 0.5] },
-    "eyes":  { "kind": "eyes",  "images": { "open": "eyes/open.png",
-               "closed": "eyes/closed.png" },
-               "anchor": [0.5, 0.41], "gazeRange": [0.06, 0.03] },
+    "eyes":  { "kind": "eyes",
+               "images": { "open": "eyes/eyes_open.png",
+                           "half": "eyes/eyes_half.png",
+                           "closed": "eyes/eyes_closed.png",
+                           "focused": "eyes/eyes_focused.png",
+                           "pressed": "eyes/eyes_pressed.png" },
+               "anchor": [0.5, 0.5], "gazeRange": [0.06, 0.03] },
     "mouth": { "kind": "mouth",
-               "images": { "soft": "mouth/soft.png",
-                           "neutral": "mouth/neutral.png",
-                           "relaxed": "mouth/relaxed.png",
-                           "open": "mouth/open.png",
-                           "pressed": "mouth/pressed.png",
-                           "sleepy": "mouth/sleepy.png" },
-               "anchor": [0.5, 0.50] }
+               "images": { "soft": "mouth/mouth_soft.png",
+                           "neutral": "mouth/mouth_neutral.png",
+                           "relaxed": "mouth/mouth_relaxed.png",
+                           "open": "mouth/mouth_open.png",
+                           "pressed": "mouth/mouth_pressed.png",
+                           "sleepy": "mouth/mouth_sleepy.png" },
+               "anchor": [0.5, 0.5], "pivot": [0.495, 0.510] }
   },
   "optionalLayers": ["limbs"]
 }
@@ -55,42 +58,53 @@ canvas.
 
 Rules:
 
-- `version` must be 1; `canvas` width/height > 0; `anchor` and every layer
-  anchor inside 0...1; `bodyBounds` inside the unit rect with positive
-  size; a `body` layer is required.
-- Layer dictionary keys must equal the layer `kind`.
-- `images` maps roles to paths relative to this directory. Roles:
-  - body: `base`
-  - eyes: `open`, `closed` (single-image rigs degrade gracefully —
-    missing role = no visual for that state, never a crash)
-  - mouth: one entry per style: `soft`, `neutral`, `relaxed`, `open`,
-    `pressed`, `sleepy`
-  - limbs (reserved, next phase): to be defined
-- `gazeRange` (eyes only, optional): maximum gaze offset as fractions of
-  canvas width/height. The renderer offsets the eye layer by
-  `gazeX * range.width * renderWidth` (continuous, eased).
+- `version` must be 1; `canvas` width/height > 0; all anchors inside
+  0...1; `bodyBounds` inside the unit rect with positive size; a `body`
+  layer is required; layer keys must equal the layer `kind`.
 - CG geometry uses CoreGraphics Codable array format: `CGPoint` =
-  `[x, y]`, `CGSize` = `[w, h]`, `CGRect` = `[[x, y], [w, h]]` — object
-  dictionaries are NOT accepted.
+  `[x, y]`, `CGSize` = `[w, h]`, `CGRect` = `[[x, y], [w, h]]`.
+- `anchor` is the REGISTRATION anchor. All handoff layers are registered
+  to one full canvas, so positioning anchors are `[0.5, 0.5]` for every
+  layer — layers are never re-centered from their alpha bounding boxes.
+- `pivot` (optional): transform pivot for mouth width/height scaling
+  (falls back to `anchor`). Mouth pivot = measured mouth center.
+- `gazeRange` (eyes): maximum gaze offset as canvas fractions.
+- SwiftPM flattens resource subdirectories into the bundle root; every
+  filename must be unique across rig folders (the loader tries the
+  declared path, then the flat basename).
 
-## Behavior the rig enables
+## Continuous expression contract
 
-The layered renderer consumes continuous performance parameters
-(`WarawaraPerformanceParameters`) produced by the state -> parameter
-mapper and eased by `WarawaraParameterAnimator`:
+The renderer consumes `WarawaraPerformanceParameters` (eased by
+`WarawaraParameterAnimator`):
 
-- eye openness crossfades `open`/`closed` continuously (blinks included)
-- gaze offsets the eye layer smoothly (curious cursor following)
-- mouth styles crossfade over ~0.22 s; `mouthOpenAmount` scales the shape
-- body breathing scale, internal squash and lean are applied around the
-  bodyBounds center
+- eye openness crossfades open(1.0) <-> half(0.5) <-> closed(0.0)
+  continuously; `focused` fades in with gaze magnitude (curious);
+  `pressed` fades in with press amount (click).
+- gaze offsets the eye layer within `gazeRange`, eased, never snapped.
+- mouth styles crossfade (~0.18 s) and scale by `mouthOpenAmount` around
+  the mouth pivot (width 1 + 0.10x, height 1 + 0.22x).
+- body-level transforms (breath, squash, tilt) wrap ALL layers so the
+  face stays registered to the deformed body.
 
-The state machine, drag/hop/float deformation and hit testing are
-unchanged — the rig layers are composed INSIDE the existing character
-view, under the same deformation pipeline.
+## Future limb layer requirements (art not yet produced)
 
-## What is still needed for the next phase
+The body still contains the original painted arms/feet. A future
+independent limb layer must provide, on the same 1024 canvas
+registration:
 
-1. User-approved layered artwork: body, eyes (open/closed) and the six
-   mouth styles, all on a shared canvas.
-2. Optional limbs layer (roles + anchor) once the limb phase lands.
+- required filenames (roles to be finalized in the manifest when art
+  arrives; the loader only requires unique basenames):
+  e.g. `limbs/arm_left.png`, `limbs/arm_right.png`,
+  `limbs/foot_left.png`, `limbs/foot_right.png`
+- per-part pivot in the manifest (`pivot` key): shoulder pivots and foot
+  pivots in normalized canvas units;
+- layer order in the manifest: limbs rendered ABOVE body, BELOW eyes
+  and mouth (the renderer stacks body -> eyes -> mouth; limbs will be
+  inserted between body and eyes);
+- deformation masks: the body revision used with limbs must have the
+  painted arms/feet removed (clean silhouette) so rotated limbs do not
+  duplicate or leak the original outline — do not overlay limbs on the
+  current body until that mask revision exists.
+
+Do not draw limbs procedurally in the app.

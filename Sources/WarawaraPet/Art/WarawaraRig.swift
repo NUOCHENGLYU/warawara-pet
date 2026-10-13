@@ -23,6 +23,9 @@ struct WarawaraRigManifest: Codable, Equatable {
         /// Eyes only: maximum gaze offset in canvas width/height fractions.
         /// Absent = no gaze offset for the layer.
         var gazeRange: CGSize?
+        /// Optional transform pivot (e.g. mouth scaling center) in
+        /// normalized canvas units. Falls back to `anchor` when absent.
+        var pivot: CGPoint? = nil
     }
 
     var version: Int
@@ -64,6 +67,9 @@ struct WarawaraRigManifest: Codable, Equatable {
         guard isValidNormalizedPoint(layer.anchor) else { return false }
         if let gaze = layer.gazeRange {
             guard gaze.width >= 0, gaze.height >= 0 else { return false }
+        }
+        if let pivot = layer.pivot {
+            guard isValidNormalizedPoint(pivot) else { return false }
         }
         return true
     }
