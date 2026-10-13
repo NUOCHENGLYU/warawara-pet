@@ -1,4 +1,4 @@
-import AppKit
+﻿import AppKit
 import SwiftUI
 import XCTest
 @testable import WarawaraPet
@@ -6,7 +6,7 @@ import XCTest
 /// Offline artwork preview generator. When ART_PREVIEW_OUT is set (CI),
 /// renders inspectable PNG contact sheets into that directory using the
 /// real placeholder views and pose math. All output uses the procedural
-/// PLACEHOLDER artwork — it is not a fidelity claim.
+/// PLACEHOLDER artwork 鈥?it is not a fidelity claim.
 @MainActor
 final class ArtPreviewGeneratorTests: XCTestCase {
     private let mainCanvas = CGSize(width: 200, height: 226)
@@ -433,13 +433,12 @@ final class ArtPreviewGeneratorTests: XCTestCase {
                    to: dir.appendingPathComponent("08-actual-size.png"))
     }
 
-    // MARK: - Phase 5A layered rig previews (development verification)
+    // MARK: - Phase 5B layered rig previews (real supplied assets)
 
-    /// Renders representative layered-rig state sheets (idle, curious,
-    /// sleepy, sleeping, pressed) using the layered renderer with
-    /// mapper-produced parameters. The eye/mouth layers here are
-    /// PROCEDURAL PREVIEW SCAFFOLDING generated inside this test — they
-    /// are never shipped and are replaced by user-provided rig art.
+    /// Renders layered-rig state sheets using the REAL handoff assets
+    /// (Assets/WarawaraRig). Multi-sample sequences show continuous
+    /// expression behavior: gaze, blink, openness, sleep/wake, press
+    /// rebound, drag, mouth styles, and main/companion scaling.
     func testGenerateRigStatePreviews() throws {
         guard let outputPath = ProcessInfo.processInfo.environment["ART_PREVIEW_OUT"] else {
             throw XCTSkip("ART_PREVIEW_OUT not set; skipping preview generation")
@@ -447,65 +446,34 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         let outputDir = URL(fileURLWithPath: outputPath)
         try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
 
-        let rigDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("RigPreview-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: rigDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: rigDir) }
-
-        let rig = try buildPreviewRig(at: rigDir)
-        try JSONEncoder().encode(rig).write(to: rigDir.appendingPathComponent("manifest.json"))
+        let repoRigRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/WarawaraPet/Resources/Assets/WarawaraRig")
         let rigLoader = WarawaraRigLoader()
-        guard rigLoader.loadManifest(from: rigDir) else {
-            throw XCTSkip("could not build preview rig: \(rigLoader.lastErrorDescription ?? "")")
+        guard rigLoader.loadManifest(from: repoRigRoot),
+              let rig = rigLoader.rig else {
+            throw XCTSkip("real rig not available: \(rigLoader.lastErrorDescription ?? "unknown")")
         }
         guard let renderSize = WarawaraExpressionDriver.renderSize(
             rig: rig, targetBodyHeight: PetMetrics.blobHeight
         ) else {
-            throw XCTSkip("preview rig has no render size")
+            throw XCTSkip("rig has no render size")
         }
 
-        let states: [(String, WarawaraExpressionContext)] = [
-            ("idle", WarawaraExpressionContext(
-                inputs: WarawaraExpressionInputs(state: .idle), breathPhase: 0.25)),
-            ("curious", WarawaraExpressionContext(
-                inputs: WarawaraExpressionInputs(state: .curious, gaze: CGVector(dx: 0.7, dy: 0.2)),
-                breathPhase: 0.1)),
-            ("sleepy", WarawaraExpressionContext(
-                inputs: WarawaraExpressionInputs(state: .sleepy), breathPhase: 0.5)),
-            ("sleeping", WarawaraExpressionContext(
-                inputs: WarawaraExpressionInputs(state: .sleeping), breathPhase: 0.75)),
-            ("pressed", WarawaraExpressionContext(
-                inputs: WarawaraExpressionInputs(state: .clicked), breathPhase: 0.25))
-        ]
+        try renderRigNeutralAndComparison(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigGazeSamples(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigBlinkProgression(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigOpennessProgression(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigSleepAndWake(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigPressRebound(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigDragReaction(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigMouthStyles(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigMainVsCompanion(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
 
-        for (index, (name, context)) in states.enumerated() {
-            let parameters = WarawaraExpressionMapper.targetParameters(for: context)
-            let content = ZStack {
-                CheckerboardBackground()
-                WarawaraLayeredCharacterView(
-                    rig: rig,
-                    rigLoader: rigLoader,
-                    parameters: parameters,
-                    renderSize: renderSize
-                )
-                VStack {
-                    HStack {
-                        Text("rig preview: \(name)")
-                            .font(.headline)
-                            .padding(4)
-                            .background(Color.white.opacity(0.8))
-                        Spacer()
-                    }
-                    Spacer()
-                }
-            }
-            let sheetName = "\(18 + index)-rig-\(name).png"
-            try render(content, size: mainCanvas, scale: 2,
-                       to: outputDir.appendingPathComponent(sheetName))
-        }
-
-        for name in ["18-rig-idle.png", "19-rig-curious.png", "20-rig-sleepy.png",
-                     "21-rig-sleeping.png", "22-rig-pressed.png"] {
+        for name in ["18-rig-neutral.png", "19-rig-old-vs-recomposed.png",
+                     "20-rig-gaze.png", "21-rig-blink.png", "22-rig-openness.png",
+                     "23-rig-sleep-wake.png", "24-rig-press-rebound.png",
+                     "25-rig-drag.png", "26-rig-mouth-styles.png",
+                     "27-rig-main-vs-companion.png"] {
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
                 "missing rig preview \(name)"
@@ -513,200 +481,312 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         }
     }
 
-    /// Builds an in-memory rig: the committed neutral artwork as the body
-    /// layer plus procedurally drawn eye/mouth layers (PREVIEW ONLY —
-    /// clearly not shipped artwork, replaced by the user's rig assets).
     @MainActor
-    private func buildPreviewRig(at dir: URL) throws -> WarawaraRigManifest {
-        let repoPNG = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("Sources/WarawaraPet/Resources/Sprites/warawara_neutral.png")
-        guard FileManager.default.fileExists(atPath: repoPNG.path) else {
-            throw XCTSkip("committed neutral artwork missing; cannot build preview rig")
-        }
-        try FileManager.default.createDirectory(at: dir.appendingPathComponent("body"), withIntermediateDirectories: true)
-        try FileManager.default.copyItem(
-            at: repoPNG, to: dir.appendingPathComponent("body/base.png")
-        )
-        try writePreviewEyesLayer(at: dir.appendingPathComponent("eyes"))
-        try writePreviewMouthLayer(at: dir.appendingPathComponent("mouth"))
-
-        return WarawaraRigManifest(
-            version: 1,
-            canvas: CGSize(width: 1024, height: 1024),
-            anchor: CGPoint(x: 0.5, y: 0.5),
-            bodyBounds: CGRect(x: 0.10, y: 0.09, width: 0.80, height: 0.82),
-            layers: [
-                "body": .init(
-                    kind: .body,
-                    images: ["base": "body/base.png"],
-                    anchor: CGPoint(x: 0.5, y: 0.5),
-                    gazeRange: nil
-                ),
-                "eyes": .init(
-                    kind: .eyes,
-                    images: ["open": "eyes/open.png", "closed": "eyes/closed.png"],
-                    anchor: CGPoint(x: 0.5, y: 0.41),
-                    gazeRange: CGSize(width: 0.06, height: 0.03)
-                ),
-                "mouth": .init(
-                    kind: .mouth,
-                    images: [
-                        "soft": "mouth/soft.png",
-                        "neutral": "mouth/neutral.png",
-                        "relaxed": "mouth/relaxed.png",
-                        "open": "mouth/open.png",
-                        "pressed": "mouth/pressed.png",
-                        "sleepy": "mouth/sleepy.png"
-                    ],
-                    anchor: CGPoint(x: 0.5, y: 0.50),
-                    gazeRange: nil
-                )
-            ],
-            optionalLayers: ["limbs"]
+    private func rigView(
+        _ rig: WarawaraRigManifest,
+        _ rigLoader: WarawaraRigLoader,
+        _ parameters: WarawaraPerformanceParameters,
+        _ renderSize: CGSize
+    ) -> some View {
+        WarawaraLayeredCharacterView(
+            rig: rig,
+            rigLoader: rigLoader,
+            parameters: parameters,
+            renderSize: renderSize
         )
     }
 
-    /// Two dark eye dots + closed-eye arcs, drawn on transparent 256x256
-    /// canvases so the rig renderer has real layers to compose. PREVIEW
-    /// SCAFFOLDING ONLY.
     @MainActor
-    private func writePreviewEyesLayer(at dir: URL) throws {
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let size = 256
-        let open = try previewBitmap(size: size) { ctx in
-            let eyeRadius = CGFloat(20)
-            let centerY = CGFloat(size) * 0.59 // 1 - 0.41 anchor
-            let gap = CGFloat(44)
-            for x in [CGFloat(size) / 2 - gap, CGFloat(size) / 2 + gap] {
-                NSColor(calibratedWhite: 0.12, alpha: 1).setFill()
-                NSBezierPath(
-                    ovalIn: NSRect(x: x - eyeRadius, y: centerY - eyeRadius,
-                                   width: eyeRadius * 2, height: eyeRadius * 2)
-                ).fill()
+    private func rigSampleSheet(
+        samples: [(String, WarawaraPerformanceParameters)],
+        rig: WarawaraRigManifest,
+        rigLoader: WarawaraRigLoader,
+        renderSize: CGSize,
+        title: String,
+        to outputDir: URL,
+        named fileName: String
+    ) throws {
+        let content = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 6) {
+                Text(title).font(.headline)
+                HStack(spacing: 28) {
+                    ForEach(samples.indices, id: \.self) { index in
+                        VStack(spacing: 4) {
+                            rigView(rig, rigLoader, samples[index].1, renderSize)
+                            Text(samples[index].0).font(.caption)
+                        }
+                    }
+                }
             }
         }
-        let closed = try previewBitmap(size: size) { ctx in
-            let width = CGFloat(44)
-            let centerY = CGFloat(size) * 0.59
-            let gap = CGFloat(44)
-            NSColor(calibratedWhite: 0.12, alpha: 1).setStroke()
-            let pen = NSBezierPath()
-            pen.lineWidth = 7
-            pen.lineCapStyle = .round
-            for x in [CGFloat(size) / 2 - gap, CGFloat(size) / 2 + gap] {
-                pen.appendArc(
-                    withCenter: NSPoint(x: x, y: centerY - 4),
-                    radius: width / 2, startAngle: 200, endAngle: 340
-                )
-            }
-            pen.stroke()
-        }
-        try open.write(to: dir.appendingPathComponent("open.png"))
-        try closed.write(to: dir.appendingPathComponent("closed.png"))
+        try render(content, size: CGSize(width: 1500, height: 460), scale: 1,
+                   to: outputDir.appendingPathComponent(fileName))
     }
 
-    /// Simple mouth style shapes. PREVIEW SCAFFOLDING ONLY.
     @MainActor
-    private func writePreviewMouthLayer(at dir: URL) throws {
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let size = 256
-        let centerX = CGFloat(size) / 2
-        let centerY = CGFloat(size) * 0.5 // 1 - 0.50 anchor
-        let color = NSColor(calibratedWhite: 0.12, alpha: 1)
+    private func rigSingleSheet(
+        rig: WarawaraRigManifest,
+        rigLoader: WarawaraRigLoader,
+        parameters: WarawaraPerformanceParameters,
+        renderSize: CGSize,
+        title: String,
+        to outputDir: URL,
+        named fileName: String
+    ) throws {
+        let content = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 8) {
+                Text(title).font(.headline)
+                rigView(rig, rigLoader, parameters, renderSize)
+            }
+        }
+        try render(content, size: mainCanvas, scale: 2,
+                   to: outputDir.appendingPathComponent(fileName))
+    }
 
-        let styles: [(String, (NSGraphicsContext) -> Void)] = [
-            ("soft", { ctx in
-                color.setStroke()
-                let path = NSBezierPath()
-                path.lineWidth = 8
-                path.lineCapStyle = .round
-                path.move(to: NSPoint(x: centerX - 34, y: centerY - 2))
-                path.curve(to: NSPoint(x: centerX + 34, y: centerY - 2),
-                           controlPoint1: NSPoint(x: centerX - 12, y: centerY + 14),
-                           controlPoint2: NSPoint(x: centerX + 12, y: centerY + 14))
-                path.stroke()
-            }),
-            ("neutral", { ctx in
-                color.setStroke()
-                let path = NSBezierPath()
-                path.lineWidth = 8
-                path.lineCapStyle = .round
-                path.move(to: NSPoint(x: centerX - 26, y: centerY))
-                path.line(to: NSPoint(x: centerX + 26, y: centerY))
-                path.stroke()
-            }),
-            ("relaxed", { ctx in
-                color.setFill()
-                NSBezierPath(
-                    ovalIn: NSRect(x: centerX - 20, y: centerY - 10, width: 40, height: 18)
-                ).fill()
-            }),
-            ("open", { ctx in
-                color.setFill()
-                NSBezierPath(
-                    ovalIn: NSRect(x: centerX - 24, y: centerY - 18, width: 48, height: 34)
-                ).fill()
-            }),
-            ("pressed", { ctx in
-                color.setStroke()
-                let path = NSBezierPath()
-                path.lineWidth = 9
-                path.lineCapStyle = .round
-                path.move(to: NSPoint(x: centerX - 30, y: centerY))
-                path.line(to: NSPoint(x: centerX + 30, y: centerY))
-                path.stroke()
-            }),
-            ("sleepy", { ctx in
-                color.setFill()
-                NSBezierPath(
-                    ovalIn: NSRect(x: centerX - 10, y: centerY - 8, width: 20, height: 16)
-                ).fill()
-            })
+    @MainActor
+    private func idleParameters(blink: CGFloat = 0, breath: CGFloat = 0.25) -> WarawaraPerformanceParameters {
+        WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+            inputs: WarawaraExpressionInputs(state: .idle),
+            breathPhase: breath,
+            blink: blink
+        ))
+    }
+
+    @MainActor
+    private func renderRigNeutralAndComparison(
+        rig: WarawaraRigManifest,
+        rigLoader: WarawaraRigLoader,
+        renderSize: CGSize,
+        to dir: URL
+    ) throws {
+        let neutral = idleParameters()
+        try rigSingleSheet(rig: rig, rigLoader: rigLoader, parameters: neutral,
+                           renderSize: renderSize, title: "rig neutral (idle)",
+                           to: dir, named: "18-rig-neutral.png")
+
+        // Old (single sprite) vs recomposed (rig neutral): they must match
+        // the accepted Phase 4B appearance.
+        let spriteLoader = WarawaraSpriteLoader()
+        let spriteRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/WarawaraPet/Resources/Sprites")
+        guard spriteLoader.loadManifest(from: spriteRoot),
+              let spriteManifest = spriteLoader.manifest,
+              let oldImage = spriteLoader.image(
+                forRelativePath: "warawara_neutral.png", baseURL: spriteRoot
+              ) else {
+            throw XCTSkip("single sprite unavailable for comparison")
+        }
+        let oldRenderSize = WarawaraAnimationMapper.renderSize(
+            canvas: spriteManifest.layout.canvas,
+            bodyHeightInCanvas: spriteManifest.layout.bodyBounds.height * spriteManifest.layout.canvas.height,
+            targetBodyHeight: PetMetrics.blobHeight
+        )
+        let content = ZStack {
+            CheckerboardBackground()
+            HStack(spacing: 60) {
+                VStack(spacing: 4) {
+                    WarawaraSpriteFrameView(
+                        image: oldImage,
+                        renderSize: oldRenderSize,
+                        anchor: spriteManifest.layout.anchor
+                    )
+                    Text("Phase 4B single sprite").font(.caption)
+                }
+                VStack(spacing: 4) {
+                    rigView(rig, rigLoader, neutral, renderSize)
+                    Text("rig recomposed neutral").font(.caption)
+                }
+            }
+        }
+        try render(content, size: CGSize(width: 800, height: 420), scale: 1,
+                   to: dir.appendingPathComponent("19-rig-old-vs-recomposed.png"))
+    }
+
+    @MainActor
+    private func renderRigGazeSamples(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        let samples: [(String, WarawaraPerformanceParameters)] = [
+            ("left", WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(state: .curious, gaze: CGVector(dx: -0.7, dy: 0)), breathPhase: 0.2))),
+            ("center", idleParameters()),
+            ("right", WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(state: .curious, gaze: CGVector(dx: 0.7, dy: 0)), breathPhase: 0.2)))
         ]
-        for (name, draw) in styles {
-            let image = try previewBitmap(size: size, draw: draw)
-            try image.write(to: dir.appendingPathComponent("\(name).png"))
-        }
+        try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "gaze: left / center / right", to: dir, named: "20-rig-gaze.png")
     }
 
     @MainActor
-    private func previewBitmap(
-        size: Int,
-        draw: (NSGraphicsContext) -> Void
-    ) throws -> Data {
-        guard let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: size,
-            pixelsHigh: size,
-            bitsPerSample: 8,
-            samplesPerPixel: 4,
-            hasAlpha: true,
-            isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bytesPerRow: size * 4,
-            bitsPerPixel: 32
-        ) else { throw NSError(domain: "preview", code: 1) }
-        NSGraphicsContext.saveGraphicsState()
-        guard let context = NSGraphicsContext(bitmapImageRep: rep) else {
-            NSGraphicsContext.restoreGraphicsState()
-            throw NSError(domain: "preview", code: 2)
-        }
-        NSGraphicsContext.current = context
-        draw(context)
-        context.flushGraphics()
-        NSGraphicsContext.restoreGraphicsState()
-        guard let png = rep.representation(using: .png, properties: [:]) else {
-            throw NSError(domain: "preview", code: 3)
-        }
-        return png
+    private func renderRigBlinkProgression(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        let samples: [(String, WarawaraPerformanceParameters)] = [
+            ("open", idleParameters(blink: 0)),
+            ("closing", idleParameters(blink: 0.4)),
+            ("half", idleParameters(blink: 0.75)),
+            ("closed", idleParameters(blink: 1)),
+            ("reopening", idleParameters(blink: 0.5))
+        ]
+        try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "blink progression (continuous)", to: dir, named: "21-rig-blink.png")
     }
 
     @MainActor
-    private func renderComparisonNote(to dir: URL) throws {        let content = ZStack {
+    private func renderRigOpennessProgression(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        let samples: [(String, WarawaraPerformanceParameters)] = [1.0, 0.7, 0.45, 0.2, 0.05].map { openness in
+            var p = idleParameters()
+            p.eyeOpenness = openness
+            p.mouthStyle = .relaxed
+            return ("\(Int(openness * 100))%", p)
+        }
+        try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "eye openness progression", to: dir, named: "22-rig-openness.png")
+    }
+
+    @MainActor
+    private func renderRigSleepAndWake(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        let frameDT = 1.0 / 30.0
+        var animator = WarawaraParameterAnimator()
+        animator.set(idleParameters())
+
+        let sleepyTarget = WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+            inputs: WarawaraExpressionInputs(state: .sleepy), breathPhase: 0.5))
+        var sleepySamples: [(String, WarawaraPerformanceParameters)] = []
+        for step in [10, 40] {
+            for _ in 0..<step { animator.step(toward: sleepyTarget, dt: frameDT) }
+            sleepySamples.append(("sleepy +\(step)f", animator.parameters))
+        }
+        let sleepingTarget = WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+            inputs: WarawaraExpressionInputs(state: .sleeping), breathPhase: 0.6))
+        for step in [20, 80] {
+            for _ in 0..<step { animator.step(toward: sleepingTarget, dt: frameDT) }
+            sleepySamples.append(("sleeping +\(step)f", animator.parameters))
+        }
+        try rigSampleSheet(samples: sleepySamples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "sleepy -> sleeping (continuous)", to: dir, named: "23-rig-sleep-wake.png")
+
+        // Wake: sleeping back to idle 鈥?continuous reopening.
+        let wakeTarget = idleParameters()
+        var wakeSamples: [(String, WarawaraPerformanceParameters)] = []
+        var wakeAnimator = WarawaraParameterAnimator()
+        wakeAnimator.set(sleepingTarget)
+        for step in [8, 25, 60, 120] {
+            for _ in 0..<step { wakeAnimator.step(toward: wakeTarget, dt: frameDT) }
+            wakeSamples.append(("wake +\(step)f", wakeAnimator.parameters))
+        }
+        try rigSampleSheet(samples: wakeSamples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "wake progression (continuous reopening)", to: dir, named: "24-rig-wake.png")
+    }
+
+    @MainActor
+    private func renderRigPressRebound(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        let frameDT = 1.0 / 30.0
+        var animator = WarawaraParameterAnimator()
+        animator.set(idleParameters())
+        let pressedTarget = WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+            inputs: WarawaraExpressionInputs(state: .clicked), breathPhase: 0.3))
+        var samples: [(String, WarawaraPerformanceParameters)] = []
+        for _ in 0..<3 { animator.step(toward: pressedTarget, dt: frameDT) }
+        samples.append(("pressed +3f", animator.parameters))
+        for _ in 0..<8 { animator.step(toward: pressedTarget, dt: frameDT) }
+        samples.append(("pressed +11f", animator.parameters))
+        let idleTarget = idleParameters()
+        for step in [6, 20, 60] {
+            for _ in 0..<step { animator.step(toward: idleTarget, dt: frameDT) }
+            samples.append(("rebound +\(step)f", animator.parameters))
+        }
+        try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "pressed / rebound (soft recovery)", to: dir, named: "25-rig-press-rebound.png")
+    }
+
+    @MainActor
+    private func renderRigDragReaction(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        func dragContext(_ direction: CGVector) -> WarawaraExpressionContext {
+            let limit = DeformationTuning.default.grabAnchorLimit
+            return WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(
+                    state: .dragged,
+                    dragDeformation: PetDeformation(
+                        stretchAngle: 0,
+                        stretchScale: 1 + DeformationTuning.default.maxStretch * 0.7,
+                        perpendicularScale: 1,
+                        rotation: 0,
+                        anchor: CGVector(dx: direction.dx * limit, dy: direction.dy * limit)
+                    )
+                ),
+                breathPhase: 0.3
+            )
+        }
+        let samples: [(String, WarawaraPerformanceParameters)] = [
+            ("drag left", WarawaraExpressionMapper.targetParameters(for: dragContext(CGVector(dx: -1, dy: 0.2)))),
+            ("drag right", WarawaraExpressionMapper.targetParameters(for: dragContext(CGVector(dx: 1, dy: 0.2)))),
+            ("drag up", WarawaraExpressionMapper.targetParameters(for: dragContext(CGVector(dx: 0, dy: 1))))
+        ]
+        try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "drag facial reaction", to: dir, named: "26-rig-drag.png")
+    }
+
+    @MainActor
+    private func renderRigMouthStyles(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        var samples: [(String, WarawaraPerformanceParameters)] = []
+        for style in WarawaraMouthStyle.allCases {
+            var p = idleParameters()
+            p.mouthStyle = style
+            samples.append((style.rawValue, p))
+        }
+        var openSample = idleParameters()
+        openSample.mouthStyle = .open
+        openSample.mouthOpenAmount = 0.7
+        samples.append(("open x0.7", openSample))
+        try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "mouth styles + open scaling", to: dir, named: "27-rig-mouth-styles.png")
+    }
+
+    @MainActor
+    private func renderRigMainVsCompanion(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        guard let companionSize = WarawaraExpressionDriver.renderSize(
+            rig: rig, targetBodyHeight: CompanionMetrics.blobHeight
+        ) else {
+            throw XCTSkip("rig has no companion render size")
+        }
+        let content = ZStack {
+            CheckerboardBackground()
+            HStack(spacing: 80) {
+                VStack(spacing: 4) {
+                    rigView(rig, rigLoader, idleParameters(), renderSize)
+                    Text("main 118 pt").font(.caption)
+                }
+                VStack(spacing: 4) {
+                    rigView(rig, rigLoader, idleParameters(), companionSize)
+                    Text("companion 74 pt").font(.caption)
+                }
+            }
+        }
+        try render(content, size: CGSize(width: 800, height: 420), scale: 1,
+                   to: dir.appendingPathComponent("28-rig-main-vs-companion.png"))
+    }
+
+    private func renderComparisonNote(to dir: URL) throws {
+        let content = ZStack {
             CheckerboardBackground()
             VStack(spacing: 14) {
                 placeholderMain
-                Text("CANDIDATE — awaiting visual approval")
+                Text("CANDIDATE 鈥?awaiting visual approval")
                     .font(.headline)
                 Text("Placeholder artwork only. Compare against official stills listed in")
                     .font(.caption)
@@ -721,8 +801,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         WarawaraPet art preview (generated by ArtPreviewGeneratorTests)
 
         All images in this artifact use the PROCEDURAL PLACEHOLDER artwork.
-        They demonstrate the sprite pipeline, pose math, and composition —
-        they make no claim of fidelity to the film design.
+        They demonstrate the sprite pipeline, pose math, and composition 鈥?        they make no claim of fidelity to the film design.
 
         Reference material:
         - Official film page: https://www.ghibli.jp/works/kimitachi/
