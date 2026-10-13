@@ -9,7 +9,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "WarawaraPet",
-            path: "Sources/WarawaraPet"
+            path: "Sources/WarawaraPet",
+            resources: [
+                .process("Resources/Sprites")
+            ]
         ),
         .testTarget(
             name: "WarawaraPetTests",

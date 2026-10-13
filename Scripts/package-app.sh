@@ -21,6 +21,13 @@ cp "$BIN_PATH" "$MACOS_DIR/WarawaraPet"
 chmod +x "$MACOS_DIR/WarawaraPet"
 cp "$ROOT_DIR/Support/Info.plist" "$CONTENTS_DIR/Info.plist"
 
+# SPM resource bundle (sprites etc.), resolved by Bundle.module from the
+# app's Contents/Resources directory.
+RESOURCE_BUNDLE="$ROOT_DIR/.build/apple/Products/Release/WarawaraPet_WarawaraPet.bundle"
+if [ -d "$RESOURCE_BUNDLE" ]; then
+    cp -R "$RESOURCE_BUNDLE" "$RESOURCES_DIR/"
+fi
+
 codesign --force --deep --sign - "$APP_DIR"
 
 rm -f "$ROOT_DIR/dist/WarawaraPet.zip"

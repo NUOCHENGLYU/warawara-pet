@@ -52,10 +52,11 @@ struct PetView: View {
     }
 
     private var petGroup: some View {
-        ZStack {
-            bodyBlob
-            eyes
-        }
+        WarawaraCharacterView(
+            visualState: WarawaraVisualState.state(for: controller.state),
+            loader: .shared,
+            placeholderSizeClass: .main
+        )
         .modifier(PoseEffect(
             deformation: controller.dragDeformation,
             isActive: controller.state == .dragged,
@@ -78,28 +79,6 @@ struct PetView: View {
         .animation(poseAnimation, value: controller.hopProgress)
         .animation(poseAnimation, value: controller.settleProgress)
         .animation(poseAnimation, value: controller.floatProgress)
-    }
-
-    private var bodyBlob: some View {
-        Capsule()
-            .fill(
-                LinearGradient(
-                    colors: [Color(white: 0.98), Color(white: 0.86)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .frame(width: 96, height: 118)
-            .overlay(Capsule().stroke(Color(white: 0.55), lineWidth: 1.5))
-            .padding(.bottom, PetMetrics.blobBottomPadding)
-    }
-
-    private var eyes: some View {
-        HStack(spacing: 34) {
-            EyeView()
-            EyeView()
-        }
-        .offset(y: 62)
     }
 
     private var bobOffset: CGFloat {
@@ -185,13 +164,5 @@ private struct SleepIndicatorView: View {
             .offset(y: rising ? 26 : 0)
             .onAppear { rising = true }
             .animation(.easeOut(duration: 2.8).repeatForever(autoreverses: false), value: rising)
-    }
-}
-
-private struct EyeView: View {
-    var body: some View {
-        Circle()
-            .fill(Color(white: 0.15))
-            .frame(width: 9, height: 11)
     }
 }

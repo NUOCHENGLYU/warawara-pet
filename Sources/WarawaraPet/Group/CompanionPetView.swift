@@ -23,35 +23,18 @@ struct CompanionPetView: View {
 
     var body: some View {
         ZStack {
-            character
-                .offset(x: pose.contentOffset.x, y: -pose.contentOffset.y)
+            WarawaraCharacterView(
+                visualState: .idle,
+                loader: .shared,
+                scale: scale,
+                placeholderSizeClass: .companion
+            )
+            .modifier(CompanionPoseEffect(deformation: pose.deformation))
+            .scaleEffect(pose.breathing, anchor: .center)
+            .offset(x: pose.contentOffset.x, y: -pose.contentOffset.y)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
-    }
-
-    private var character: some View {
-        Capsule()
-            .fill(
-                LinearGradient(
-                    colors: [Color(white: 0.97), Color(white: 0.84)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .frame(width: CompanionMetrics.blobWidth, height: CompanionMetrics.blobHeight)
-            .overlay(Capsule().stroke(Color(white: 0.5), lineWidth: 1.2))
-            .overlay(
-                HStack(spacing: 22) {
-                    Circle().fill(Color(white: 0.18)).frame(width: 6, height: 7)
-                    Circle().fill(Color(white: 0.18)).frame(width: 6, height: 7)
-                }
-                .offset(y: 10),
-                alignment: .center
-            )
-            .scaleEffect(scale, anchor: .center)
-            .modifier(CompanionPoseEffect(deformation: pose.deformation))
-            .scaleEffect(pose.breathing, anchor: .center)
     }
 }
 
