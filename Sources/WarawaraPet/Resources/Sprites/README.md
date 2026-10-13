@@ -26,9 +26,9 @@ sprites.json
 {
   "version": 1,
   "layout": {
-    "canvas": { "width": 200, "height": 226 },      // logical points
-    "anchor": { "x": 0.5, "y": 0.5 },               // normalized, top-left origin
-    "bodyBounds": { "x": 0.26, "y": 0.24, "width": 0.48, "height": 0.52 }  // normalized
+    "canvas": [200, 226],      // logical points
+    "anchor": [0.5, 0.5],               // normalized, top-left origin
+    "bodyBounds": [0.26, 0.24, 0.48, 0.52]  // normalized
   },
   "animations": {
     "idle": { "frames": ["idle/idle_00.png", "idle/idle_01.png"],

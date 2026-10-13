@@ -29,9 +29,9 @@ final class WarawaraSpriteManifestTests: XCTestCase {
         // decode failure here proves the problem is struct-side, not
         // file-side.
         let json = """
-        {"version":1,"layout":{"canvas":{"width":200,"height":226},\
-        "anchor":{"x":0.5,"y":0.5},\
-        "bodyBounds":{"x":0.26,"y":0.239,"width":0.48,"height":0.522}},\
+        {"version":1,"layout":{"canvas":[200,226],\
+        "anchor":[0.5,0.5],\
+        "bodyBounds":[0.26,0.239,0.48,0.522]},\
         "animations":{"idle":{"frames":["idle/idle_00.png","idle/idle_01.png"],\
         "frameDuration":0.6,"loop":true},"hop":{"frames":["hop/hop_00.png",\
         "hop/hop_01.png","hop/hop_02.png"],"frameDuration":0.08,"loop":false},\

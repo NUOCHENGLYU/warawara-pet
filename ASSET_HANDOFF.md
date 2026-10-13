@@ -62,9 +62,9 @@ animation); the directory convention above is only a suggestion. The
 {
   "version": 1,
   "layout": {
-    "canvas": { "width": 200, "height": 226 },
-    "anchor": { "x": 0.5, "y": 0.5 },
-    "bodyBounds": { "x": 0.26, "y": 0.24, "width": 0.48, "height": 0.52 }
+    "canvas": [200, 226],
+    "anchor": [0.5, 0.5],
+    "bodyBounds": [0.26, 0.24, 0.48, 0.52]
   },
   "animations": {
     "idle": {
