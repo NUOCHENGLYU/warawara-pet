@@ -300,6 +300,51 @@ enum GroupMotionMath {
         return body.minY >= topY + margin
     }
 
+    /// Character-space exit predicate: the rendered body's BOTTOM (from
+    /// the character's global center and scale) is above `topY`. This is
+    /// the unified completion check for both the moving-panel ascent and
+    /// the screen-contained viewport exit.
+    static func isCharacterFullyAboveTopEdge(
+        characterCenterY: CGFloat,
+        scale: CGFloat,
+        topY: CGFloat,
+        margin: CGFloat
+    ) -> Bool {
+        let bodyBottom = characterCenterY - CompanionMetrics.blobHeight * scale / 2
+        return bodyBottom > topY + margin
+    }
+
+    /// The screen-contained exit viewport: a fixed panel frame whose TOP
+    /// edge coincides exactly with the visible desktop's upper boundary
+    /// (`topY`). The panel stays inside the visible region; the character
+    /// moves upward INSIDE it and is clipped by the panel's top edge.
+    /// The horizontal origin is centered on the character and clamped
+    /// into the visible frame (near side edges the viewport shifts but
+    /// the character position is preserved via the local offset).
+    static func exitViewportFrame(
+        characterCenter: CGPoint,
+        topY: CGFloat,
+        visibleFrame: CGRect,
+        tuning: GroupTuning
+    ) -> CGRect {
+        let width = tuning.exitViewportWidth
+        let height = tuning.exitViewportHeight
+        let minX = visibleFrame.minX
+        let maxX = max(visibleFrame.minX, visibleFrame.maxX - width)
+        let x = min(max(characterCenter.x - width / 2, minX), maxX)
+        return CGRect(x: x, y: topY - height, width: width, height: height)
+    }
+
+    /// The character's local offset from the viewport's center (AppKit
+    /// orientation: +x right, +y up). Handoff preserves the character's
+    /// exact global position: viewportCenter + offset == characterCenter.
+    static func localOffset(characterCenter: CGPoint, viewportFrame: CGRect) -> CGVector {
+        CGVector(
+            dx: characterCenter.x - viewportFrame.midX,
+            dy: characterCenter.y - viewportFrame.midY
+        )
+    }
+
     /// Fraction of the rendered body that has passed above `topY`:
     /// 0 = fully visible, 1 = fully beyond. Used to verify the staged
     /// partial-body exit.

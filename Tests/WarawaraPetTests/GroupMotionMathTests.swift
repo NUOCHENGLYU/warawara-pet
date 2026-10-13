@@ -393,6 +393,132 @@ final class GroupMotionMathTests: XCTestCase {
         XCTAssertFalse(allIdentical, "companions must not move identically")
     }
 
+    // MARK: - Screen-contained top-exit viewport
+
+    func testViewportTopEdgeAlignsExactlyWithVisibleTop() {
+        let topY = visibleFrame.maxY
+        for characterCenter in [CGPoint(x: 500, y: 680), CGPoint(x: 30, y: 660), CGPoint(x: 970, y: 670)] {
+            let frame = GroupMotionMath.exitViewportFrame(
+                characterCenter: characterCenter,
+                topY: topY,
+                visibleFrame: visibleFrame,
+                tuning: tuning
+            )
+            XCTAssertEqual(frame.maxY, topY, accuracy: 0.5, "viewport top must coincide with the visible top")
+        }
+    }
+
+    func testViewportIsContainedWithinVisibleFrame() {
+        let topY = visibleFrame.maxY
+        for characterCenter in [CGPoint(x: 500, y: 680), CGPoint(x: 30, y: 660), CGPoint(x: 970, y: 670), CGPoint(x: 120, y: 500)] {
+            let frame = GroupMotionMath.exitViewportFrame(
+                characterCenter: characterCenter,
+                topY: topY,
+                visibleFrame: visibleFrame,
+                tuning: tuning
+            )
+            XCTAssertGreaterThanOrEqual(frame.minX, visibleFrame.minX - 0.001)
+            XCTAssertLessThanOrEqual(frame.maxX, visibleFrame.maxX + 0.001)
+            XCTAssertGreaterThanOrEqual(frame.minY, visibleFrame.minY - 0.001)
+            XCTAssertLessThanOrEqual(frame.maxY, visibleFrame.maxY + 0.001)
+        }
+    }
+
+    func testHandoffPreservesGlobalCharacterPosition() {
+        let topY = visibleFrame.maxY
+        var rng = SeededRandomSource(seed: 70)
+        for _ in 0..<100 {
+            let character = CGPoint(
+                x: RandomBounds.randomCGFloat(in: 40...960, using: &rng),
+                y: RandomBounds.randomCGFloat(in: 300...720, using: &rng)
+            )
+            let frame = GroupMotionMath.exitViewportFrame(
+                characterCenter: character,
+                topY: topY,
+                visibleFrame: visibleFrame,
+                tuning: tuning
+            )
+            let offset = GroupMotionMath.localOffset(characterCenter: character, viewportFrame: frame)
+            let restored = CGPoint(x: frame.midX + offset.dx, y: frame.midY + offset.dy)
+            XCTAssertEqual(restored.x, character.x, accuracy: 0.0001)
+            XCTAssertEqual(restored.y, character.y, accuracy: 0.0001)
+        }
+    }
+
+    func testViewportContainsTransformedBodyAtHandoff() {
+        let topY = visibleFrame.maxY
+        // At handoff the body top is at topY - handoffMargin; the whole
+        // transformed silhouette must fit inside the viewport.
+        let bodyHalf = CompanionMetrics.blobHeight * CompanionMetrics.maxScale * (1 + CompanionMetrics.maxStretch) / 2
+        let character = CGPoint(x: 500, y: topY - tuning.exitHandoffMargin - bodyHalf)
+        let frame = GroupMotionMath.exitViewportFrame(
+            characterCenter: character, topY: topY, visibleFrame: visibleFrame, tuning: tuning
+        )
+        let bodyFrame = CGRect(
+            x: character.x - CompanionMetrics.blobWidth * CompanionMetrics.maxScale * (1 + CompanionMetrics.maxStretch) / 2,
+            y: character.y - bodyHalf,
+            width: CompanionMetrics.blobWidth * CompanionMetrics.maxScale * (1 + CompanionMetrics.maxStretch),
+            height: bodyHalf * 2
+        )
+        XCTAssertGreaterThanOrEqual(bodyFrame.minX, frame.minX - 0.5)
+        XCTAssertLessThanOrEqual(bodyFrame.maxX, frame.maxX + 0.5)
+        XCTAssertGreaterThanOrEqual(bodyFrame.minY, frame.minY - 0.5)
+        XCTAssertLessThanOrEqual(bodyFrame.maxY, frame.maxY + 0.5)
+    }
+
+    func testViewportExitProgressesThroughPartialStages() {
+        // The character rises inside the fixed viewport at a slow speed;
+        // the fraction of its body above the visible top must pass
+        // through every intermediate stage over a nonzero interval.
+        let topY = visibleFrame.maxY
+        let slowSpeed: CGFloat = 40
+        let bodyHalf = CompanionMetrics.blobHeight / 2
+        var characterY = topY - 60 - bodyHalf
+        var fractions: [CGFloat] = []
+        for _ in 0..<300 {
+            characterY += slowSpeed / 60
+            // A synthetic standard-size panel centered on the character:
+            // fractionAboveTopEdge insets it by the companion padding to
+            // recover the rendered body frame.
+            let panelFrame = CGRect(
+                x: 500 - CompanionMetrics.size / 2,
+                y: characterY - CompanionMetrics.size / 2,
+                width: CompanionMetrics.size,
+                height: CompanionMetrics.size
+            )
+            let fraction = GroupMotionMath.fractionAboveTopEdge(panelFrame: panelFrame, topY: topY)
+            fractions.append(fraction)
+            if fraction >= 1 { break }
+        }
+        XCTAssertGreaterThan(fractions.first ?? 0, -0.0001)
+        XCTAssertEqual(fractions.first ?? 1, 0, accuracy: 0.0001)
+        XCTAssertTrue(fractions.contains { $0 > 0.2 && $0 < 0.4 }, "must pass through a ~30% clipped stage")
+        XCTAssertTrue(fractions.contains { $0 > 0.5 && $0 < 0.8 }, "must pass through a ~65% clipped stage")
+        XCTAssertEqual(fractions.last ?? 0, 1, accuracy: 0.0001)
+        // Partial stages span multiple frames (nonzero time interval).
+        XCTAssertGreaterThan(fractions.filter { $0 > 0 && $0 < 1 }.count, 5)
+    }
+
+    func testCharacterIsNotRecycledWhileVisible() {
+        let topY = visibleFrame.maxY
+        let bodyHalf = CompanionMetrics.blobHeight / 2
+        XCTAssertFalse(
+            GroupMotionMath.isCharacterFullyAboveTopEdge(
+                characterCenterY: topY - 20, scale: 1, topY: topY, margin: 8
+            )
+        )
+        XCTAssertFalse(
+            GroupMotionMath.isCharacterFullyAboveTopEdge(
+                characterCenterY: topY + 10, scale: 1, topY: topY, margin: 8
+            )
+        )
+        XCTAssertTrue(
+            GroupMotionMath.isCharacterFullyAboveTopEdge(
+                characterCenterY: topY + bodyHalf + 8 + 1, scale: 1, topY: topY, margin: 8
+            )
+        )
+    }
+
     // MARK: - Cancellation fade
 
     func testFadeAlphaDecreasesMonotonicallyToZero() {

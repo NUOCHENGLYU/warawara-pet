@@ -20,6 +20,8 @@ final class GroupSequenceController {
         var ascentStart = CGPoint.zero
         var released = false
         var exited = false
+        var viewportActive = false
+        var viewportFrame = CGRect.zero
         let poseModel = CompanionPoseModel()
         var poseEstimator = CompanionPoseEstimator()
     }
@@ -115,7 +117,13 @@ final class GroupSequenceController {
             )
             panel.contentView = hosting
             panel.alphaValue = 1
-            panel.setFrameOrigin(origin(for: companion.config.entryPoint))
+            panel.setFrame(
+                CGRect(
+                    origin: origin(for: companion.config.entryPoint),
+                    size: CGSize(width: CompanionMetrics.size, height: CompanionMetrics.size)
+                ),
+                display: false
+            )
             panel.orderFrontRegardless()
             panels[companion.config.id] = panel
             runtimes.append(runtime)
@@ -127,10 +135,17 @@ final class GroupSequenceController {
         if let index = runtimes.firstIndex(where: { $0.config.id == id }) {
             runtimes[index].poseModel.deformation = .neutral
             runtimes[index].poseModel.breathing = 1
+            runtimes[index].poseModel.contentOffset = .zero
             runtimes[index].poseEstimator.reset()
+            runtimes[index].viewportActive = false
         }
         panel.alphaValue = 0
-        panel.setFrameOrigin(restingPosition)
+        // Restore the standard panel size so pooled reuse is safe even
+        // after a viewport-resized exit.
+        panel.setFrame(
+            CGRect(origin: restingPosition, size: CGSize(width: CompanionMetrics.size, height: CompanionMetrics.size)),
+            display: false
+        )
         panelPool.append(panel)
     }
 
@@ -328,11 +343,9 @@ final class GroupSequenceController {
             )
 
             // Staged exit across the VISIBLE top boundary: once the body
-            // top is inside the slow zone (measured against the usable
-            // desktop top, i.e. below the menu bar band), rise at a slow
-            // constant speed so the body visibly crosses the boundary in
-            // stages (top, half, lower portion). After the timeout the
-            // same slow progression is forced instead of hiding anything.
+            // top is inside the slow zone, rise at a slow constant speed.
+            // After the timeout the same slow progression is forced
+            // instead of hiding anything.
             let bodyHalfHeight = CompanionMetrics.blobHeight * config.scale / 2
             let bodyTopY = runtimes[index].kinematics.position.y + bodyHalfHeight
             let exitTopY = visibleFrame.maxY
@@ -347,20 +360,46 @@ final class GroupSequenceController {
 
             updatePose(index: index, now: now)
             let position = runtimes[index].kinematics.position
-            updatePanel(id: config.id) {
-                $0.alphaValue = 1
-                $0.setFrameOrigin(self.origin(for: position))
+
+            // Screen-contained top-exit viewport handoff: once the body
+            // top is near the visible boundary, freeze the panel with its
+            // top edge exactly at the boundary and let the character keep
+            // rising inside it, clipped by the panel's top edge. The
+            // character's global position, velocity, and pose all remain
+            // continuous (the local offset is derived from the same
+            // world-space position).
+            if !runtimes[index].viewportActive,
+               bodyTopY >= exitTopY - tuning.exitHandoffMargin {
+                let frame = GroupMotionMath.exitViewportFrame(
+                    characterCenter: position,
+                    topY: exitTopY,
+                    visibleFrame: visibleFrame,
+                    tuning: tuning
+                )
+                runtimes[index].viewportFrame = frame
+                runtimes[index].viewportActive = true
+                panels[config.id]?.setFrame(frame, display: true)
+                panels[config.id]?.contentView?.frame = CGRect(origin: .zero, size: frame.size)
             }
 
-            // Recycle only after the ENTIRE rendered body has passed the
-            // visible top boundary. No deadline-based hiding: companions
-            // keep rising at the slow speed until fully out.
-            let panelFrame = CGRect(
-                origin: origin(for: position),
-                size: CGSize(width: CompanionMetrics.size, height: CompanionMetrics.size)
-            )
-            if GroupMotionMath.isFullyAboveTopEdge(
-                panelFrame: panelFrame,
+            if runtimes[index].viewportActive {
+                let offset = GroupMotionMath.localOffset(
+                    characterCenter: position,
+                    viewportFrame: runtimes[index].viewportFrame
+                )
+                runtimes[index].poseModel.contentOffset = CGPoint(x: offset.dx, y: offset.dy)
+            } else {
+                updatePanel(id: config.id) {
+                    $0.alphaValue = 1
+                    $0.setFrameOrigin(self.origin(for: position))
+                }
+            }
+
+            // Recycle only after the ENTIRE rendered body (global
+            // character bounds) has passed the visible top boundary.
+            if GroupMotionMath.isCharacterFullyAboveTopEdge(
+                characterCenterY: position.y,
+                scale: config.scale,
                 topY: exitTopY,
                 margin: tuning.exitTopMargin
             ) {

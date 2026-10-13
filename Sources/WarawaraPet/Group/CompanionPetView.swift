@@ -1,22 +1,36 @@
 import SwiftUI
 
 /// Publishable companion pose: velocity-driven deformation plus a subtle
-/// breathing scale. Updated by GroupSequenceController each tick.
+/// breathing scale, and the character's offset from the panel center
+/// (AppKit orientation: +x right, +y up) used by the screen-contained
+/// top-exit viewport. Updated by GroupSequenceController each tick.
 final class CompanionPoseModel: ObservableObject {
     @Published var deformation: PetDeformation = .neutral
     @Published var breathing: CGFloat = 1
+    @Published var contentOffset: CGPoint = .zero
 }
 
 /// Placeholder companion Warawara: the same procedural blob language as
-/// the main pet. The body is CENTERED in a canvas large enough to contain
-/// its maximum silhouette (scale + stretch + lean), so panel-center
-/// coordinates equal body-center coordinates and nothing ever clips.
-/// Final artwork replaces this later.
+/// the main pet. The view fills its hosting view; the character is
+/// centered by default and shifted by `contentOffset` (used during the
+/// top-exit viewport, where the panel is fixed and the character moves
+/// inside it). The container clips at its top edge, so a character rising
+/// past it is progressively hidden — a genuine geometric wipe, not a
+/// fade. Final artwork replaces this later.
 struct CompanionPetView: View {
     let scale: CGFloat
     @ObservedObject var pose: CompanionPoseModel
 
     var body: some View {
+        ZStack {
+            character
+                .offset(x: pose.contentOffset.x, y: -pose.contentOffset.y)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+
+    private var character: some View {
         Capsule()
             .fill(
                 LinearGradient(
@@ -38,7 +52,6 @@ struct CompanionPetView: View {
             .scaleEffect(scale, anchor: .center)
             .modifier(CompanionPoseEffect(deformation: pose.deformation))
             .scaleEffect(pose.breathing, anchor: .center)
-            .frame(width: CompanionMetrics.size, height: CompanionMetrics.size)
     }
 }
 

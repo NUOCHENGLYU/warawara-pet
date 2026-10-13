@@ -59,6 +59,13 @@ struct GroupTuning {
     /// crosses the boundary in stages.
     var exitSlowZoneHeight: CGFloat = 120
     var exitSlowSpeedRange: ClosedRange<CGFloat> = 35...55
+    /// Screen-contained top-exit viewport: when the body top is within
+    /// this distance of the visible top, the panel freezes with its top
+    /// edge exactly at the visible boundary and the character continues
+    /// upward inside it, clipped by the viewport top.
+    var exitHandoffMargin: CGFloat = 40
+    var exitViewportWidth: CGFloat = 200
+    var exitViewportHeight: CGFloat = 160
     /// Emergency fallback only: a companion still on screen after this
     /// long is parked off-screen. Normal exits happen spatially first.
     var ascentMaxDuration: TimeInterval = 14
