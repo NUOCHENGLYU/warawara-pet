@@ -85,7 +85,7 @@ enum WarawaraExpressionMapper {
             // Mildly alert during flight; mouth opens mid-hop.
             p.eyeOpenness = 1
             let flight = hopFlightAmount(inputs.hopProgress)
-            p.mouthStyle = flight > 0.2 ? .open : .soft
+            p.mouthStyle = flight > 0.2 ? .open : .neutral
             p.mouthOpenAmount = flight
         case .float:
             p.eyeOpenness = 1
