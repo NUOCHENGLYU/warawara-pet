@@ -1,5 +1,7 @@
 import AppKit
+import CoreGraphics
 import Foundation
+import ImageIO
 
 /// Loads and caches the sprite manifest and PNG frames. All decoding
 /// happens once per image; animation frames reuse the cached instances.
@@ -10,15 +12,26 @@ final class WarawaraSpriteLoader {
 
     private(set) var manifest: WarawaraSpriteManifest?
     private var imageCache: [String: NSImage] = [:]
+    /// Human-readable last failure (diagnostics only).
+    private(set) var lastErrorDescription: String?
 
     /// Loads sprites.json from the given base URL (the bundle resource
     /// root). Returns true when a valid manifest was loaded.
     @discardableResult
     func loadManifest(from baseURL: URL) -> Bool {
         let manifestURL = baseURL.appendingPathComponent("sprites.json")
-        guard let data = try? Data(contentsOf: manifestURL),
-              let decoded = try? JSONDecoder().decode(WarawaraSpriteManifest.self, from: data),
-              let validated = WarawaraSpriteManifest.validated(decoded) else {
+        guard let data = try? Data(contentsOf: manifestURL) else {
+            lastErrorDescription = "cannot read \(manifestURL.path)"
+            manifest = nil
+            return false
+        }
+        guard let decoded = try? JSONDecoder().decode(WarawaraSpriteManifest.self, from: data) else {
+            lastErrorDescription = "cannot decode \(manifestURL.path)"
+            manifest = nil
+            return false
+        }
+        guard let validated = WarawaraSpriteManifest.validated(decoded) else {
+            lastErrorDescription = "invalid manifest at \(manifestURL.path)"
             manifest = nil
             return false
         }
@@ -42,11 +55,21 @@ final class WarawaraSpriteLoader {
         manifest?.animations[key]
     }
 
-    /// Cached image for a manifest frame path.
+    /// Cached image for a manifest frame path. Decodes via NSImage first,
+    /// then falls back to ImageIO (CGImageSource) for PNG variants that
+    /// NSImage rejects.
     func image(forRelativePath path: String, baseURL: URL) -> NSImage? {
         if let cached = imageCache[path] { return cached }
         let url = baseURL.appendingPathComponent(path)
-        guard let image = NSImage(contentsOf: url) else { return nil }
+        var image = NSImage(contentsOf: url)
+        if image == nil, let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+           let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        }
+        if image == nil {
+            lastErrorDescription = "cannot decode \(path)"
+            return nil
+        }
         imageCache[path] = image
         return image
     }
@@ -55,5 +78,6 @@ final class WarawaraSpriteLoader {
     func reset() {
         manifest = nil
         imageCache.removeAll()
+        lastErrorDescription = nil
     }
 }

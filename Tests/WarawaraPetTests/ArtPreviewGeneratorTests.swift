@@ -57,8 +57,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
                 .compactMap { $0 }
             for url in candidates {
                 loader.reset()
-                if loader.loadManifest(from: url),
-                   loader.image(forRelativePath: "idle/idle_00.png", baseURL: url) != nil {
+                if loader.loadManifest(from: url) {
                     baseURL = url
                     break
                 }
@@ -67,7 +66,9 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         guard loader.hasSprites,
               let baseURL,
               let manifest = loader.manifest else {
-            throw XCTSkip("no sprite manifest available; skipping candidate previews")
+            throw XCTSkip(
+                "no sprite manifest available (\(loader.lastErrorDescription ?? "unknown error"))"
+            )
         }
         let outputDir = URL(fileURLWithPath: outputPath)
         try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
