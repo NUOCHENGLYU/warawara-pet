@@ -104,8 +104,9 @@ function Save-Frame([string]$dirName, [string]$frameName, [float]$bw, [float]$bh
     Write-Host "wrote $path"
 }
 
-Save-Frame "idle" "idle_00" 96 118 "open" 0
-Save-Frame "idle" "idle_01" 101 111 "open" 0
+# NOTE: idle_00/idle_01/sleeping_00 are now drawn by
+# generate-faithful-neutral.ps1 (Phase 4A). This script skips them so a
+# full regeneration cannot clobber the faithful neutral/sleeping frames.
 Save-Frame "hop" "hop_00" 106 100 "open" 0
 Save-Frame "hop" "hop_01" 86 126 "open" 0
 Save-Frame "hop" "hop_02" 110 94 "open" 0
@@ -117,7 +118,6 @@ Save-Frame "clicked" "clicked_00" 108 92 "open" 0
 Save-Frame "dragged" "dragged_00" 96 118 "open" 0
 Save-Frame "settling" "settling_00" 98 112 "open" 0
 Save-Frame "sleepy" "sleepy_00" 96 118 "sleepy" 0
-Save-Frame "sleeping" "sleeping_00" 98 112 "sleeping" 0
 Save-Frame "wake" "wake_00" 96 118 "open" 0
 
 $manifest = @"
