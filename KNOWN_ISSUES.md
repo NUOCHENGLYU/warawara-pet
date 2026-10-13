@@ -49,15 +49,20 @@ are intentionally deferred:
    tuning was deliberately left unchanged; revisit only after real-Mac
    testing if visible clipping occurs.
 
-6. **Phase 5A layered rig is built but inactive until rig assets exist.**
+6. **Phase 5B layered rig is active; limb art still pending.**
    The layered character system (continuous performance parameters,
    state->parameter mapper, easing animator, body/eyes/mouth renderer,
-   rig loader) is implemented and tested, but no rig artwork is committed
-   yet, so the app still renders the single-sprite pipeline (this is
-   logged at startup). The blink pattern is a deterministic two-period
-   placeholder awaiting real tuning. Activation requires dropping the
-   rig under `Sources/WarawaraPet/Resources/Assets/WarawaraRig/` (see its
-   README) — no code changes.
+   rig loader) is implemented, tested, and now ACTIVE with the
+   ChatGPT-supplied rig assets (Assets/WarawaraRig, 12 registered
+   1024x1024 layers; --verify-sprites reports rig=loaded). Known
+   limitations: eye multi-level crossfades (open/half/closed) and
+   focused/pressed overlays are opacity blends of registered layers, so
+   brief transient semi-transparency is possible during fast blinks;
+   the blink pattern is a deterministic two-period placeholder awaiting
+   real tuning; independent limb artwork (with shoulder/foot pivots and
+   a masked body revision) is required before limbs can animate without
+   duplicating the painted arms/feet — see the rig README for the exact
+   contract.
 
 ## Platform
 
