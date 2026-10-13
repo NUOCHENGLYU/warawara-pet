@@ -49,14 +49,25 @@ final class ArtPreviewGeneratorTests: XCTestCase {
             throw XCTSkip("ART_PREVIEW_OUT not set; skipping preview generation")
         }
         let loader = WarawaraSpriteLoader.shared
+        var baseURL: URL?
         if !loader.hasSprites {
-            _ = loader.loadManifest(from: WarawaraSpriteLoader.defaultResourceURL
-                ?? URL(fileURLWithPath: "/dev/null"))
+            let repoResources = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                .appendingPathComponent("Sources/WarawaraPet/Resources/Sprites")
+            let candidates: [URL] = [WarawaraSpriteLoader.defaultResourceURL, repoResources]
+                .compactMap { $0 }
+            for url in candidates {
+                loader.reset()
+                if loader.loadManifest(from: url),
+                   loader.image(forRelativePath: "idle/idle_00.png", baseURL: url) != nil {
+                    baseURL = url
+                    break
+                }
+            }
         }
         guard loader.hasSprites,
-              let baseURL = WarawaraSpriteLoader.defaultResourceURL,
+              let baseURL,
               let manifest = loader.manifest else {
-            throw XCTSkip("no sprite manifest bundled; skipping candidate previews")
+            throw XCTSkip("no sprite manifest available; skipping candidate previews")
         }
         let outputDir = URL(fileURLWithPath: outputPath)
         try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
