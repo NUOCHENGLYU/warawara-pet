@@ -1,12 +1,25 @@
 # Sprite assets
 
-Final artwork lives here (SPM-processed into the app bundle). The app
-renders the procedural placeholder until real, user-approved artwork is
-added.
+## Current contents: CANDIDATE assets (awaiting visual approval)
+
+The PNGs and `sprites.json` currently committed here are **procedurally
+generated candidate artwork** (originally created, not traced, not
+downloaded). They exist to exercise the sprite pipeline end-to-end and
+for visual review — they make NO claim of film fidelity and must not be
+shipped as final artwork without the user's approval.
+
+Regenerate the candidates (Windows):
+
+```
+powershell -ExecutionPolicy Bypass -File Scripts\generate-candidate-sprites.ps1
+```
+
+Replace them with hand-corrected, user-approved frames at any time by
+dropping new PNGs here and editing `sprites.json` — no Swift changes.
 
 ## Manifest format
 
-One optional JSON file at the bundle root:
+One JSON file at the bundle root:
 
 ```
 sprites.json

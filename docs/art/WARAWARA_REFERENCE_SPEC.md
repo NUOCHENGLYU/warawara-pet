@@ -1,66 +1,65 @@
 # Warawara Reference Specification — The Boy and the Heron (2023)
 
-**Status: CANDIDATE references only. NO visual observations were made in
-this session; every visual fact below must be verified by the user against
-the referenced stills before any artwork is accepted.**
+**Status: CANDIDATE references. Visual fidelity is NOT accepted until the
+user completes the review checklist below against the referenced stills.**
 
-## Verified official sources
+## Verified sources
 
-- Film page (Studio Ghibli official): <https://www.ghibli.jp/works/kimitachi/>
-  - Contains the official still gallery: 50 stills, numbered
-    `kimitachi001` … `kimitachi052` (some numbers unused).
-  - Direct still URLs:
-    `https://www.ghibli.jp/gallery/kimitachiNNN.jpg`
-    (thumbnails: `https://www.ghibli.jp/gallery/thumb-kimitachiNNN.png`)
-- Still-distribution notice: <https://www.ghibli.jp/info/013772/>
-  - Dated 2023-08-18: 14 stills for the film were published.
-  - Ghibli's own usage statement (Japanese, verbatim):
-    「常識の範囲でご自由にお使いください」
-    ("Please use them freely within the scope of common sense."),
-    published with the images on their site.
+- **PRIMARY (user-verified):** official Studio Ghibli film still
+  <https://www.ghibli.jp/gallery/kimitachi007.jpg>
+  (official source page: <https://www.ghibli.jp/works/kimitachi/>)
+- **SECONDARY (user-verified):** Warawara floating scene clip
+  <https://tenor.com/view/warawara-the-boy-and-the-heron-wara-wara-studio-ghibli-gif-16810839560147500943>
+- Studio Ghibli's official still-distribution notice:
+  <https://www.ghibli.jp/info/013772/> — dated 2023-08-18, with the usage
+  note 「常識の範囲でご自由にお使いください」 ("Please use them freely
+  within the scope of common sense").
 
-## Provenance and permissions
+A local copy of the primary still is kept for reference only at
+`research/kimitachi007.jpg` (gitignored — **never committed, never
+bundled into the app**).
 
-- The stills are Studio Ghibli's official promotional stills, published on
-  their own site under their "use freely within common sense" note.
-- That note makes the stills suitable as **visual reference material** for
-  our private gift. It does **NOT** grant or imply rights to redistribute
-  film frames or to copy the character design into a distributable product
-  without permission. Per the project rules:
-  - Reference stills may be downloaded to a gitignored location for
-    comparison only.
-  - No film frames, thumbnails, or derived images may be committed to the
-    repository or shipped in the release artifact.
-  - All artwork candidates must be originally created with the film design
-    as the reference, and must be approved by the user before shipping.
+## Objective measurements from the primary still (machine-made, 2026-10)
 
-## Visual feature checklist — TO VERIFY against the stills
+These are measurements, not aesthetic claims:
 
-Nothing in this list is asserted as fact. Each item must be checked
-against specific stills and marked `Observed` (with still numbers) or
-`Unknown` during the user's visual review.
+- Image size: 1920 × 1038 px.
+- Sampled color histogram is dominated by mid-grays (RGB ≈ 160,160,160);
+  **no sampled pixel is brighter than RGB 200**. The still is muted/graded;
+  the character reads as light gray rather than pure white in this frame.
+- Dark pixels (< 80 luminance) ≈ 16 % of the sample — consistent with dark
+  eyes and shaded background areas.
 
-- [ ] Canonical silhouette (outline shape: round vs teardrop vs blob)
-- [ ] Head-to-body proportions
-- [ ] Eye shape / size / position / count
-- [ ] Presence or absence of a mouth and its shape
-- [ ] Body color, shading, and translucency
-- [ ] Lower-body contour (does the body taper? is there a flat bottom?)
-- [ ] Limbs/appendages (visible or absent)
-- [ ] Front-view geometry
-- [ ] Side / three-quarter appearance (if any still shows it)
-- [ ] Floating behavior: body orientation while floating, deformation
-      (squash/stretch), bobbing rhythm
-- [ ] Group appearance: typical cluster size, spacing, size variation
-- [ ] Any expression variants visible in the stills (sleeping/eyes closed,
-      attention, surprise)
+## Candidate sprite palette (procedural, for verification)
+
+- Body: near-white gradient #FDFDFF → #D5DAE8 with a subtle cool
+  bottom shading (#A8B0C6 at low alpha) and a soft gray outline.
+- Eyes: near-black #1A1A1E.
+- Mouth: soft pink #E2848A.
+- Canvas 200 × 226 logical (400 × 452 px), body 96 × 118, anchor (0.5, 0.5),
+  bodyBounds (0.26, 0.239, 0.48, 0.522) — identical geometry to the
+  procedural placeholder.
+
+## Review checklist — TO VERIFY by the user against the references
+
+Each item is an ASSUMPTION of the current candidate until checked:
+
+- [ ] Silhouette: simple rounded plump blob (no limbs drawn in the
+      candidate — arm/foot shapes are currently **UNKNOWN** and omitted)
+- [ ] Proportions: body 96 × 118 logical vs the still
+- [ ] Eye shape/size/position: small dark ovals, spacing 34, placed in the
+      upper-middle (assumption)
+- [ ] Mouth: tiny pink oval at (0, +26) below center (assumption)
+- [ ] Outlines and shading: soft gray outline + bottom shading (assumption)
+- [ ] Individual variation: the candidate set varies only body size per
+      frame; film variation across characters is unmodeled
 
 ## Explicit unknowns (not to be invented)
 
-- Whether Warawara ever show distinct "sleep" or "clicked" expressions in
-  the film.
-- Exact colors (the placeholder palette is procedural and NOT a claim).
-- Any official naming of individual features.
+- Arm and foot shapes (whether Warawara show them in the principal still).
+- Exact eye geometry (angle, aspect ratio).
+- Exact mouth shape and color.
+- Any sleeping/expression variants in the film.
 
-Until the user completes the checklist, all artwork produced for this
-project is labeled **CANDIDATE — awaiting visual approval**.
+Until the user completes the checklist, all artwork in this project is
+labeled **CANDIDATE — awaiting visual approval**.
