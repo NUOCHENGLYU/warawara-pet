@@ -157,7 +157,7 @@ struct WarawaraExpressionDriverView: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let date = context.date
             let dt = boundedDelta(from: lastDate, to: date)
-            DispatchQueue.main.async { self.lastDate = date }
+            let _ = DispatchQueue.main.async { self.lastDate = date }
 
             let breath = WarawaraExpressionDriver.breathPhase(at: date.timeIntervalSinceReferenceDate)
             let blink = WarawaraExpressionDriver.blink(at: date.timeIntervalSinceReferenceDate)

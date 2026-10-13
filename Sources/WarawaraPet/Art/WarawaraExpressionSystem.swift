@@ -1,4 +1,4 @@
-import Foundation
+﻿import Foundation
 
 /// Inputs the app layer provides per frame. Time-derived values (breath
 /// phase, blink) are added by the expression driver, so this struct stays
@@ -134,7 +134,7 @@ enum WarawaraExpressionMapper {
         }
 
         // Blink multiplies openness everywhere except deep sleep (already
-        // closed) — continuous, never an open/closed flip.
+        // closed) 鈥?continuous, never an open/closed flip.
         let blinkDamp = 1 - 0.8 * clamp(context.blink, 0, 1)
         if inputs.state != .sleeping {
             p.eyeOpenness *= blinkDamp
@@ -186,41 +186,41 @@ struct WarawaraParameterAnimator {
         let t = target.clamped()
         let dtF = CGFloat(max(dt, 0))
 
-        parameters.eyeOpenness = approach(
+        parameters.eyeOpenness = Self.approach(
             parameters.eyeOpenness, t.eyeOpenness,
             dt: dtF, tau: tuning.eyeResponse
         )
-        parameters.gazeX = approach(parameters.gazeX, t.gazeX, dt: dtF, tau: tuning.gazeResponse)
-        parameters.gazeY = approach(parameters.gazeY, t.gazeY, dt: dtF, tau: tuning.gazeResponse)
-        parameters.mouthOpenAmount = approach(
+        parameters.gazeX = Self.approach(parameters.gazeX, t.gazeX, dt: dtF, tau: tuning.gazeResponse)
+        parameters.gazeY = Self.approach(parameters.gazeY, t.gazeY, dt: dtF, tau: tuning.gazeResponse)
+        parameters.mouthOpenAmount = Self.approach(
             parameters.mouthOpenAmount, t.mouthOpenAmount,
             dt: dtF, tau: tuning.mouthResponse
         )
-        parameters.drowsiness = approach(
+        parameters.drowsiness = Self.approach(
             parameters.drowsiness, t.drowsiness,
             dt: dtF, tau: tuning.drowsinessResponse
         )
-        parameters.dragAmount = approach(parameters.dragAmount, t.dragAmount, dt: dtF, tau: tuning.dragResponse)
-        parameters.dragDirectionX = approach(
+        parameters.dragAmount = Self.approach(parameters.dragAmount, t.dragAmount, dt: dtF, tau: tuning.dragResponse)
+        parameters.dragDirectionX = Self.approach(
             parameters.dragDirectionX, t.dragDirectionX, dt: dtF, tau: tuning.dragResponse
         )
-        parameters.dragDirectionY = approach(
+        parameters.dragDirectionY = Self.approach(
             parameters.dragDirectionY, t.dragDirectionY, dt: dtF, tau: tuning.dragResponse
         )
-        parameters.bodySquashX = approach(
+        parameters.bodySquashX = Self.approach(
             parameters.bodySquashX, t.bodySquashX, dt: dtF, tau: tuning.bodyResponse
         )
-        parameters.bodySquashY = approach(
+        parameters.bodySquashY = Self.approach(
             parameters.bodySquashY, t.bodySquashY, dt: dtF, tau: tuning.bodyResponse
         )
-        parameters.bodyTilt = approach(parameters.bodyTilt, t.bodyTilt, dt: dtF, tau: tuning.bodyResponse)
+        parameters.bodyTilt = Self.approach(parameters.bodyTilt, t.bodyTilt, dt: dtF, tau: tuning.bodyResponse)
 
         // Press uses asymmetric response: fast squash on press, slower
-        // springy release on recovery — no instant snap-back.
+        // springy release on recovery 鈥?no instant snap-back.
         let pressTau = t.pressAmount > parameters.pressAmount
             ? tuning.pressAttackResponse
             : tuning.pressReleaseResponse
-        parameters.pressAmount = approach(parameters.pressAmount, t.pressAmount, dt: dtF, tau: pressTau)
+        parameters.pressAmount = Self.approach(parameters.pressAmount, t.pressAmount, dt: dtF, tau: pressTau)
 
         // Mouth style: adopt the target style but let the renderer
         // crossfade the images; the style value itself eases through the
@@ -229,7 +229,7 @@ struct WarawaraParameterAnimator {
 
         parameters.breathPhase = t.breathPhase
         parameters.floatPhase = t.floatPhase
-        parameters.limbSwingAmount = approach(
+        parameters.limbSwingAmount = Self.approach(
             parameters.limbSwingAmount, t.limbSwingAmount, dt: dtF, tau: tuning.bodyResponse
         )
         parameters.limbLagPhase = t.limbLagPhase
@@ -238,7 +238,7 @@ struct WarawaraParameterAnimator {
         return parameters
     }
 
-    /// Jump directly to a value (wake-ups etc. — still used only where a
+    /// Jump directly to a value (wake-ups etc. 鈥?still used only where a
     /// hard reset is semantically required).
     mutating func set(_ value: WarawaraPerformanceParameters) {
         parameters = value.clamped()
