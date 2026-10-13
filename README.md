@@ -4,14 +4,14 @@ A tiny native macOS desktop-pet application (private birthday gift, not for
 public distribution). The pet is a Warawara-like character that lives in a
 transparent, borderless floating window above the desktop.
 
-**Current status: Phase 3 — multi-Warawara group behavior (candidate,
-awaiting real-Mac acceptance).**
+**Current status: Phase 4 — faithful Warawara artwork (candidate branch;
+placeholder art remains the default).**
 
 What exists today:
 
 - accessory app (no Dock icon), transparent borderless non-activating panel
   that can never become key/main — clicks never steal keyboard focus
-- placeholder pet (procedurally drawn blob — no copyrighted artwork)
+- procedural placeholder pet (blob + eyes — NOT the final artwork)
 - gentle idle bob, randomized hops with squash/stretch
 - soft floats: slow lift, sustained hover with bob/sway, slow descent
 - curiosity: subtle lean/stretch toward a lingering cursor
@@ -26,15 +26,17 @@ What exists today:
 - tight elliptical hit region around the pet body
 - `.stationary` collection behavior so the pet stays visible during Show
   Desktop / Mission Control
-- **Phase 3:** a manually triggered companion group sequence — 3–5
-  temporary non-interactive Warawara enter from outside the display,
-  gather loosely with spring inertia and velocity-responsive soft-body
-  stretch/lean, hover organically with subtle breathing, ascend with
-  gentle acceleration along individual fan-out paths, slow to a staged
-  crossing at the top edge (body visibly passes out of view), and park
-  off-screen (panels are pooled, never closed mid-session, so the main
-  pet panel can never be affected); clicking or dragging the main pet
-  cancels the sequence instantly
+- **Phase 3 (frozen, functionally accepted):** a manually triggered
+  companion group sequence — 3–5 temporary non-interactive Warawara enter
+  from outside the display, gather with spring inertia, hover, ascend
+  along individual fan-out paths, exit through a screen-contained
+  top-edge viewport, and park off-screen (panels pooled, never closed)
+- **Phase 4 (in progress):** a production sprite asset pipeline
+  (`WarawaraSpriteManifest` / `WarawaraSpriteLoader` /
+  `WarawaraCharacterView`) that renders transparent PNG sprite frames for
+  every pet state with the procedural placeholder as the automatic
+  fallback; CI generates a `WarawaraPet-Art-Preview` artifact with
+  contact sheets for offline review
 
 No group randomness in the scheduler yet, no birthday behavior, no final
 artwork, no sound, no network, no NSMenu (menu-bar quit is a direct
@@ -223,6 +225,28 @@ Phase 3 real-Mac checklist:
 - [ ] keyboard focus remains with the previously active app
 - [ ] Show Desktop still works
 - [ ] menu-bar quit button still exits immediately
+
+## Sprite asset pipeline (Phase 4)
+
+Final artwork is added without code changes:
+
+1. Drop transparent PNG frames into
+   `Sources/WarawaraPet/Resources/Sprites/<animation>/`.
+2. Create `sprites.json` at the bundle root (see the manifest format in
+   `Sources/WarawaraPet/Resources/Sprites/README.md`): canvas, anchor,
+   body bounds, and per-animation frame lists with durations and looping.
+3. Rebuild — `WarawaraCharacterView` renders the sprites for the main pet
+   and companions; missing or invalid assets fall back to the procedural
+   placeholder automatically.
+
+Animation keys: `idle`, `hop`, `float`, `curious`, `clicked`, `dragged`,
+`settling`, `sleepy`, `sleeping`, `wake` (see `WarawaraAnimationMapper`).
+
+Artwork fidelity rules: the film design is the sole authority. See
+`docs/art/WARAWARA_REFERENCE_SPEC.md` for the official reference sources
+and review checklist. No film frames may be committed or shipped; all
+candidates must be originally created and visually approved by the user.
+CI contact sheets: Actions → latest run → `WarawaraPet-Art-Preview`.
 
 ## Signing and notarization (future)
 
