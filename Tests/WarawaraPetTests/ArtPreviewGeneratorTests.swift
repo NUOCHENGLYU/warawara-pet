@@ -471,9 +471,9 @@ final class ArtPreviewGeneratorTests: XCTestCase {
 
         for name in ["18-rig-neutral.png", "19-rig-old-vs-recomposed.png",
                      "20-rig-gaze.png", "21-rig-blink.png", "22-rig-openness.png",
-                     "23-rig-sleep-wake.png", "24-rig-press-rebound.png",
-                     "25-rig-drag.png", "26-rig-mouth-styles.png",
-                     "27-rig-main-vs-companion.png"] {
+                     "23-rig-sleep-wake.png", "24-rig-wake.png",
+                     "25-rig-press-rebound.png", "26-rig-drag.png",
+                     "27-rig-mouth-styles.png", "28-rig-main-vs-companion.png"] {
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
                 "missing rig preview \(name)"
