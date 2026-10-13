@@ -72,7 +72,16 @@ final class WarawaraSpriteLoader {
             image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
         }
         if image == nil {
-            lastErrorDescription = "cannot decode \(path)"
+            var detail = "cannot decode \(path)"
+            if !FileManager.default.fileExists(atPath: url.path) {
+                detail += "; file missing at \(url.path)"
+            } else if let source = CGImageSourceCreateWithURL(url as CFURL, nil) {
+                let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
+                detail += "; ImageIO opened source, props: \(String(describing: props))"
+            } else {
+                detail += "; ImageIO cannot open source at \(url.path)"
+            }
+            lastErrorDescription = detail
             return nil
         }
         imageCache[path] = image

@@ -53,7 +53,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         if !loader.hasSprites {
             let repoResources = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 .appendingPathComponent("Sources/WarawaraPet/Resources/Sprites")
-            let candidates: [URL] = [WarawaraSpriteLoader.defaultResourceURL, repoResources]
+            let candidates: [URL] = [repoResources, WarawaraSpriteLoader.defaultResourceURL]
                 .compactMap { $0 }
             for url in candidates {
                 loader.reset()
@@ -126,7 +126,14 @@ final class ArtPreviewGeneratorTests: XCTestCase {
     ) throws {
         guard let frame = candidateFrameView("idle/idle_00.png", loader: loader, baseURL: baseURL,
                                              manifest: manifest, targetBodyHeight: PetMetrics.blobHeight) else {
-            throw NSError(domain: "ArtPreviewGenerator", code: 3)
+            throw NSError(
+                domain: "ArtPreviewGenerator",
+                code: 3,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "cannot render idle_00 from \(baseURL.path): \(loader.lastErrorDescription ?? "unknown")"
+                ]
+            )
         }
         let content = ZStack { CheckerboardBackground(); frame }
         try render(content, size: mainCanvas, scale: 1, to: dir.appendingPathComponent("10-candidate-neutral.png"))
