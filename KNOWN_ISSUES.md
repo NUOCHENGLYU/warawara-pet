@@ -26,10 +26,23 @@ are intentionally deferred:
 
 ## Artwork
 
-4. **All characters still use the procedural placeholder blob.** Phase 4
-   introduces the sprite asset pipeline and faithful-artwork candidates.
-   Until the user visually approves real artwork, the placeholder remains
-   the shipped look.
+4. **All characters now use the installed neutral artwork (Phase 4B).**
+   `warawara_neutral.png` is referenced by every state; motion comes from
+   the pose pipeline. The procedural placeholder blob remains only as the
+   automatic fallback for missing/invalid assets, and the Phase 4A
+   candidate frames are kept on disk for rollback (see
+   `Sources/WarawaraPet/Resources/Sprites/README.md`).
+
+5. **Drag deformation envelope: worst-case corner overshoot.**
+   The neutral artwork's body (≈115 pt wide × 118 pt tall) is wider than
+   the Phase 1.6 placeholder (96 × 118) the deformation tuning was
+   verified against. At the absolute extreme (grab at the window edge +
+   max velocity + max torque rotation) the stretched corner can exceed
+   the 200 pt window by roughly 8–10 pt on one side; the placeholder
+   baseline already overshoots ~7 pt in the same corner case. All
+   normal-range deformation stays fully inside the window. Deformation
+   tuning was deliberately left unchanged; revisit only after real-Mac
+   testing if visible clipping occurs.
 
 ## Platform
 

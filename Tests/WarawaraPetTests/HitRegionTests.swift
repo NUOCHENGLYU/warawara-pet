@@ -45,4 +45,28 @@ final class HitRegionTests: XCTestCase {
         XCTAssertFalse(petRegion.contains(CGPoint(x: bounds.midX, y: 1)))
         XCTAssertFalse(petRegion.contains(CGPoint(x: 1, y: bounds.midY)))
     }
+
+    func testDefaultRegionCoversInstalledNeutralArtworkBody() {
+        // The Phase 4B neutral artwork body (bodyBounds [[0.10,0.09],
+        // [0.80,0.82]] on a 1024 canvas) renders ~115 x 118 pt centered
+        // on the visual center. The hit region must cover the whole body.
+        let canvas = CGSize(width: 1024, height: 1024)
+        let bodyBounds = CGRect(x: 0.10, y: 0.09, width: 0.80, height: 0.82)
+        let renderSize = WarawaraAnimationMapper.renderSize(
+            canvas: canvas,
+            bodyHeightInCanvas: bodyBounds.height * canvas.height,
+            targetBodyHeight: PetMetrics.blobHeight
+        )
+        let halfWidth = bodyBounds.width * renderSize.width / 2
+        let halfHeight = bodyBounds.height * renderSize.height / 2
+        let region = EllipseHitRegion.petDefault(in: CGRect(origin: .zero, size: PetMetrics.size))
+        for point in [
+            CGPoint(x: PetMetrics.visualCenter.x + halfWidth, y: PetMetrics.visualCenter.y),
+            CGPoint(x: PetMetrics.visualCenter.x - halfWidth, y: PetMetrics.visualCenter.y),
+            CGPoint(x: PetMetrics.visualCenter.x, y: PetMetrics.visualCenter.y + halfHeight),
+            CGPoint(x: PetMetrics.visualCenter.x, y: PetMetrics.visualCenter.y - halfHeight)
+        ] {
+            XCTAssertTrue(region.contains(point), "hit region misses body edge \(point)")
+        }
+    }
 }

@@ -141,9 +141,21 @@ struct WarawaraCharacterView: View {
                     renderSize: renderSize,
                     anchor: loader.manifest?.layout.anchor ?? CGPoint(x: 0.5, y: 0.5)
                 )
+                // Keep the artwork's body center on the established
+                // visual center so window origins, ground position and
+                // the hit region stay aligned for any canvas aspect.
+                .padding(.bottom, spriteBottomLift(renderSize: renderSize))
             }
         } else {
             PlaceholderWarawaraView(sizeClass: placeholderSizeClass, scale: scale)
         }
+    }
+
+    /// Lifts the sprite so its body center lands on the pet's visual
+    /// center (main pet only; companions stay panel-centered). Zero for
+    /// the legacy full-window canvas.
+    private func spriteBottomLift(renderSize: CGSize) -> CGFloat {
+        guard placeholderSizeClass == .main else { return 0 }
+        return max(0, PetMetrics.visualCenter.y - renderSize.height / 2)
     }
 }

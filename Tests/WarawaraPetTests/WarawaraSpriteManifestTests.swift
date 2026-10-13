@@ -24,8 +24,7 @@ final class WarawaraSpriteManifestTests: XCTestCase {
         XCTAssertNotNil(decoded.flatMap { WarawaraSpriteManifest.validated($0) })
     }
 
-    func testCommittedManifestShapeDecodesFromInlineJSON() throws {
-        // Mirrors the exact shape of the committed sprites.json so a
+    func testCommittedManifestShapeDecodesFromInlineJSON() throws {        // Mirrors the exact shape of the committed sprites.json so a
         // decode failure here proves the problem is struct-side, not
         // file-side.
         let json = """
@@ -49,6 +48,23 @@ final class WarawaraSpriteManifestTests: XCTestCase {
         let decoded = try JSONDecoder().decode(WarawaraSpriteManifest.self, from: Data(json.utf8))
         XCTAssertEqual(decoded.animations.count, 10)
         XCTAssertNotNil(WarawaraSpriteManifest.validated(decoded))
+    }
+
+    func testCommittedManifestAnchorMatchesBodyCenter() throws {
+        // The installed neutral artwork is centered on the canvas, so the
+        // anchor must equal the bodyBounds center — the invariant that
+        // keeps the body on the visual center and inside the hit region.
+        let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/WarawaraPet/Resources/Sprites/sprites.json")
+        let data = try Data(contentsOf: url)
+        let manifest = try JSONDecoder().decode(WarawaraSpriteManifest.self, from: data)
+        let bodyCenter = CGPoint(
+            x: manifest.layout.bodyBounds.midX,
+            y: manifest.layout.bodyBounds.midY
+        )
+        XCTAssertEqual(manifest.layout.anchor.x, bodyCenter.x, accuracy: 0.02)
+        XCTAssertEqual(manifest.layout.anchor.y, bodyCenter.y, accuracy: 0.02)
+        XCTAssertNotNil(WarawaraSpriteManifest.validated(manifest))
     }
 
     func testWrongVersionIsRejected() {

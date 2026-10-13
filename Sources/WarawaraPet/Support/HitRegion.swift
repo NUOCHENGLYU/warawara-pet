@@ -14,8 +14,8 @@ struct EllipseHitRegion {
     static func petDefault(in bounds: CGRect) -> EllipseHitRegion {
         EllipseHitRegion(
             center: PetMetrics.visualCenter,
-            radiusX: 55,
-            radiusY: 64
+            radiusX: 62,
+            radiusY: 66
         )
     }
 }
