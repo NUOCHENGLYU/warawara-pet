@@ -11,7 +11,8 @@ let package = Package(
             name: "WarawaraPet",
             path: "Sources/WarawaraPet",
             resources: [
-                .process("Resources/Sprites")
+                .process("Resources/Sprites"),
+                .process("Resources/Assets")
             ]
         ),
         .testTarget(
