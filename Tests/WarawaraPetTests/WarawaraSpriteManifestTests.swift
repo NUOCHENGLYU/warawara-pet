@@ -24,6 +24,33 @@ final class WarawaraSpriteManifestTests: XCTestCase {
         XCTAssertNotNil(decoded.flatMap { WarawaraSpriteManifest.validated($0) })
     }
 
+    func testCommittedManifestShapeDecodesFromInlineJSON() throws {
+        // Mirrors the exact shape of the committed sprites.json so a
+        // decode failure here proves the problem is struct-side, not
+        // file-side.
+        let json = """
+        {"version":1,"layout":{"canvas":{"width":200,"height":226},\
+        "anchor":{"x":0.5,"y":0.5},\
+        "bodyBounds":{"x":0.26,"y":0.239,"width":0.48,"height":0.522}},\
+        "animations":{"idle":{"frames":["idle/idle_00.png","idle/idle_01.png"],\
+        "frameDuration":0.6,"loop":true},"hop":{"frames":["hop/hop_00.png",\
+        "hop/hop_01.png","hop/hop_02.png"],"frameDuration":0.08,"loop":false},\
+        "float":{"frames":["float/float_00.png","float/float_01.png",\
+        "float/float_02.png"],"frameDuration":0.15,"loop":true},\
+        "curious":{"frames":["curious/curious_00.png"],"frameDuration":0.1,\
+        "loop":false},"clicked":{"frames":["clicked/clicked_00.png"],\
+        "frameDuration":0.1,"loop":false},"dragged":{"frames":["dragged/dragged_00.png"],\
+        "frameDuration":0.1,"loop":false},"settling":{"frames":["settling/settling_00.png"],\
+        "frameDuration":0.1,"loop":false},"sleepy":{"frames":["sleepy/sleepy_00.png"],\
+        "frameDuration":0.1,"loop":false},"sleeping":{"frames":["sleeping/sleeping_00.png"],\
+        "frameDuration":0.1,"loop":false},"wake":{"frames":["wake/wake_00.png"],\
+        "frameDuration":0.1,"loop":false}}}
+        """
+        let decoded = try JSONDecoder().decode(WarawaraSpriteManifest.self, from: Data(json.utf8))
+        XCTAssertEqual(decoded.animations.count, 10)
+        XCTAssertNotNil(WarawaraSpriteManifest.validated(decoded))
+    }
+
     func testWrongVersionIsRejected() {
         let manifest = WarawaraSpriteManifest(
             version: 2,

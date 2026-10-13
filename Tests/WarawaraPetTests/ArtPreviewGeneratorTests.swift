@@ -66,9 +66,16 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         guard loader.hasSprites,
               let baseURL,
               let manifest = loader.manifest else {
-            throw XCTSkip(
-                "no sprite manifest available (\(loader.lastErrorDescription ?? "unknown error"))"
-            )
+            var detail = loader.lastErrorDescription ?? "unknown error"
+            let manifestFile = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                .appendingPathComponent("Sources/WarawaraPet/Resources/Sprites/sprites.json")
+            if let data = try? Data(contentsOf: manifestFile) {
+                let head = data.prefix(48).map { String(format: "%02X", $0) }.joined(separator: " ")
+                detail += " | bytes=\(data.count) head=\(head)"
+            } else {
+                detail += " | manifest file missing at \(manifestFile.path)"
+            }
+            throw XCTSkip("no sprite manifest available (\(detail))")
         }
         let outputDir = URL(fileURLWithPath: outputPath)
         try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)

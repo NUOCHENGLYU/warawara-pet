@@ -25,8 +25,13 @@ final class WarawaraSpriteLoader {
             manifest = nil
             return false
         }
-        guard let decoded = try? JSONDecoder().decode(WarawaraSpriteManifest.self, from: data) else {
-            lastErrorDescription = "cannot decode \(manifestURL.path)"
+        guard let decoded: WarawaraSpriteManifest = {
+            do { return try JSONDecoder().decode(WarawaraSpriteManifest.self, from: data) }
+            catch {
+                lastErrorDescription = "decode error: \(error)"
+                return nil
+            }
+        }() else {
             manifest = nil
             return false
         }
