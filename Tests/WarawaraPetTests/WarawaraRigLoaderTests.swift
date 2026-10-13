@@ -212,10 +212,13 @@ final class WarawaraRigLoaderTests: XCTestCase {
         XCTAssertNotNil(body.flatMap { rigLoader.image(forLayer: $0, role: "base") })
     }
 
-    func testRigCandidateURLsIncludeRigSubdirectory() {
+    func testRigCandidateURLsIncludeRigSubdirectoryAndBundleRoot() {
         let spriteRoot = URL(fileURLWithPath: "/tmp/Resources")
         let rigCandidates = WarawaraRigLoader.candidateBaseURLs(spriteCandidates: [spriteRoot])
-        XCTAssertEqual(rigCandidates, [spriteRoot.appendingPathComponent("Assets/WarawaraRig")])
+        XCTAssertEqual(rigCandidates, [
+            spriteRoot.appendingPathComponent("Assets/WarawaraRig"),
+            spriteRoot
+        ])
     }
 
     func testCorruptRigManifestRecordsDecodeError() throws {

@@ -19,11 +19,18 @@ final class WarawaraRigLoader {
 
     var hasRig: Bool { rig != nil }
 
-    /// Rig root candidates derived from the sprite bundle candidates:
-    /// each sprite resource root is probed for Assets/WarawaraRig.
+    /// Rig root candidates derived from the sprite bundle candidates.
+    /// SwiftPM flattens resource subdirectories into the bundle root, so
+    /// the rig can land at <root>/Assets/WarawaraRig (source/dev layout)
+    /// or directly at <root> (packaged app): both are probed.
     static func candidateBaseURLs(spriteCandidates: [URL]? = nil) -> [URL] {
         let roots = spriteCandidates ?? WarawaraSpriteLoader.candidateBaseURLs()
-        return roots.map { $0.appendingPathComponent("Assets/WarawaraRig") }
+        var urls: [URL] = []
+        for root in roots {
+            urls.append(root.appendingPathComponent("Assets/WarawaraRig"))
+            urls.append(root)
+        }
+        return urls
     }
 
     /// Loads the default rig once. Idempotent; failures are recorded with
