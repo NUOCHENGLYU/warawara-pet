@@ -67,6 +67,18 @@ The still is night-graded (no pixel brighter than RGB 200), so the
 sprite's warm white is based on the character's daylight film look, not
 on still pixel colors.
 
+## Phase 4B — ChatGPT-provided artwork integration (2026-10-13)
+
+Artwork production moved to ChatGPT. `warawara_neutral.png` (1024 × 1024,
+transparent) from `art_handoff/Warawara_Art_Handoff_v1/` is installed
+byte-for-byte and reused for every state via pose/deformation animation.
+Objective measurements of the installed PNG: opaque bbox ≈
+x 108–914 / y 96–926 (body ~806 × 830 px, aspect ≈ 0.97, centered at
+(511, 511)). The manifest declares canvas `[1024, 1024]`, anchor
+`[0.5, 0.5]`, bodyBounds `[[0.10, 0.09], [0.80, 0.82]]`. Artwork
+fidelity approval remains with the user; this file documents evidence,
+not acceptance.
+
 ## Review checklist — Phase 4A neutral sprite (TO VERIFY by the user)
 
 Each item is an ASSUMPTION of the Phase 4A candidate until checked:

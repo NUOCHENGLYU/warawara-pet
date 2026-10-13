@@ -1,20 +1,20 @@
 {
   "version": 1,
   "layout": {
-    "canvas": [200, 226],
+    "canvas": [1024, 1024],
     "anchor": [0.5, 0.5],
-    "bodyBounds": [[0.26, 0.239], [0.48, 0.522]]
+    "bodyBounds": [[0.10, 0.09], [0.80, 0.82]]
   },
   "animations": {
-    "idle":     { "frames": ["idle/idle_00.png", "idle/idle_01.png"], "frameDuration": 0.6, "loop": true },
-    "hop":      { "frames": ["hop/hop_00.png", "hop/hop_01.png", "hop/hop_02.png"], "frameDuration": 0.08, "loop": false },
-    "float":    { "frames": ["float/float_00.png", "float/float_01.png", "float/float_02.png"], "frameDuration": 0.15, "loop": true },
-    "curious":  { "frames": ["curious/curious_00.png"], "frameDuration": 0.1, "loop": false },
-    "clicked":  { "frames": ["clicked/clicked_00.png"], "frameDuration": 0.1, "loop": false },
-    "dragged":  { "frames": ["dragged/dragged_00.png"], "frameDuration": 0.1, "loop": false },
-    "settling": { "frames": ["settling/settling_00.png"], "frameDuration": 0.1, "loop": false },
-    "sleepy":   { "frames": ["sleepy/sleepy_00.png"], "frameDuration": 0.1, "loop": false },
-    "sleeping": { "frames": ["sleeping/sleeping_00.png"], "frameDuration": 0.1, "loop": false },
-    "wake":     { "frames": ["wake/wake_00.png"], "frameDuration": 0.1, "loop": false }
+    "idle":     { "frames": ["warawara_neutral.png", "warawara_neutral.png"], "frameDuration": 0.6, "loop": true },
+    "hop":      { "frames": ["warawara_neutral.png", "warawara_neutral.png", "warawara_neutral.png"], "frameDuration": 0.08, "loop": false },
+    "float":    { "frames": ["warawara_neutral.png", "warawara_neutral.png", "warawara_neutral.png"], "frameDuration": 0.15, "loop": true },
+    "curious":  { "frames": ["warawara_neutral.png"], "frameDuration": 0.1, "loop": false },
+    "clicked":  { "frames": ["warawara_neutral.png"], "frameDuration": 0.1, "loop": false },
+    "dragged":  { "frames": ["warawara_neutral.png"], "frameDuration": 0.1, "loop": false },
+    "settling": { "frames": ["warawara_neutral.png"], "frameDuration": 0.1, "loop": false },
+    "sleepy":   { "frames": ["warawara_neutral.png"], "frameDuration": 0.1, "loop": false },
+    "sleeping": { "frames": ["warawara_neutral.png"], "frameDuration": 0.1, "loop": false },
+    "wake":     { "frames": ["warawara_neutral.png"], "frameDuration": 0.1, "loop": false }
   }
 }
