@@ -120,7 +120,7 @@ final class WarawaraSpriteBootstrapTests: XCTestCase {
         XCTAssertNil(loader.lastErrorDescription)
     }
 
-    func testAppCandidateURLsLoadInTestEnvironmentOrSkip() {
+    func testAppCandidateURLsLoadInTestEnvironmentOrSkip() throws {
         // Exercises the real app-side URL list (Bundle.module etc.). In
         // the SwiftPM test environment this is the same bundle the
         // packaged app resolves; skip only where no bundle exists.
