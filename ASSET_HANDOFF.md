@@ -64,7 +64,7 @@ animation); the directory convention above is only a suggestion. The
   "layout": {
     "canvas": [200, 226],
     "anchor": [0.5, 0.5],
-    "bodyBounds": [0.26, 0.24, 0.48, 0.52]
+    "bodyBounds": [[0.26, 0.24], [0.48, 0.52]]
   },
   "animations": {
     "idle": {
