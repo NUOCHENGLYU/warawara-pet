@@ -29,7 +29,10 @@ jobs:
 
       - name: Verify packaged app loads sprites
         run: |
-          "dist/WarawaraPet.app/Contents/MacOS/WarawaraPet" --verify-sprites
+          OUTPUT="$("dist/WarawaraPet.app/Contents/MacOS/WarawaraPet" --verify-sprites)"
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "SPRITES_OK" || { echo "sprites not loaded"; exit 1; }
+          echo "$OUTPUT" | grep -q "rig=loaded" || { echo "layered rig not loaded"; exit 1; }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -238,4 +238,87 @@ final class WarawaraRigLoaderTests: XCTestCase {
         XCTAssertNil(rigLoader.loadedBaseURL)
         XCTAssertNil(rigLoader.lastErrorDescription)
     }
+
+    // MARK: - Real bundled rig (Phase 5B assets)
+
+    func testRealBundledRigLoadsFromAppCandidateURLsOrSkip() throws {
+        // Uses the REAL application resource lookup (Bundle.module etc.),
+        // not a synthetic test bundle. Skipped only where no rig bundle
+        // exists in the environment (e.g. some local dev setups).
+        let candidates = WarawaraRigLoader.candidateBaseURLs()
+        let anyManifest = candidates.contains {
+            FileManager.default.fileExists(atPath: $0.appendingPathComponent("manifest.json").path)
+        }
+        guard anyManifest else {
+            throw XCTSkip("no bundled rig available in this environment")
+        }
+        let rigLoader = WarawaraRigLoader()
+        XCTAssertTrue(
+            rigLoader.loadDefaultRig(),
+            "bundled rig must load: \(rigLoader.lastErrorDescription ?? "unknown")"
+        )
+        try assertRigResourcesComplete(rigLoader)
+    }
+
+    func testRealRigFromRepoResourcesHasAllMandatoryLayers() throws {
+        // Direct repo-path load used by CI previews: proves the committed
+        // manifest + PNGs satisfy the full contract.
+        let repoRigRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/WarawaraPet/Resources/Assets/WarawaraRig")
+        guard FileManager.default.fileExists(atPath: repoRigRoot.appendingPathComponent("manifest.json").path) else {
+            throw XCTSkip("repo rig assets not present")
+        }
+        let rigLoader = WarawaraRigLoader()
+        XCTAssertTrue(rigLoader.loadManifest(from: repoRigRoot))
+        try assertRigResourcesComplete(rigLoader)
+    }
+
+    private func assertRigResourcesComplete(_ rigLoader: WarawaraRigLoader) throws {
+        guard let rig = rigLoader.rig else {
+            XCTFail("rig missing")
+            return
+        }
+        XCTAssertNotNil(rig.bodyLayer)
+        XCTAssertNotNil(rig.eyesLayer)
+        XCTAssertNotNil(rig.mouthLayer)
+        XCTAssertTrue(rig.optionalLayers.contains("limbs"))
+
+        // Mandatory roles resolve, decode, and are transparent 1024x1024
+        // canvases matching the declared canvas.
+        var roles: [(WarawaraRigManifest.Layer, String)] = [
+            (rig.bodyLayer!, "base")
+        ]
+        if let eyes = rig.eyesLayer {
+            for role in ["open", "closed"] {
+                roles.append((eyes, role))
+            }
+        }
+        if let mouth = rig.mouthLayer {
+            for style in WarawaraMouthStyle.allCases {
+                roles.append((mouth, style.rawValue))
+            }
+        }
+        for (layer, role) in roles {
+            let image = rigLoader.image(forLayer: layer, role: role)
+            XCTAssertNotNil(image, "missing rig image role \(role): \(rigLoader.lastErrorDescription ?? "")")
+            guard let image else { continue }
+            let expectedPixels = Int(rig.canvas.width)
+            XCTAssertEqual(Int(image.size.width), expectedPixels, "\(role) must match canvas width")
+            XCTAssertEqual(Int(image.size.height), expectedPixels, "\(role) must match canvas height")
+            // Alpha validity: fully transparent corners on the shared canvas.
+            if let tiff = image.tiffRepresentation,
+               let rep = NSBitmapImageRep(data: tiff) {
+                let corner = rep.colorAt(x: 0, y: 0)?.alphaComponent ?? 0
+                let farCorner = rep.colorAt(x: rep.pixelsWide - 1, y: rep.pixelsHigh - 1)?.alphaComponent ?? 0
+                XCTAssertEqual(corner, 0, accuracy: 0.01, "\(role) corner must be transparent")
+                XCTAssertEqual(farCorner, 0, accuracy: 0.01, "\(role) far corner must be transparent")
+            }
+        }
+
+        // Main and companion scaling from the real rig geometry.
+        let main = WarawaraExpressionDriver.renderSize(rig: rig, targetBodyHeight: PetMetrics.blobHeight)
+        let companion = WarawaraExpressionDriver.renderSize(rig: rig, targetBodyHeight: CompanionMetrics.blobHeight)
+        XCTAssertEqual(main?.height ?? 0, 143.9, accuracy: 1.0)
+        XCTAssertEqual(companion?.height ?? 0, 90.3, accuracy: 1.0)
+    }
 }
