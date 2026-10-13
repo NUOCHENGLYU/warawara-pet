@@ -35,7 +35,7 @@ final class WarawaraExpressionMapperTests: XCTestCase {
         XCTAssertEqual(p.eyeOpenness, 1, accuracy: 0.001)
         XCTAssertEqual(p.gazeX, 0, accuracy: 0.001)
         XCTAssertEqual(p.gazeY, 0, accuracy: 0.001)
-        XCTAssertEqual(p.mouthStyle, .soft)
+        XCTAssertEqual(p.mouthStyle, .neutral)
         XCTAssertEqual(p.mouthOpenAmount, 0, accuracy: 0.001)
         XCTAssertEqual(p.drowsiness, 0, accuracy: 0.001)
         XCTAssertEqual(p.pressAmount, 0, accuracy: 0.001)
@@ -139,7 +139,7 @@ final class WarawaraExpressionMapperTests: XCTestCase {
         let grounded = WarawaraExpressionMapper.targetParameters(
             for: context(state: .hop, hop: 0.05)
         )
-        XCTAssertEqual(grounded.mouthStyle, .soft)
+        XCTAssertEqual(grounded.mouthStyle, .neutral)
         XCTAssertEqual(grounded.mouthOpenAmount, 0, accuracy: 0.001)
     }
 

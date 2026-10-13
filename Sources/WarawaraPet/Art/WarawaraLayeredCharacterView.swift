@@ -15,16 +15,26 @@ struct WarawaraLayeredCharacterView: View {
     @State private var previousMouthOpacity: Double = 0
 
     var body: some View {
+        // Body-level transforms wrap ALL layers so the face stays
+        // registered to the deformed body (no detachment during squash,
+        // lean or breathing). Face-only offsets happen inside the group.
         ZStack {
             bodyLayer
             eyesLayer
             mouthLayer
         }
         .frame(width: renderSize.width, height: renderSize.height)
+        .scaleEffect(breathScale, anchor: bodyCenterUnit)
+        .scaleEffect(
+            x: parameters.bodySquashX,
+            y: parameters.bodySquashY,
+            anchor: bodyCenterUnit
+        )
+        .rotationEffect(.radians(Double(parameters.bodyTilt)), anchor: bodyCenterUnit)
         .onChange(of: parameters.mouthStyle) { oldStyle in
             previousMouthStyle = oldStyle
             previousMouthOpacity = 1
-            withAnimation(.easeInOut(duration: 0.22)) {
+            withAnimation(.easeInOut(duration: 0.18)) {
                 previousMouthOpacity = 0
             }
         }
@@ -36,30 +46,19 @@ struct WarawaraLayeredCharacterView: View {
     private var bodyLayer: some View {
         if let layer = rig.bodyLayer, let image = rigLoader.image(forLayer: layer, role: "base") {
             layerImage(image, layer: layer)
-                // Breathing: subtle scale, deeper as drowsiness rises.
-                .scaleEffect(breathScale, anchor: bodyCenterUnit)
-                // Internal squash (identity for states where the outer
-                // pose pipeline already deforms the body).
-                .scaleEffect(
-                    x: parameters.bodySquashX,
-                    y: parameters.bodySquashY,
-                    anchor: bodyCenterUnit
-                )
-                // Gentle internal lean.
-                .rotationEffect(.radians(Double(parameters.bodyTilt)), anchor: bodyCenterUnit)
         }
     }
 
     /// Breathing amplitude: gentle awake, deeper asleep.
     private var breathScale: CGFloat {
-        1 + 0.012 * sin(2 * .pi * parameters.breathPhase) * (0.4 + 0.6 * parameters.drowsiness)
+        WarawaraLayeredGeometry.breathScale(
+            breathPhase: parameters.breathPhase,
+            drowsiness: parameters.drowsiness
+        )
     }
 
     private var bodyCenterUnit: UnitPoint {
-        UnitPoint(
-            x: rig.bodyBounds.midX,
-            y: rig.bodyBounds.midY
-        )
+        WarawaraLayeredGeometry.bodyCenterUnit(bodyBounds: rig.bodyBounds)
     }
 
     // MARK: - Eyes
@@ -67,34 +66,66 @@ struct WarawaraLayeredCharacterView: View {
     @ViewBuilder
     private var eyesLayer: some View {
         if let layer = rig.eyesLayer {
-            // Continuous openness: crossfade between the open and closed
-            // eye images (no binary open/closed switch). A single-image
-            // rig degrades to a static eye layer.
-            let openImage = rigLoader.image(forLayer: layer, role: "open")
-            let closedImage = rigLoader.image(forLayer: layer, role: "closed")
+            let e = min(max(parameters.eyeOpenness, 0), 1)
+            // Continuous openness across three registered levels:
+            // open (1) <-> half (0.5) <-> closed (0). At most two images
+            // are meaningful at any moment.
+            let (lower, upper, upperOpacity): (NSImage?, NSImage?, Double) =
+                e >= 0.5
+                ? (rigLoader.image(forLayer: layer, role: "open"),
+                   rigLoader.image(forLayer: layer, role: "half"),
+                   Double((1 - e) * 2))
+                : (rigLoader.image(forLayer: layer, role: "half"),
+                   rigLoader.image(forLayer: layer, role: "closed"),
+                   Double((0.5 - e) * 2))
+
+            // Curious focus and press squint replace the open look with
+            // continuous crossfades (registered images, no jump).
+            let focus = WarawaraLayeredGeometry.focusAmount(
+                gazeX: parameters.gazeX, gazeY: parameters.gazeY
+            )
+            let press = WarawaraLayeredGeometry.pressBlend(pressAmount: parameters.pressAmount)
+
             ZStack {
-                if let openImage {
-                    layerImage(openImage, layer: layer)
-                        .opacity(Double(parameters.eyeOpenness))
+                if let lower {
+                    layerImage(lower, layer: layer)
+                        .opacity(1 - upperOpacity)
                 }
-                if let closedImage {
-                    layerImage(closedImage, layer: layer)
-                        .opacity(Double(1 - parameters.eyeOpenness))
+                if let upper {
+                    layerImage(upper, layer: layer)
+                        .opacity(upperOpacity)
+                }
+                if focus > 0.02, e >= 0.5,
+                   let focused = rigLoader.image(forLayer: layer, role: "focused") {
+                    layerImage(focused, layer: layer)
+                        .opacity(Double(focus))
+                }
+                if press > 0.02,
+                   let pressed = rigLoader.image(forLayer: layer, role: "pressed") {
+                    layerImage(pressed, layer: layer)
+                        .opacity(Double(press))
                 }
             }
-            // Small continuous gaze offset relative to the body.
             .offset(x: gazeOffsetX, y: gazeOffsetY)
         }
     }
 
     private var gazeOffsetX: CGFloat {
-        let range = rig.eyesLayer?.gazeRange?.width ?? 0
-        return parameters.gazeX * range * renderSize.width
+        WarawaraLayeredGeometry.gazeOffset(
+            axis: .x,
+            gaze: parameters.gazeX,
+            range: rig.eyesLayer?.gazeRange?.width ?? 0,
+            renderSize: renderSize
+        )
     }
 
     private var gazeOffsetY: CGFloat {
-        let range = rig.eyesLayer?.gazeRange?.height ?? 0
-        return parameters.gazeY * range * renderSize.height
+        WarawaraLayeredGeometry.gazeOffset(
+            axis: .y,
+            gaze: parameters.gazeY,
+            range: rig.eyesLayer?.gazeRange?.height ?? 0,
+            renderSize: renderSize
+        )
     }
 
     // MARK: - Mouth
@@ -113,16 +144,18 @@ struct WarawaraLayeredCharacterView: View {
                     layerImage(image, layer: layer)
                 }
             }
-            // Continuous open amount on top of the style shape.
-            .scaleEffect(1 + 0.18 * parameters.mouthOpenAmount, anchor: mouthAnchorUnit)
+            // Continuous open amount: controlled width/height scaling
+            // around the mouth's registered pivot.
+            .scaleEffect(
+                x: 1 + 0.10 * parameters.mouthOpenAmount,
+                y: 1 + 0.22 * parameters.mouthOpenAmount,
+                anchor: mouthAnchorUnit
+            )
         }
     }
 
     private var mouthAnchorUnit: UnitPoint {
-        UnitPoint(
-            x: rig.mouthLayer?.anchor.x ?? 0.5,
-            y: rig.mouthLayer?.anchor.y ?? 0.5
-        )
+        WarawaraLayeredGeometry.pivotUnit(layer: rig.mouthLayer)
     }
 
     // MARK: - Shared layer geometry
@@ -138,6 +171,62 @@ struct WarawaraLayeredCharacterView: View {
                 x: renderSize.width / 2 - layer.anchor.x * renderSize.width,
                 y: renderSize.height / 2 - layer.anchor.y * renderSize.height
             )
+    }
+}
+
+/// Pure, testable geometry helpers shared by the layered renderer.
+enum WarawaraLayeredGeometry {
+    enum Axis { case x, y }
+
+    /// Transform pivot at the body bounds center (normalized).
+    static func bodyCenterUnit(bodyBounds: CGRect) -> UnitPoint {
+        UnitPoint(x: bodyBounds.midX, y: bodyBounds.midY)
+    }
+
+    /// Breathing scale: gentle awake, deeper as drowsiness rises.
+    static func breathScale(breathPhase: CGFloat, drowsiness: CGFloat) -> CGFloat {
+        let depth = min(max(drowsiness, 0), 1)
+        return 1 + 0.012 * sin(2 * .pi * breathPhase) * (0.4 + 0.6 * depth)
+    }
+
+    /// Eye layer gaze offset, bounded by the rig's gazeRange.
+    static func gazeOffset(
+        axis: Axis,
+        gaze: CGFloat,
+        range: CGFloat,
+        renderSize: CGSize
+    ) -> CGFloat {
+        let clamped = min(max(gaze, -1), 1)
+        switch axis {
+        case .x: return clamped * range * renderSize.width
+        case .y: return clamped * range * renderSize.height
+        }
+    }
+
+    /// Curious focus blend 0...1 from the gaze magnitude (smooth, no
+    /// threshold snap).
+    static func focusAmount(gazeX: CGFloat, gazeY: CGFloat) -> CGFloat {
+        let magnitude = min(hypot(gazeX, gazeY), 1)
+        return smoothstep(magnitude, edge0: 0.3, edge1: 0.7)
+    }
+
+    /// Press squint blend 0...1 from the press amount.
+    static func pressBlend(pressAmount: CGFloat) -> CGFloat {
+        smoothstep(min(max(pressAmount, 0), 1), edge0: 0.25, edge1: 0.6)
+    }
+
+    /// Layer transform pivot: explicit pivot or the layer anchor.
+    static func pivotUnit(layer: WarawaraRigManifest.Layer?) -> UnitPoint {
+        UnitPoint(
+            x: layer?.pivot?.x ?? layer?.anchor.x ?? 0.5,
+            y: layer?.pivot?.y ?? layer?.anchor.y ?? 0.5
+        )
+    }
+
+    static func smoothstep(_ x: CGFloat, edge0: CGFloat, edge1: CGFloat) -> CGFloat {
+        guard edge1 > edge0 else { return x >= edge1 ? 1 : 0 }
+        let t = min(max((x - edge0) / (edge1 - edge0), 0), 1)
+        return t * t * (3 - 2 * t)
     }
 }
 
@@ -159,7 +248,12 @@ struct WarawaraExpressionDriverView: View {
             let dt = boundedDelta(from: lastDate, to: date)
             let _ = DispatchQueue.main.async { self.lastDate = date }
 
-            let breath = WarawaraExpressionDriver.breathPhase(at: date.timeIntervalSinceReferenceDate)
+            // Breathing slows as the character drifts toward sleep.
+            let breathPeriod = 4.0 + 2.5 * animator.parameters.drowsiness
+            let breath = WarawaraExpressionDriver.breathPhase(
+                at: date.timeIntervalSinceReferenceDate,
+                period: breathPeriod
+            )
             let blink = WarawaraExpressionDriver.blink(at: date.timeIntervalSinceReferenceDate)
             let contextValue = WarawaraExpressionContext(
                 inputs: inputs,

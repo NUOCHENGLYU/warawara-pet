@@ -33,6 +33,9 @@ struct WarawaraExpressionContext: Equatable {
 struct WarawaraExpressionTuning {
     /// Eye openness (fast: blinks track closely, wake-up stays soft).
     var eyeResponse: TimeInterval = 0.12
+    /// Eye openness response when drowsy: wakes and droops stay gradual
+    /// instead of snapping open/shut.
+    var eyeDrowsyResponse: TimeInterval = 0.55
     /// Gaze smoothing (curious tracking).
     var gazeResponse: TimeInterval = 0.18
     /// Mouth opening response.
@@ -68,7 +71,7 @@ enum WarawaraExpressionMapper {
         switch inputs.state {
         case .idle:
             p.eyeOpenness = 1
-            p.mouthStyle = .soft
+            p.mouthStyle = .neutral
             p.mouthOpenAmount = 0
         case .curious:
             // Gaze follows the cursor direction (already smoothed by the
@@ -77,7 +80,7 @@ enum WarawaraExpressionMapper {
             p.eyeOpenness = 1
             p.gazeX = clamp(inputs.gaze.dx, -1, 1)
             p.gazeY = clamp(inputs.gaze.dy, -1, 1)
-            p.mouthStyle = .soft
+            p.mouthStyle = .neutral
         case .hop:
             // Mildly alert during flight; mouth opens mid-hop.
             p.eyeOpenness = 1
@@ -186,9 +189,13 @@ struct WarawaraParameterAnimator {
         let t = target.clamped()
         let dtF = CGFloat(max(dt, 0))
 
+        // Eye response slows with drowsiness so sleeping <-> wake
+        // transitions are continuous reopenings, never snaps.
+        let eyeTau = tuning.eyeResponse
+            + (tuning.eyeDrowsyResponse - tuning.eyeResponse) * parameters.drowsiness
         parameters.eyeOpenness = Self.approach(
             parameters.eyeOpenness, t.eyeOpenness,
-            dt: dtF, tau: tuning.eyeResponse
+            dt: dtF, tau: eyeTau
         )
         parameters.gazeX = Self.approach(parameters.gazeX, t.gazeX, dt: dtF, tau: tuning.gazeResponse)
         parameters.gazeY = Self.approach(parameters.gazeY, t.gazeY, dt: dtF, tau: tuning.gazeResponse)
