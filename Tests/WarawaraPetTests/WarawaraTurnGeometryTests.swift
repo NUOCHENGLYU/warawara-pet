@@ -87,13 +87,17 @@ final class WarawaraTurnGeometryTests: XCTestCase {
         let midX = bodyRect.midX
         XCTAssertEqual(right.count, left.count)
         for i in 0..<right.count {
+            // Mirroring maps the right turn's strip i (counting from the
+            // left edge) onto the left turn's strip counted from the
+            // right edge.
             let mirroredRight = CGRect(
                 x: 2 * midX - right[i].destination.maxX,
                 y: right[i].destination.minY,
                 width: right[i].destination.width,
                 height: right[i].destination.height
             )
-            XCTAssertEqual(mirroredRight.minX, left[i].destination.minX, accuracy: 0.001,
+            let mirroredLeft = left[left.count - 1 - i].destination
+            XCTAssertEqual(mirroredRight.minX, mirroredLeft.minX, accuracy: 0.001,
                            "left turn must mirror the right turn (strip \(i))")
         }
     }
