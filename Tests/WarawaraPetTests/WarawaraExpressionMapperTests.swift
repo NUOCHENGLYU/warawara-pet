@@ -49,10 +49,11 @@ final class WarawaraExpressionMapperTests: XCTestCase {
         )
         XCTAssertEqual(p.gazeX, 0.6, accuracy: 0.001)
         XCTAssertEqual(p.gazeY, -0.4, accuracy: 0.001)
-        // Coordinated turn: body leans and squashes slightly toward the
-        // gaze (renderer adds the small translation on top).
-        XCTAssertEqual(p.bodyTilt, 0.05 * 0.6, accuracy: 0.001)
-        XCTAssertEqual(p.bodySquashX, 1 - 0.02 * 0.6, accuracy: 0.001)
+        // Coordinated turn: lean sign follows the accepted pose-pipeline
+        // convention (cursor right -> negative rotation -> leans toward),
+        // plus a slight horizontal squash.
+        XCTAssertEqual(p.bodyTilt, -0.05 * 0.6, accuracy: 0.001)
+        XCTAssertEqual(p.bodySquashX, 1 - 0.03 * 0.6, accuracy: 0.001)
         let focus = WarawaraExpressionMapper.focusAmount(gazeX: 0.6, gazeY: -0.4)
         XCTAssertEqual(p.mouthOpenAmount, 0.12 * focus, accuracy: 0.001)
         XCTAssertEqual(p.mouthStyle, .neutral)

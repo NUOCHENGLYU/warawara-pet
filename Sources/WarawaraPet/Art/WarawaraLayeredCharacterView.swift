@@ -15,19 +15,24 @@ struct WarawaraLayeredCharacterView: View {
     @State private var previousMouthOpacity: Double = 0
 
     var body: some View {
-        // Transform hierarchy (single gaze application):
+        // Head-turn hierarchy (single gaze application, canonical Y-up
+        // parameter convention converted to screen space exactly once):
         //   body pose (outer pipeline, untouched)
-        //   -> whole-character turn: translation + tilt + asymmetric
-        //      squash of BODY AND FACE together around the body center
-        //   -> small eye-local gaze inside the shared facial frame
-        // Eyes and mouth always share one facial coordinate system.
+        //   -> body silhouette bias toward the target (small)
+        //   -> shared face group (eyes + mouth together) with a larger
+        //      relative shift — the primary "turning to look" cue
+        //   -> minimal eye-local gaze inside the facial frame
+        //   -> whole-group lean + asymmetric squash complete the turn
         ZStack {
             bodyLayer
-            eyesLayer
-            mouthLayer
+                .offset(x: bodyTurnX, y: bodyTurnY)
+            Group {
+                eyesLayer
+                mouthLayer
+            }
+            .offset(x: faceTurnX, y: faceTurnY)
         }
         .frame(width: renderSize.width, height: renderSize.height)
-        .offset(x: turnShiftX, y: turnShiftY)
         .scaleEffect(breathScale, anchor: bodyCenterUnit)
         .scaleEffect(
             x: parameters.bodySquashX,
@@ -44,16 +49,26 @@ struct WarawaraLayeredCharacterView: View {
         }
     }
 
-    /// Whole-character translation toward the gaze: affects the artwork
-    /// layers only — never the panel origin or interaction coordinates.
-    private var turnShiftX: CGFloat {
-        WarawaraLayeredGeometry.turnShiftOffset(
+    private var bodyTurnX: CGFloat {
+        WarawaraLayeredGeometry.bodyTurnOffset(
             axis: .x, gaze: parameters.gazeX, renderSize: renderSize
         )
     }
 
-    private var turnShiftY: CGFloat {
-        WarawaraLayeredGeometry.turnShiftOffset(
+    private var bodyTurnY: CGFloat {
+        WarawaraLayeredGeometry.bodyTurnOffset(
+            axis: .y, gaze: parameters.gazeY, renderSize: renderSize
+        )
+    }
+
+    private var faceTurnX: CGFloat {
+        WarawaraLayeredGeometry.faceTurnOffset(
+            axis: .x, gaze: parameters.gazeX, renderSize: renderSize
+        )
+    }
+
+    private var faceTurnY: CGFloat {
+        WarawaraLayeredGeometry.faceTurnOffset(
             axis: .y, gaze: parameters.gazeY, renderSize: renderSize
         )
     }
@@ -210,20 +225,46 @@ enum WarawaraLayeredGeometry {
         return 1 + 0.012 * sin(2 * .pi * breathPhase) * (0.4 + 0.6 * depth)
     }
 
-    /// Whole-character turn translation toward the gaze direction. Small
-    /// (max ~1.2% of the canvas) so the character subtly steps toward the
-    /// cursor; applied to artwork layers only, never to window geometry.
-    static func turnShiftOffset(
+    /// Screen-space conversion: gaze parameters use a canonical UP-
+    /// POSITIVE Y (matching NSEvent screen coordinates and the curiosity
+    /// tracker), while SwiftUI offsets are DOWN-POSITIVE. The negation
+    /// happens exactly once, here.
+    private static func screenAxis(_ axis: Axis, gaze: CGFloat) -> CGFloat {
+        let clamped = min(max(gaze, -1), 1)
+        return axis == .y ? -clamped : clamped
+    }
+
+    /// Body silhouette bias toward the attention target: small, so the
+    /// face keeps a clear RELATIVE lead (see faceTurnOffset).
+    static func bodyTurnOffset(
         axis: Axis,
         gaze: CGFloat,
         renderSize: CGSize
     ) -> CGFloat {
-        let clamped = min(max(gaze, -1), 1)
+        let signed = screenAxis(axis, gaze: gaze)
         switch axis {
-        case .x: return clamped * 0.012 * renderSize.width
-        case .y: return clamped * 0.008 * renderSize.height
+        case .x: return signed * 0.008 * renderSize.width
+        case .y: return signed * 0.005 * renderSize.height
         }
     }
+
+    /// Shared face-group shift (eyes + mouth together), relative to the
+    /// body. The primary head-turn cue: clearly larger than the body
+    /// bias and the eye-local gaze, so the face visibly turns toward
+    /// the cursor instead of the eyes sliding alone.
+    static func faceTurnOffset(
+        axis: Axis,
+        gaze: CGFloat,
+        renderSize: CGSize
+    ) -> CGFloat {
+        let signed = screenAxis(axis, gaze: gaze)
+        switch axis {
+        case .x: return signed * 0.020 * renderSize.width
+        case .y: return signed * 0.014 * renderSize.height
+        }
+    }
+
+    /// Eye layer gaze offset, bounded by the rig's gazeRange.
 
     /// Final rendered eye openness: the slow state channel (sleep/drowsy,
     /// smoothed by the animator) multiplied by the fast, unsmoothed blink
@@ -297,16 +338,18 @@ enum WarawaraLayeredGeometry {
     }
 
     /// Eye layer gaze offset, bounded by the rig's gazeRange.
+    /// Gaze parameters are UP-POSITIVE; the returned value is a SwiftUI
+    /// offset (DOWN-POSITIVE Y) — converted once via screenAxis.
     static func gazeOffset(
         axis: Axis,
         gaze: CGFloat,
         range: CGFloat,
         renderSize: CGSize
     ) -> CGFloat {
-        let clamped = min(max(gaze, -1), 1)
+        let signed = screenAxis(axis, gaze: gaze)
         switch axis {
-        case .x: return clamped * range * renderSize.width
-        case .y: return clamped * range * renderSize.height
+        case .x: return signed * range * renderSize.width
+        case .y: return signed * range * renderSize.height
         }
     }
 

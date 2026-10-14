@@ -56,9 +56,11 @@ are intentionally deferred:
    the blink/gaze rendering defects: blink is now a fast unsmoothed
    channel composed at render time (full closure guaranteed), eye-layer
    composition uses normalized mutually-exclusive weights (no additive
-   double eyes), and curious gaze is a single coordinated whole-character
-   turn (translation + tilt + squash) with only subtle eye-local
-   tracking. Remaining limitations: the blink schedule is a
+   double eyes), and curious gaze is a coordinated head-turn hierarchy
+   (Phase 5E): body silhouette bias -> shared face-group lead -> minimal
+   eye-local gaze -> whole-group lean/squash, with a single documented
+   Y-up parameter convention converted to screen space exactly once.
+   Remaining limitations: the blink schedule is a
    deterministic two-period pattern awaiting real tuning; independent
    limb artwork (with shoulder/foot pivots and a masked body revision)
    is required before limbs can animate without duplicating the painted

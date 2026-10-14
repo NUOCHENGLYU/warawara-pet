@@ -26,27 +26,56 @@ final class WarawaraLayeredGeometryTests: XCTestCase {
         )
     }
 
-    func testTurnShiftIsBoundedAndSmall() {
+    func testBodyAndFaceTurnOffsetsAreBoundedAndSmall() {
         for gaze in [CGFloat(-2), -1, -0.5, 0, 0.5, 1, 2] {
-            let shift = WarawaraLayeredGeometry.turnShiftOffset(
+            let face = WarawaraLayeredGeometry.faceTurnOffset(
                 axis: .x, gaze: gaze, renderSize: renderSize
             )
-            XCTAssertTrue(shift.isFinite)
+            let body = WarawaraLayeredGeometry.bodyTurnOffset(
+                axis: .x, gaze: gaze, renderSize: renderSize
+            )
+            XCTAssertTrue(face.isFinite && body.isFinite)
             XCTAssertTrue(
-                abs(shift) <= 0.012 * renderSize.width + 0.001,
-                "turn shift must stay subtle"
+                abs(face) <= 0.020 * renderSize.width + 0.001,
+                "face shift must stay gentle"
+            )
+            XCTAssertTrue(
+                abs(body) <= 0.008 * renderSize.width + 0.001,
+                "body bias must stay subtle"
             )
         }
         XCTAssertEqual(
-            WarawaraLayeredGeometry.turnShiftOffset(axis: .x, gaze: 1, renderSize: renderSize),
-            0.012 * renderSize.width,
+            WarawaraLayeredGeometry.faceTurnOffset(axis: .x, gaze: 1, renderSize: renderSize),
+            0.020 * renderSize.width,
             accuracy: 0.01
         )
         XCTAssertEqual(
-            WarawaraLayeredGeometry.turnShiftOffset(axis: .y, gaze: 1, renderSize: renderSize),
-            0.008 * renderSize.height,
+            WarawaraLayeredGeometry.bodyTurnOffset(axis: .x, gaze: 1, renderSize: renderSize),
+            0.008 * renderSize.width,
             accuracy: 0.01
         )
+    }
+
+    func testVerticalOffsetsUseScreenConvention() {
+        // Gaze is UP-POSITIVE (cursor above -> gazeY +1); SwiftUI offsets
+        // are DOWN-POSITIVE, so up must become a negative offset.
+        let aboveFace = WarawaraLayeredGeometry.faceTurnOffset(
+            axis: .y, gaze: 1, renderSize: renderSize
+        )
+        XCTAssertLessThan(aboveFace, 0, "cursor above must render upward")
+        let belowFace = WarawaraLayeredGeometry.faceTurnOffset(
+            axis: .y, gaze: -1, renderSize: renderSize
+        )
+        XCTAssertGreaterThan(belowFace, 0, "cursor below must render downward")
+        let aboveGaze = WarawaraLayeredGeometry.gazeOffset(
+            axis: .y, gaze: 1, range: 0.04, renderSize: renderSize
+        )
+        XCTAssertLessThan(aboveGaze, 0)
+        // Horizontal must be sign-preserving (right -> positive offset).
+        let rightFace = WarawaraLayeredGeometry.faceTurnOffset(
+            axis: .x, gaze: 1, renderSize: renderSize
+        )
+        XCTAssertGreaterThan(rightFace, 0)
     }
 
     func testEffectiveEyeOpennessReachesClosedOnFullBlink() {

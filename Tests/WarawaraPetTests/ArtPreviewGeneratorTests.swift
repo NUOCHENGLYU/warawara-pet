@@ -473,6 +473,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         try renderRigOpennessSteps(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
         try renderRigHeldGaze(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
         try renderRigBlinkTimeline(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigHeadTurn(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
 
         for name in ["18-rig-neutral.png", "19-rig-old-vs-recomposed.png",
                      "20-rig-gaze.png", "21-rig-blink.png", "22-rig-openness.png",
@@ -481,7 +482,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
                      "27-rig-mouth-styles.png", "28-rig-main-vs-companion.png",
                      "29-rig-sleep-z.png", "30-rig-static-composition.png",
                      "31-rig-openness-steps.png", "32-rig-held-gaze.png",
-                     "33-rig-blink-timeline.png"] {
+                     "33-rig-blink-timeline.png", "34-rig-head-turn.png"] {
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
                 "missing rig preview \(name)"
@@ -920,6 +921,44 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         }
         try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
                            title: "blink timeline (production waveform, 30 fps)", to: dir, named: "33-rig-blink-timeline.png")
+    }
+
+    @MainActor
+    private func renderRigHeadTurn(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        // Coordinated head-turn contact sheet: neutral, four directions,
+        // a held gaze, a mid-transition frame, and the neutral recovery —
+        // rendered with the production layered view at real desktop size.
+        func staticParams(_ direction: CGVector) -> WarawaraPerformanceParameters {
+            WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(state: .curious, gaze: direction),
+                breathPhase: 0.25
+            ))
+        }
+        func driverParams(inputs: WarawaraExpressionInputs, seconds: Double) -> WarawaraPerformanceParameters {
+            let model = WarawaraExpressionDriverModel()
+            let start = 3000.0
+            let frames = Int(seconds * 30)
+            for frame in 0..<frames {
+                model.tick(at: Date(timeIntervalSinceReferenceDate: start + Double(frame) / 30.0), inputs: inputs)
+            }
+            return model.parameters
+        }
+
+        let curiousRight = WarawaraExpressionInputs(state: .curious, gaze: CGVector(dx: 0.7, dy: 0.2))
+        let samples: [(String, WarawaraPerformanceParameters)] = [
+            ("neutral", idleParameters()),
+            ("left", staticParams(CGVector(dx: -0.7, dy: 0))),
+            ("right", staticParams(CGVector(dx: 0.7, dy: 0))),
+            ("up", staticParams(CGVector(dx: 0, dy: 0.7))),
+            ("down", staticParams(CGVector(dx: 0, dy: -0.7))),
+            ("held 3s", driverParams(inputs: curiousRight, seconds: 3)),
+            ("mid-turn", driverParams(inputs: curiousRight, seconds: 0.4)),
+            ("recovery", driverParams(inputs: WarawaraExpressionInputs(state: .idle), seconds: 1))
+        ]
+        try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "coordinated head turn (production renderer)", to: dir, named: "34-rig-head-turn.png")
     }
 
     private func renderComparisonNote(to dir: URL) throws {

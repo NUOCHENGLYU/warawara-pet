@@ -86,11 +86,12 @@ enum WarawaraExpressionMapper {
             p.gazeY = gazeY
             p.mouthStyle = .neutral
             p.mouthOpenAmount = 0.12 * focus
-            // Coordinated whole-character turn: lean and a slight
-            // horizontal squash toward the gaze (the renderer adds the
-            // small translation on top of these).
-            p.bodyTilt = 0.05 * gazeX
-            p.bodySquashX = 1 - 0.02 * abs(gazeX)
+            // Coordinated whole-character turn. The sign matches the
+            // ACCEPTED pose pipeline convention (cursor right -> negative
+            // SwiftUI rotation -> leans toward the cursor), so the two
+            // leans ADD instead of cancelling.
+            p.bodyTilt = -0.05 * gazeX
+            p.bodySquashX = 1 - 0.03 * abs(gazeX)
         case .hop:
             // Mildly alert during flight; mouth opens mid-hop.
             p.eyeOpenness = 1
