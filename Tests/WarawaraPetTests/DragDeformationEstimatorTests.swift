@@ -64,7 +64,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
     func testDirectionReversalPassesNearNeutralContinuously() {
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
-        dragRight(&estimator, samples: 60, speed: 600)
+        dragRight(&estimator, samples: 60, speed: tuning.velocityAtMaxStretch)
         XCTAssertGreaterThan(estimator.deformation.stretchScale, 1 + 0.8 * tuning.maxStretch)
 
         var smallestStretch = estimator.deformation.stretchScale
@@ -85,7 +85,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
     func testLongGapDecaysTowardNeutralInsteadOfSpikingOrFreezing() {
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
-        dragRight(&estimator, samples: 60, speed: 600)
+        dragRight(&estimator, samples: 60, speed: tuning.velocityAtMaxStretch)
         XCTAssertGreaterThan(estimator.deformation.stretchScale, 1 + 0.8 * tuning.maxStretch)
 
         var t: TimeInterval = 60 * 0.016
@@ -145,7 +145,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
     func testResetReturnsToNeutral() {
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
-        dragRight(&estimator, samples: 60, speed: 600)
+        dragRight(&estimator, samples: 60, speed: tuning.velocityAtMaxStretch)
         XCTAssertGreaterThan(estimator.deformation.stretchScale, 1 + 0.8 * tuning.maxStretch)
 
         estimator.reset()
@@ -177,7 +177,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
     func testDecayWithinStartDelayDoesNothing() {
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
-        dragRight(&estimator, samples: 60, speed: 600)
+        dragRight(&estimator, samples: 60, speed: tuning.velocityAtMaxStretch)
         let before = estimator.deformation
 
         estimator.decay(at: 0.96 + 0.03)  // 0.03 s pause < decayStartDelay
@@ -187,7 +187,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
     func testDecayAfterPauseMonotonicallyApproachesNeutral() {
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
-        dragRight(&estimator, samples: 60, speed: 600)
+        dragRight(&estimator, samples: 60, speed: tuning.velocityAtMaxStretch)
         XCTAssertGreaterThan(estimator.deformation.stretchScale, 1 + 0.8 * tuning.maxStretch)
         XCTAssertEqual(abs(estimator.deformation.rotation), tuning.maxRotation, accuracy: 0.001)
 
@@ -207,7 +207,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
     func testDecayPreservesGrabAnchor() {
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
-        dragRight(&estimator, samples: 60, speed: 600)
+        dragRight(&estimator, samples: 60, speed: tuning.velocityAtMaxStretch)
         let before = estimator.deformation
 
         estimator.decay(at: 1.36)
@@ -222,7 +222,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
     func testMovementResumesSmoothlyAfterDecay() {
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
-        dragRight(&estimator, samples: 60, speed: 600)
+        dragRight(&estimator, samples: 60, speed: tuning.velocityAtMaxStretch)
 
         estimator.decay(at: 1.36)
         let decayedScale = estimator.deformation.stretchScale
@@ -248,5 +248,6 @@ final class DragDeformationEstimatorTests: XCTestCase {
         XCTAssertEqual(estimator.deformation.rotation, -tuning.maxRotation, accuracy: 0.01)
     }
 }
+
 
 
