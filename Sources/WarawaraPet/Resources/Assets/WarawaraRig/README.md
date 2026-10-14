@@ -42,7 +42,7 @@ current schema).
                            "closed": "eyes/eyes_closed.png",
                            "focused": "eyes/eyes_focused.png",
                            "pressed": "eyes/eyes_pressed.png" },
-               "anchor": [0.5, 0.5], "gazeRange": [0.10, 0.05] },
+               "anchor": [0.5, 0.5], "gazeRange": [0.04, 0.02] },
     "mouth": { "kind": "mouth",
                "images": { "soft": "mouth/mouth_soft.png",
                            "neutral": "mouth/mouth_neutral.png",

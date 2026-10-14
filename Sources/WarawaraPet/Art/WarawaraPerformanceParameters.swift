@@ -18,6 +18,10 @@ enum WarawaraMouthStyle: String, CaseIterable, Equatable {
 struct WarawaraPerformanceParameters: Equatable {
     /// 0 = fully closed, 1 = fully open.
     var eyeOpenness: CGFloat = 1
+    /// Fast, UNSMOOTHED blink transient (0 = no blink, 1 = fully closed).
+    /// Composed with `eyeOpenness` at render time — deliberately outside
+    /// the animator's smoothing so blinks stay visually complete.
+    var blinkAmount: CGFloat = 0
     /// Gaze direction, signed: -1...1 in each axis (right/up positive).
     var gazeX: CGFloat = 0
     var gazeY: CGFloat = 0
@@ -58,6 +62,7 @@ struct WarawaraPerformanceParameters: Equatable {
     func clamped() -> WarawaraPerformanceParameters {
         var copy = self
         copy.eyeOpenness = min(max(eyeOpenness, 0), 1)
+        copy.blinkAmount = min(max(blinkAmount, 0), 1)
         copy.gazeX = min(max(gazeX, -1), 1)
         copy.gazeY = min(max(gazeY, -1), 1)
         copy.mouthOpenAmount = min(max(mouthOpenAmount, 0), 1)

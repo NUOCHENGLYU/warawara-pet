@@ -15,21 +15,19 @@ struct WarawaraLayeredCharacterView: View {
     @State private var previousMouthOpacity: Double = 0
 
     var body: some View {
-        // Body-level transforms wrap ALL layers so the face stays
-        // registered to the deformed body (no detachment during squash,
-        // lean or breathing). Face-only offsets happen inside the group.
+        // Transform hierarchy (single gaze application):
+        //   body pose (outer pipeline, untouched)
+        //   -> whole-character turn: translation + tilt + asymmetric
+        //      squash of BODY AND FACE together around the body center
+        //   -> small eye-local gaze inside the shared facial frame
+        // Eyes and mouth always share one facial coordinate system.
         ZStack {
             bodyLayer
-            // Eyes + mouth shift together toward the gaze direction: a
-            // small parallax that reads as the character turning to look,
-            // not just the eyes sliding.
-            Group {
-                eyesLayer
-                mouthLayer
-            }
-            .offset(x: faceShiftX, y: faceShiftY)
+            eyesLayer
+            mouthLayer
         }
         .frame(width: renderSize.width, height: renderSize.height)
+        .offset(x: turnShiftX, y: turnShiftY)
         .scaleEffect(breathScale, anchor: bodyCenterUnit)
         .scaleEffect(
             x: parameters.bodySquashX,
@@ -46,14 +44,16 @@ struct WarawaraLayeredCharacterView: View {
         }
     }
 
-    private var faceShiftX: CGFloat {
-        WarawaraLayeredGeometry.faceShiftOffset(
+    /// Whole-character translation toward the gaze: affects the artwork
+    /// layers only — never the panel origin or interaction coordinates.
+    private var turnShiftX: CGFloat {
+        WarawaraLayeredGeometry.turnShiftOffset(
             axis: .x, gaze: parameters.gazeX, renderSize: renderSize
         )
     }
 
-    private var faceShiftY: CGFloat {
-        WarawaraLayeredGeometry.faceShiftOffset(
+    private var turnShiftY: CGFloat {
+        WarawaraLayeredGeometry.turnShiftOffset(
             axis: .y, gaze: parameters.gazeY, renderSize: renderSize
         )
     }
@@ -84,44 +84,47 @@ struct WarawaraLayeredCharacterView: View {
     @ViewBuilder
     private var eyesLayer: some View {
         if let layer = rig.eyesLayer {
-            let e = min(max(parameters.eyeOpenness, 0), 1)
-            // Continuous openness across three registered levels:
-            // open (1) <-> half (0.5) <-> closed (0). At most two images
-            // are meaningful at any moment.
-            let (lower, upper, upperOpacity): (NSImage?, NSImage?, Double) =
-                e >= 0.5
-                ? (rigLoader.image(forLayer: layer, role: "open"),
-                   rigLoader.image(forLayer: layer, role: "half"),
-                   Double((1 - e) * 2))
-                : (rigLoader.image(forLayer: layer, role: "half"),
-                   rigLoader.image(forLayer: layer, role: "closed"),
-                   Double((0.5 - e) * 2))
-
-            // Curious focus and press squint replace the open look with
-            // continuous crossfades (registered images, no jump).
+            let e = WarawaraLayeredGeometry.effectiveEyeOpenness(
+                base: parameters.eyeOpenness,
+                blink: parameters.blinkAmount
+            )
             let focus = WarawaraLayeredGeometry.focusAmount(
                 gazeX: parameters.gazeX, gazeY: parameters.gazeY
             )
             let press = WarawaraLayeredGeometry.pressBlend(pressAmount: parameters.pressAmount)
+            // Normalized composition: the base pair and the focused /
+            // pressed overlays are mutually exclusive weights whose sum
+            // never exceeds 1 — no additive double eyes, and fully closed
+            // eyes leave zero open-eye remnant.
+            let weights = WarawaraLayeredGeometry.composedEyeWeights(
+                openness: e, focus: focus, press: press
+            )
+            let openImage = rigLoader.image(forLayer: layer, role: "open")
+            let halfImage = rigLoader.image(forLayer: layer, role: "half")
+            let closedImage = rigLoader.image(forLayer: layer, role: "closed")
+            let focusedImage = rigLoader.image(forLayer: layer, role: "focused")
+            let pressedImage = rigLoader.image(forLayer: layer, role: "pressed")
 
             ZStack {
-                if let lower {
-                    layerImage(lower, layer: layer)
-                        .opacity(1 - upperOpacity)
+                if weights.lowerWeight > 0.001 {
+                    if let image = weights.lowerIsOpen ? openImage : halfImage {
+                        layerImage(image, layer: layer)
+                            .opacity(weights.lowerWeight)
+                    }
                 }
-                if let upper {
-                    layerImage(upper, layer: layer)
-                        .opacity(upperOpacity)
+                if weights.upperWeight > 0.001 {
+                    if let image = weights.lowerIsOpen ? halfImage : closedImage {
+                        layerImage(image, layer: layer)
+                            .opacity(weights.upperWeight)
+                    }
                 }
-                if focus > 0.02, e >= 0.5,
-                   let focused = rigLoader.image(forLayer: layer, role: "focused") {
-                    layerImage(focused, layer: layer)
-                        .opacity(Double(focus))
+                if weights.focusedWeight > 0.001, let focusedImage {
+                    layerImage(focusedImage, layer: layer)
+                        .opacity(weights.focusedWeight)
                 }
-                if press > 0.02,
-                   let pressed = rigLoader.image(forLayer: layer, role: "pressed") {
-                    layerImage(pressed, layer: layer)
-                        .opacity(Double(press))
+                if weights.pressedWeight > 0.001, let pressedImage {
+                    layerImage(pressedImage, layer: layer)
+                        .opacity(weights.pressedWeight)
                 }
             }
             .offset(x: gazeOffsetX, y: gazeOffsetY)
@@ -207,18 +210,78 @@ enum WarawaraLayeredGeometry {
         return 1 + 0.012 * sin(2 * .pi * breathPhase) * (0.4 + 0.6 * depth)
     }
 
-    /// Face-group parallax shift toward the gaze direction (eyes + mouth
-    /// move together; subtle, ~2% of the canvas per unit gaze).
-    static func faceShiftOffset(
+    /// Whole-character turn translation toward the gaze direction. Small
+    /// (max ~1.2% of the canvas) so the character subtly steps toward the
+    /// cursor; applied to artwork layers only, never to window geometry.
+    static func turnShiftOffset(
         axis: Axis,
         gaze: CGFloat,
         renderSize: CGSize
     ) -> CGFloat {
         let clamped = min(max(gaze, -1), 1)
         switch axis {
-        case .x: return clamped * 0.02 * renderSize.width
-        case .y: return clamped * 0.015 * renderSize.height
+        case .x: return clamped * 0.012 * renderSize.width
+        case .y: return clamped * 0.008 * renderSize.height
         }
+    }
+
+    /// Final rendered eye openness: the slow state channel (sleep/drowsy,
+    /// smoothed by the animator) multiplied by the fast, unsmoothed blink
+    /// channel. Sleeping stays fully closed because its base is zero.
+    static func effectiveEyeOpenness(base: CGFloat, blink: CGFloat) -> CGFloat {
+        let b = min(max(base, 0), 1)
+        let k = min(max(blink, 0), 1)
+        return min(max(b * (1 - 0.95 * k), 0), 1)
+    }
+
+    /// Normalized eye-layer composition weights for one rendered frame.
+    struct EyeCompositeWeights: Equatable {
+        var lowerWeight: Double
+        var upperWeight: Double
+        /// True when the lower slot is the "open" artwork (open/half pair);
+        /// false for the half/closed pair.
+        var lowerIsOpen: Bool
+        var focusedWeight: Double
+        var pressedWeight: Double
+
+        var total: Double {
+            lowerWeight + upperWeight + focusedWeight + pressedWeight
+        }
+    }
+
+    /// Mutually exclusive blending across open/half/closed plus the
+    /// focused and pressed overlays. The base pair weight is scaled down
+    /// by the overlay weights, so the sum never exceeds 1 — no additive
+    /// double eyes, and openness 0 leaves zero open-eye remnant.
+    static func composedEyeWeights(
+        openness: CGFloat,
+        focus: CGFloat,
+        press: CGFloat
+    ) -> EyeCompositeWeights {
+        let e = min(max(openness, 0), 1)
+        let f = min(max(focus, 0), 1)
+        let p = min(max(press, 0), 1)
+        let baseScale = (1 - f) * (1 - p)
+
+        var lower: Double
+        var upper: Double
+        var lowerIsOpen: Bool
+        if e >= 0.5 {
+            lowerIsOpen = true
+            lower = Double(2 * e - 1)
+            upper = Double((1 - e) * 2)
+        } else {
+            lowerIsOpen = false
+            lower = Double(e * 2)
+            upper = Double((0.5 - e) * 2)
+        }
+        return EyeCompositeWeights(
+            lowerWeight: lower * baseScale,
+            upperWeight: upper * baseScale,
+            lowerIsOpen: lowerIsOpen,
+            focusedWeight: Double(f),
+            pressedWeight: Double(p)
+        )
     }
 
     /// Eye layer gaze offset, bounded by the rig's gazeRange.
@@ -265,62 +328,70 @@ enum WarawaraLayeredGeometry {
 /// Time-driven expression driver: computes continuous performance
 /// parameters (breath, blink, state targets) and eases toward them.
 /// Sits inside WarawaraCharacterView and receives the app-level inputs.
+///
+/// State is mutated ONLY inside `tick(at:inputs:)`, which runs from a
+/// `TimelineView.onChange` — never during view evaluation. Repeated
+/// ticks with the same date are no-ops, so no duplicate stepping occurs.
 struct WarawaraExpressionDriverView: View {
     let rig: WarawaraRigManifest
     let rigLoader: WarawaraRigLoader
     let inputs: WarawaraExpressionInputs
     let renderSize: CGSize
 
-    @State private var animator = WarawaraParameterAnimator()
-    @State private var lastDate: Date?
+    @StateObject private var model = WarawaraExpressionDriverModel()
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-            let date = context.date
-            let dt = boundedDelta(from: lastDate, to: date)
-            let _ = DispatchQueue.main.async { self.lastDate = date }
-
-            // Breathing slows as the character drifts toward sleep.
-            let breathPeriod = 4.0 + 2.5 * animator.parameters.drowsiness
-            let breath = WarawaraExpressionDriver.breathPhase(
-                at: date.timeIntervalSinceReferenceDate,
-                period: breathPeriod
-            )
-            let blink = WarawaraExpressionDriver.blink(at: date.timeIntervalSinceReferenceDate)
-            let contextValue = WarawaraExpressionContext(
-                inputs: inputs,
-                breathPhase: breath,
-                floatPhase: inputs.floatProgress,
-                blink: blink
-            )
-            let target = WarawaraExpressionMapper.targetParameters(for: contextValue)
-            let parameters = withAnimationDisabled {
-                var copy = animator
-                copy.step(toward: target, dt: dt)
-                animator = copy
-                return copy.parameters
-            }
             WarawaraLayeredCharacterView(
                 rig: rig,
                 rigLoader: rigLoader,
-                parameters: parameters,
+                parameters: model.parameters,
                 renderSize: renderSize
             )
+            .onChange(of: context.date) { newDate in
+                model.tick(at: newDate, inputs: inputs)
+            }
         }
     }
+}
 
-    private func boundedDelta(from previous: Date?, to current: Date) -> TimeInterval {
-        guard let previous else { return 0 }
-        return min(max(current.timeIntervalSince(previous), 0), 0.1)
+/// The expression animator's state holder. All mutation happens in
+/// `tick`, which is idempotent per date (dt == 0 for repeated calls).
+final class WarawaraExpressionDriverModel: ObservableObject {
+    @Published private(set) var parameters = WarawaraPerformanceParameters.neutral
+
+    private var animator = WarawaraParameterAnimator()
+    private var lastDate: Date?
+
+    func tick(at date: Date, inputs: WarawaraExpressionInputs) {
+        let dt: TimeInterval
+        if let last = lastDate {
+            dt = min(max(date.timeIntervalSince(last), 0), 0.1)
+        } else {
+            dt = 0
+        }
+        lastDate = date
+
+        // Breathing slows as the character drifts toward sleep.
+        let breathPeriod = 4.0 + 2.5 * animator.parameters.drowsiness
+        let breath = WarawaraExpressionDriver.breathPhase(
+            at: date.timeIntervalSinceReferenceDate,
+            period: breathPeriod
+        )
+        let blink = WarawaraExpressionDriver.blink(at: date.timeIntervalSinceReferenceDate)
+        let context = WarawaraExpressionContext(
+            inputs: inputs,
+            breathPhase: breath,
+            floatPhase: inputs.floatProgress,
+            blink: blink
+        )
+        let target = WarawaraExpressionMapper.targetParameters(for: context)
+        animator.step(toward: target, dt: dt)
+        parameters = animator.parameters
     }
 
-    /// Animator mutation inside the timeline closure must not trigger
-    /// view updates mid-frame; step synchronously and return the value.
-    private func withAnimationDisabled<T>(_ body: () -> T) -> T {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        return withTransaction(transaction) { body() }
-    }
+    /// Test/diagnostic access to the smoothed state.
+    var animatorParameters: WarawaraPerformanceParameters { animator.parameters }
 }
 
 /// Pure, testable time helpers for the expression driver.

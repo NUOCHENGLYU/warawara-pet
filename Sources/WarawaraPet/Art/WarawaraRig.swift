@@ -46,6 +46,15 @@ struct WarawaraRigManifest: Codable, Equatable {
     var eyesLayer: Layer? { layers[LayerKind.eyes.rawValue] }
     var mouthLayer: Layer? { layers[LayerKind.mouth.rawValue] }
 
+    /// Diagnostic/preview helper: the same rig with only the given layer
+    /// keys (used by static composition audits — never in production
+    /// rendering).
+    func withOnlyLayers(_ keys: [String]) -> WarawaraRigManifest {
+        var copy = self
+        copy.layers = layers.filter { keys.contains($0.key) }
+        return copy
+    }
+
     /// Strict validation: any invalid geometry falls back to the
     /// single-sprite pipeline instead of rendering garbage.
     static func validated(_ manifest: WarawaraRigManifest) -> WarawaraRigManifest? {

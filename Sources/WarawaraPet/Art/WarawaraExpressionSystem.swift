@@ -86,7 +86,11 @@ enum WarawaraExpressionMapper {
             p.gazeY = gazeY
             p.mouthStyle = .neutral
             p.mouthOpenAmount = 0.12 * focus
-            p.bodyTilt = 0.04 * gazeX
+            // Coordinated whole-character turn: lean and a slight
+            // horizontal squash toward the gaze (the renderer adds the
+            // small translation on top of these).
+            p.bodyTilt = 0.05 * gazeX
+            p.bodySquashX = 1 - 0.02 * abs(gazeX)
         case .hop:
             // Mildly alert during flight; mouth opens mid-hop.
             p.eyeOpenness = 1
@@ -142,13 +146,11 @@ enum WarawaraExpressionMapper {
             p.bodySquashY = 0.97
         }
 
-        // Blink multiplies openness everywhere except deep sleep (already
-        // closed) — continuous, never an open/closed flip. The multiplier
-        // reaches near-zero so the closed-eye artwork is clearly readable.
-        let blinkDamp = 1 - 0.95 * clamp(context.blink, 0, 1)
-        if inputs.state != .sleeping {
-            p.eyeOpenness *= blinkDamp
-        }
+        // Blink ownership: blink is a FAST, unsmoothed channel passed
+        // straight through to the renderer (blinkAmount). It is NOT
+        // multiplied into eyeOpenness, which belongs to the slow
+        // state-driven channel and would be smoothed into invisibility.
+        p.blinkAmount = clamp(context.blink, 0, 1)
 
         p.breathPhase = context.breathPhase
         return p.clamped()
@@ -238,11 +240,15 @@ struct WarawaraParameterAnimator {
         parameters.bodyTilt = Self.approach(parameters.bodyTilt, t.bodyTilt, dt: dtF, tau: tuning.bodyResponse)
 
         // Press uses asymmetric response: fast squash on press, slower
-        // springy release on recovery 鈥?no instant snap-back.
+        // springy release on recovery — no instant snap-back.
         let pressTau = t.pressAmount > parameters.pressAmount
             ? tuning.pressAttackResponse
             : tuning.pressReleaseResponse
         parameters.pressAmount = Self.approach(parameters.pressAmount, t.pressAmount, dt: dtF, tau: pressTau)
+
+        // Blink is a fast transient: pass through unsmoothed so a full
+        // blink always reaches a visibly closed eye state.
+        parameters.blinkAmount = t.blinkAmount
 
         // Mouth style: adopt the target style but let the renderer
         // crossfade the images; the style value itself eases through the
