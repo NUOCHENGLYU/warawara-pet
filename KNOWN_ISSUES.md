@@ -52,16 +52,17 @@ are intentionally deferred:
    state->parameter mapper, easing animator, body/eyes/mouth renderer,
    rig loader) is implemented, tested, and now ACTIVE with the
    ChatGPT-supplied rig assets (Assets/WarawaraRig, 12 registered
-   1024x1024 layers; --verify-sprites reports rig=loaded). Known
-   limitations: eye multi-level crossfades (open/half/closed) and
-   focused/pressed overlays are opacity blends of registered layers, so
-   brief transient semi-transparency is possible during fast blinks
-   (blinks are now asymmetric close-hold-reopen and clearly readable);
-   the blink schedule is a deterministic two-period pattern awaiting
-   real tuning; independent limb artwork (with shoulder/foot pivots and
-   a masked body revision) is required before limbs can animate without
-   duplicating the painted arms/feet — see the rig README for the exact
-   contract.
+   1024x1024 layers; --verify-sprites reports rig=loaded). Phase 5D fixed
+   the blink/gaze rendering defects: blink is now a fast unsmoothed
+   channel composed at render time (full closure guaranteed), eye-layer
+   composition uses normalized mutually-exclusive weights (no additive
+   double eyes), and curious gaze is a single coordinated whole-character
+   turn (translation + tilt + squash) with only subtle eye-local
+   tracking. Remaining limitations: the blink schedule is a
+   deterministic two-period pattern awaiting real tuning; independent
+   limb artwork (with shoulder/foot pivots and a masked body revision)
+   is required before limbs can animate without duplicating the painted
+   arms/feet — see the rig README for the exact contract.
 
 ## Platform
 

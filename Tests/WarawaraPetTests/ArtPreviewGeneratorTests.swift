@@ -469,13 +469,19 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         try renderRigMouthStyles(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
         try renderRigMainVsCompanion(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
         try renderRigSleepZ(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigStaticComposition(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigOpennessSteps(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigHeldGaze(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigBlinkTimeline(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
 
         for name in ["18-rig-neutral.png", "19-rig-old-vs-recomposed.png",
                      "20-rig-gaze.png", "21-rig-blink.png", "22-rig-openness.png",
                      "23-rig-sleep-wake.png", "24-rig-wake.png",
                      "25-rig-press-rebound.png", "26-rig-drag.png",
                      "27-rig-mouth-styles.png", "28-rig-main-vs-companion.png",
-                     "29-rig-sleep-z.png"] {
+                     "29-rig-sleep-z.png", "30-rig-static-composition.png",
+                     "31-rig-openness-steps.png", "32-rig-held-gaze.png",
+                     "33-rig-blink-timeline.png"] {
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
                 "missing rig preview \(name)"
@@ -819,6 +825,101 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         }
         try render(content, size: CGSize(width: 460, height: 520), scale: 1,
                    to: dir.appendingPathComponent("29-rig-sleep-z.png"))
+    }
+
+    @MainActor
+    private func renderRigStaticComposition(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        // Static composition audit (real packaged art, same renderer):
+        // proves body carries no baked face, eye variants composite with
+        // normalized weights, and closed eyes leave no open remnant.
+        let bodyOnly = rig.withOnlyLayers(["body"])
+        let eyesOnly = rig.withOnlyLayers(["eyes"])
+        let bodyAndEyes = rig.withOnlyLayers(["body", "eyes"])
+        var closedParams = idleParameters()
+        closedParams.eyeOpenness = 0
+
+        func cell(_ title: String, rigVariant: WarawaraRigManifest, params: WarawaraPerformanceParameters) -> some View {
+            VStack(spacing: 2) {
+                WarawaraLayeredCharacterView(
+                    rig: rigVariant, rigLoader: rigLoader, parameters: params, renderSize: renderSize
+                )
+                Text(title).font(.caption2)
+            }
+        }
+
+        let content = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 8) {
+                Text("static composition audit (real rig assets)").font(.headline)
+                HStack(spacing: 10) {
+                    cell("A body only", rigVariant: bodyOnly, params: idleParameters())
+                    cell("B eyes_open only", rigVariant: eyesOnly, params: idleParameters())
+                    cell("C eyes_closed only", rigVariant: eyesOnly, params: closedParams)
+                    cell("D body+open", rigVariant: bodyAndEyes, params: idleParameters())
+                    cell("E body+closed", rigVariant: bodyAndEyes, params: closedParams)
+                    cell("F final neutral", rigVariant: rig, params: idleParameters())
+                }
+            }
+        }
+        try render(content, size: CGSize(width: 1600, height: 420), scale: 1,
+                   to: dir.appendingPathComponent("30-rig-static-composition.png"))
+    }
+
+    @MainActor
+    private func renderRigOpennessSteps(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        let samples: [(String, WarawaraPerformanceParameters)] = [1.0, 0.75, 0.5, 0.25, 0].map { openness in
+            var p = self.idleParameters()
+            p.eyeOpenness = openness
+            return ("\(Int(openness * 100))%", p)
+        }
+        try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "eye openness steps (normalized weights)", to: dir, named: "31-rig-openness-steps.png")
+    }
+
+    @MainActor
+    private func renderRigHeldGaze(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        // Stationary cursor held off-center for 3 s through the PRODUCTION
+        // driver model; samples show the converged, stable gaze.
+        func heldParameters(direction: CGVector) -> WarawaraPerformanceParameters {
+            let model = WarawaraExpressionDriverModel()
+            let inputs = direction == .zero
+                ? WarawaraExpressionInputs(state: .idle)
+                : WarawaraExpressionInputs(state: .curious, gaze: direction)
+            let start = 3000.0
+            for frame in 0..<90 {
+                model.tick(at: Date(timeIntervalSinceReferenceDate: start + Double(frame) / 30.0), inputs: inputs)
+            }
+            return model.parameters
+        }
+        let samples: [(String, WarawaraPerformanceParameters)] = [
+            ("left 3s", heldParameters(direction: CGVector(dx: -0.7, dy: 0))),
+            ("center 3s", heldParameters(direction: .zero)),
+            ("right 3s", heldParameters(direction: CGVector(dx: 0.7, dy: 0))),
+            ("up 3s", heldParameters(direction: CGVector(dx: 0, dy: 0.7)))
+        ]
+        try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "held gaze (stationary cursor, 3 s steady state)", to: dir, named: "32-rig-held-gaze.png")
+    }
+
+    @MainActor
+    private func renderRigBlinkTimeline(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        // One full blink sampled from the production waveform at 30 fps.
+        var samples: [(String, WarawaraPerformanceParameters)] = []
+        for frame in 0..<15 {
+            let t = Double(frame) / 30.0
+            let blink = WarawaraExpressionDriver.blinkPulse(t, period: 100, phase: 0)
+            samples.append((String(format: "%.2fs", t), idleParameters(blink: blink)))
+        }
+        try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "blink timeline (production waveform, 30 fps)", to: dir, named: "33-rig-blink-timeline.png")
     }
 
     private func renderComparisonNote(to dir: URL) throws {

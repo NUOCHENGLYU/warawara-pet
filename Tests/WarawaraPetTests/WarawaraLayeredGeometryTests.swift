@@ -26,27 +26,77 @@ final class WarawaraLayeredGeometryTests: XCTestCase {
         )
     }
 
-    func testFaceShiftIsBoundedAndSmall() {
+    func testTurnShiftIsBoundedAndSmall() {
         for gaze in [CGFloat(-2), -1, -0.5, 0, 0.5, 1, 2] {
-            let shift = WarawaraLayeredGeometry.faceShiftOffset(
+            let shift = WarawaraLayeredGeometry.turnShiftOffset(
                 axis: .x, gaze: gaze, renderSize: renderSize
             )
             XCTAssertTrue(shift.isFinite)
             XCTAssertTrue(
-                abs(shift) <= 0.02 * renderSize.width + 0.001,
-                "face shift must stay subtle"
+                abs(shift) <= 0.012 * renderSize.width + 0.001,
+                "turn shift must stay subtle"
             )
         }
         XCTAssertEqual(
-            WarawaraLayeredGeometry.faceShiftOffset(axis: .x, gaze: 1, renderSize: renderSize),
-            0.02 * renderSize.width,
+            WarawaraLayeredGeometry.turnShiftOffset(axis: .x, gaze: 1, renderSize: renderSize),
+            0.012 * renderSize.width,
             accuracy: 0.01
         )
         XCTAssertEqual(
-            WarawaraLayeredGeometry.faceShiftOffset(axis: .y, gaze: 1, renderSize: renderSize),
-            0.015 * renderSize.height,
+            WarawaraLayeredGeometry.turnShiftOffset(axis: .y, gaze: 1, renderSize: renderSize),
+            0.008 * renderSize.height,
             accuracy: 0.01
         )
+    }
+
+    func testEffectiveEyeOpennessReachesClosedOnFullBlink() {
+        // The blink channel must drive the final openness below 0.1 even
+        // though the state channel is fully open — this is what makes a
+        // blink visibly CLOSED in the production renderer.
+        let blinking = WarawaraLayeredGeometry.effectiveEyeOpenness(base: 1, blink: 1)
+        XCTAssertLessThanOrEqual(blinking, 0.1)
+        XCTAssertEqual(
+            WarawaraLayeredGeometry.effectiveEyeOpenness(base: 1, blink: 0),
+            1,
+            accuracy: 0.001
+        )
+        // Sleeping base zero stays closed no matter the blink channel.
+        XCTAssertEqual(
+            WarawaraLayeredGeometry.effectiveEyeOpenness(base: 0, blink: 1),
+            0,
+            accuracy: 0.001
+        )
+    }
+
+    func testComposedEyeWeightsNormalizeWithNoOpenRemnant() {
+        for openness in stride(from: 0.0, through: 1.0, by: 0.1) {
+            for focus in stride(from: 0.0, through: 1.0, by: 0.25) {
+                for press in stride(from: 0.0, through: 1.0, by: 0.25) {
+                    let w = WarawaraLayeredGeometry.composedEyeWeights(
+                        openness: CGFloat(openness),
+                        focus: CGFloat(focus),
+                        press: CGFloat(press)
+                    )
+                    XCTAssertLessThanOrEqual(w.total, 1.001, "eye weights must never exceed 1")
+                    XCTAssertTrue(w.lowerWeight >= 0 && w.upperWeight >= 0)
+                    XCTAssertTrue(w.focusedWeight >= 0 && w.pressedWeight >= 0)
+                }
+            }
+        }
+        // Fully closed: the closed artwork is opaque, open has no remnant.
+        let closed = WarawaraLayeredGeometry.composedEyeWeights(openness: 0, focus: 0, press: 0)
+        XCTAssertEqual(closed.lowerIsOpen, false)
+        XCTAssertEqual(closed.lowerWeight, 0, accuracy: 0.001)
+        XCTAssertEqual(closed.upperWeight, 1, accuracy: 0.001)
+        // Fully open neutral: only the open artwork.
+        let open = WarawaraLayeredGeometry.composedEyeWeights(openness: 1, focus: 0, press: 0)
+        XCTAssertEqual(open.lowerIsOpen, true)
+        XCTAssertEqual(open.lowerWeight, 1, accuracy: 0.001)
+        XCTAssertEqual(open.upperWeight, 0, accuracy: 0.001)
+        // Curious focus REPLACES part of the base instead of adding.
+        let focused = WarawaraLayeredGeometry.composedEyeWeights(openness: 1, focus: 0.6, press: 0)
+        XCTAssertEqual(focused.focusedWeight, 0.6, accuracy: 0.001)
+        XCTAssertEqual(focused.lowerWeight + focused.upperWeight, 0.4, accuracy: 0.001)
     }
 
     func testBreathScaleIsContinuousAndBounded() {

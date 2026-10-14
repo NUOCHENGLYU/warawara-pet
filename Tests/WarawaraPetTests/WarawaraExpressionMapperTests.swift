@@ -49,9 +49,10 @@ final class WarawaraExpressionMapperTests: XCTestCase {
         )
         XCTAssertEqual(p.gazeX, 0.6, accuracy: 0.001)
         XCTAssertEqual(p.gazeY, -0.4, accuracy: 0.001)
-        // Coordinated turn: body leans toward the gaze on top of the pose
-        // pipeline, mouth softens slightly when focused.
-        XCTAssertEqual(p.bodyTilt, 0.04 * 0.6, accuracy: 0.001)
+        // Coordinated turn: body leans and squashes slightly toward the
+        // gaze (renderer adds the small translation on top).
+        XCTAssertEqual(p.bodyTilt, 0.05 * 0.6, accuracy: 0.001)
+        XCTAssertEqual(p.bodySquashX, 1 - 0.02 * 0.6, accuracy: 0.001)
         let focus = WarawaraExpressionMapper.focusAmount(gazeX: 0.6, gazeY: -0.4)
         XCTAssertEqual(p.mouthOpenAmount, 0.12 * focus, accuracy: 0.001)
         XCTAssertEqual(p.mouthStyle, .neutral)
@@ -90,18 +91,26 @@ final class WarawaraExpressionMapperTests: XCTestCase {
         XCTAssertEqual(p.mouthStyle, .sleepy)
     }
 
-    func testBlinkDoesNotAffectSleepingButMultipliesOpennessElsewhere() {
+    func testBlinkIsAnUnsmoothChannelAndNeverTouchesOpenness() {
+        // Blink ownership: blinkAmount passes straight through (fast
+        // channel); eyeOpenness is the slow state channel.
         let idle = WarawaraExpressionMapper.targetParameters(
             for: context(state: .idle, blink: 1)
         )
-        // Full blink leaves the eye layer nearly at the closed artwork
-        // (multiplier 0.95) so blinks are clearly readable.
-        XCTAssertEqual(idle.eyeOpenness, 0.05, accuracy: 0.001)
+        XCTAssertEqual(idle.blinkAmount, 1, accuracy: 0.001)
+        XCTAssertEqual(idle.eyeOpenness, 1, accuracy: 0.001)
 
         let sleeping = WarawaraExpressionMapper.targetParameters(
             for: context(state: .sleeping, blink: 1)
         )
+        XCTAssertEqual(sleeping.blinkAmount, 1, accuracy: 0.001)
+        // Sleeping base openness stays fully closed; the renderer's
+        // effective-openness composition keeps it closed regardless of
+        // the blink channel.
         XCTAssertEqual(sleeping.eyeOpenness, 0, accuracy: 0.001)
+
+        let noBlink = WarawaraExpressionMapper.targetParameters(for: context())
+        XCTAssertEqual(noBlink.blinkAmount, 0, accuracy: 0.001)
     }
 
     // MARK: - Clicked / pressed
