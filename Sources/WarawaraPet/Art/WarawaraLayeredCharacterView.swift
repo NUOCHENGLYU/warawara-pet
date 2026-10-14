@@ -15,22 +15,32 @@ struct WarawaraLayeredCharacterView: View {
     @State private var previousMouthOpacity: Double = 0
 
     var body: some View {
-        // Head-turn hierarchy (single gaze application, canonical Y-up
-        // parameter convention converted to screen space exactly once):
+        // 2.5D head-turn hierarchy (single yaw/pitch source of truth):
         //   body pose (outer pipeline, untouched)
-        //   -> body silhouette bias toward the target (small)
-        //   -> shared face group (eyes + mouth together) with a larger
-        //      relative shift — the primary "turning to look" cue
+        //   -> body volume warp: perspective-aware strip redistribution
+        //      of the body raster (near side expands, far side narrows)
+        //      + far-side shading — the silhouette actually turns
+        //   -> shared facial frame: ONE affine remap of eyes + mouth
+        //      derived from the same yaw/pitch (face rides the near
+        //      side, eye spacing foreshortens) — never independent
+        //      per-layer translations
         //   -> minimal eye-local gaze inside the facial frame
-        //   -> whole-group lean + asymmetric squash complete the turn
+        //   -> whole-group breath / squash / lean (unchanged)
         ZStack {
             bodyLayer
-                .offset(x: bodyTurnX, y: bodyTurnY)
             Group {
                 eyesLayer
                 mouthLayer
             }
-            .offset(x: faceTurnX, y: faceTurnY)
+            .scaleEffect(
+                x: faceTransform?.scaleX ?? 1,
+                y: faceTransform?.scaleY ?? 1,
+                anchor: faceCenterUnit
+            )
+            .offset(
+                x: faceTransform?.offset(in: renderSize).width ?? 0,
+                y: faceTransform?.offset(in: renderSize).height ?? 0
+            )
         }
         .frame(width: renderSize.width, height: renderSize.height)
         .scaleEffect(breathScale, anchor: bodyCenterUnit)
@@ -49,27 +59,23 @@ struct WarawaraLayeredCharacterView: View {
         }
     }
 
-    private var bodyTurnX: CGFloat {
-        WarawaraLayeredGeometry.bodyTurnOffset(
-            axis: .x, gaze: parameters.gazeX, renderSize: renderSize
+    /// The shared facial remap derived from yaw/pitch; nil (and thus
+    /// exactly the accepted rendering) while the turn is inactive.
+    private var faceTransform: WarawaraTurnGeometry.FaceTransform? {
+        guard WarawaraTurnGeometry.isActive(
+            yawDegrees: parameters.yawDegrees,
+            pitchDegrees: parameters.pitchDegrees
+        ) else { return nil }
+        return WarawaraTurnGeometry.faceTransform(
+            yawDegrees: parameters.yawDegrees,
+            pitchDegrees: parameters.pitchDegrees
         )
     }
 
-    private var bodyTurnY: CGFloat {
-        WarawaraLayeredGeometry.bodyTurnOffset(
-            axis: .y, gaze: parameters.gazeY, renderSize: renderSize
-        )
-    }
-
-    private var faceTurnX: CGFloat {
-        WarawaraLayeredGeometry.faceTurnOffset(
-            axis: .x, gaze: parameters.gazeX, renderSize: renderSize
-        )
-    }
-
-    private var faceTurnY: CGFloat {
-        WarawaraLayeredGeometry.faceTurnOffset(
-            axis: .y, gaze: parameters.gazeY, renderSize: renderSize
+    private var faceCenterUnit: UnitPoint {
+        UnitPoint(
+            x: rig.eyesLayer?.anchor.x ?? 0.5,
+            y: rig.eyesLayer?.anchor.y ?? 0.5
         )
     }
 
@@ -78,7 +84,21 @@ struct WarawaraLayeredCharacterView: View {
     @ViewBuilder
     private var bodyLayer: some View {
         if let layer = rig.bodyLayer, let image = rigLoader.image(forLayer: layer, role: "base") {
-            layerImage(image, layer: layer)
+            if WarawaraTurnGeometry.isActive(
+                yawDegrees: parameters.yawDegrees,
+                pitchDegrees: parameters.pitchDegrees
+            ) {
+                // Perspective-aware volume warp of the real body raster.
+                WarawaraWarpedBodyView(
+                    image: image,
+                    renderSize: renderSize,
+                    bodyBounds: rig.bodyBounds,
+                    yawDegrees: parameters.yawDegrees,
+                    pitchDegrees: parameters.pitchDegrees
+                )
+            } else {
+                layerImage(image, layer: layer)
+            }
         }
     }
 
@@ -210,6 +230,66 @@ struct WarawaraLayeredCharacterView: View {
     }
 }
 
+/// Draws the body raster with a perspective-aware strip warp: 14
+/// vertical strips whose widths follow WarawaraTurnGeometry's smooth
+/// profile, plus a far-side shading gradient clipped to the warped
+/// silhouette. Pure redraw per frame of a handful of image slices —
+/// no bitmap generation, deterministic, cheap.
+struct WarawaraWarpedBodyView: View {
+    let image: NSImage
+    let renderSize: CGSize
+    let bodyBounds: CGRect
+    let yawDegrees: CGFloat
+    let pitchDegrees: CGFloat
+
+    private let stripCount = 14
+
+    var body: some View {
+        Canvas { context, size in
+            let strips = WarawaraTurnGeometry.strips(
+                count: stripCount,
+                canvasSize: size,
+                bodyBounds: bodyBounds,
+                yawDegrees: yawDegrees,
+                pitchDegrees: pitchDegrees
+            )
+            guard let cgImage = image.cgImage(
+                forProposedRect: nil, context: nil, hints: nil
+            ) else { return }
+            let drawable = Image(decorative: cgImage, scale: 1)
+
+            var silhouette = Path()
+            for strip in strips {
+                silhouette.addRect(strip.destination)
+            }
+            context.clip(to: silhouette)
+            for strip in strips {
+                context.draw(drawable, in: strip.destination, from: strip.source)
+            }
+
+            // Far-side depth shading over the warped silhouette only.
+            let shade = WarawaraTurnGeometry.shadeStrength(yawDegrees: yawDegrees)
+            if shade > 0.001 {
+                let farSideOnLeft = yawDegrees >= 0
+                let gradient = Gradient(stops: [
+                    .init(color: Color.black.opacity(Double(shade)), location: farSideOnLeft ? 0 : 1),
+                    .init(color: .clear, location: farSideOnLeft ? 0.45 : 0.55)
+                ])
+                let farEdge = farSideOnLeft ? 0.0 : 1.0
+                context.fill(
+                    silhouette,
+                    with: .linearGradient(
+                        gradient,
+                        startPoint: CGPoint(x: farEdge * size.width, y: 0),
+                        endPoint: CGPoint(x: (1 - farEdge) * size.width, y: 0)
+                    )
+                )
+            }
+        }
+        .frame(width: renderSize.width, height: renderSize.height)
+    }
+}
+
 /// Pure, testable geometry helpers shared by the layered renderer.
 enum WarawaraLayeredGeometry {
     enum Axis { case x, y }
@@ -232,36 +312,6 @@ enum WarawaraLayeredGeometry {
     private static func screenAxis(_ axis: Axis, gaze: CGFloat) -> CGFloat {
         let clamped = min(max(gaze, -1), 1)
         return axis == .y ? -clamped : clamped
-    }
-
-    /// Body silhouette bias toward the attention target: small, so the
-    /// face keeps a clear RELATIVE lead (see faceTurnOffset).
-    static func bodyTurnOffset(
-        axis: Axis,
-        gaze: CGFloat,
-        renderSize: CGSize
-    ) -> CGFloat {
-        let signed = screenAxis(axis, gaze: gaze)
-        switch axis {
-        case .x: return signed * 0.008 * renderSize.width
-        case .y: return signed * 0.005 * renderSize.height
-        }
-    }
-
-    /// Shared face-group shift (eyes + mouth together), relative to the
-    /// body. The primary head-turn cue: clearly larger than the body
-    /// bias and the eye-local gaze, so the face visibly turns toward
-    /// the cursor instead of the eyes sliding alone.
-    static func faceTurnOffset(
-        axis: Axis,
-        gaze: CGFloat,
-        renderSize: CGSize
-    ) -> CGFloat {
-        let signed = screenAxis(axis, gaze: gaze)
-        switch axis {
-        case .x: return signed * 0.020 * renderSize.width
-        case .y: return signed * 0.014 * renderSize.height
-        }
     }
 
     /// Eye layer gaze offset, bounded by the rig's gazeRange.

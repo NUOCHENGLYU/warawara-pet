@@ -50,6 +50,9 @@ struct WarawaraExpressionTuning {
     var dragResponse: TimeInterval = 0.08
     /// Internal body squash/tilt.
     var bodyResponse: TimeInterval = 0.25
+    /// Spatial turn (yaw/pitch) easing: natural settle into a turned
+    /// pose and an equally smooth return to neutral.
+    var turnResponse: TimeInterval = 0.28
     /// Mouth style crossfade handled by the renderer; this paces the
     /// open-amount and style decision cadence.
     var styleResponse: TimeInterval = 0.22
@@ -74,24 +77,22 @@ enum WarawaraExpressionMapper {
             p.mouthStyle = .neutral
             p.mouthOpenAmount = 0
         case .curious:
-            // Coordinated "turning to look": eyes track the cursor, the
-            // mouth softens slightly, and the body leans a little toward
-            // the gaze on top of the existing pose pipeline lean. The
-            // layered renderer additionally shifts the face group.
+            // Coordinated 2.5D turn: the smoothed gaze drives spatial
+            // yaw/pitch (volume turning, not screen-plane roll). The
+            // renderer warps the body and remaps the shared facial frame
+            // from these same values.
             let gazeX = clamp(inputs.gaze.dx, -1, 1)
             let gazeY = clamp(inputs.gaze.dy, -1, 1)
             let focus = focusAmount(gazeX: gazeX, gazeY: gazeY)
             p.eyeOpenness = 1
             p.gazeX = gazeX
             p.gazeY = gazeY
+            p.yawDegrees = gazeX * WarawaraTurnGeometry.maxYawDegrees
+            p.pitchDegrees = gazeY * WarawaraTurnGeometry.maxPitchDegrees
             p.mouthStyle = .neutral
             p.mouthOpenAmount = 0.12 * focus
-            // Coordinated whole-character turn. The sign matches the
-            // ACCEPTED pose pipeline convention (cursor right -> negative
-            // SwiftUI rotation -> leans toward the cursor), so the two
-            // leans ADD instead of cancelling.
-            p.bodyTilt = -0.05 * gazeX
-            p.bodySquashX = 1 - 0.03 * abs(gazeX)
+            p.bodyTilt = 0
+            p.bodySquashX = 1
         case .hop:
             // Mildly alert during flight; mouth opens mid-hop.
             p.eyeOpenness = 1
@@ -217,6 +218,12 @@ struct WarawaraParameterAnimator {
         )
         parameters.gazeX = Self.approach(parameters.gazeX, t.gazeX, dt: dtF, tau: tuning.gazeResponse)
         parameters.gazeY = Self.approach(parameters.gazeY, t.gazeY, dt: dtF, tau: tuning.gazeResponse)
+        parameters.yawDegrees = Self.approach(
+            parameters.yawDegrees, t.yawDegrees, dt: dtF, tau: tuning.turnResponse
+        )
+        parameters.pitchDegrees = Self.approach(
+            parameters.pitchDegrees, t.pitchDegrees, dt: dtF, tau: tuning.turnResponse
+        )
         parameters.mouthOpenAmount = Self.approach(
             parameters.mouthOpenAmount, t.mouthOpenAmount,
             dt: dtF, tau: tuning.mouthResponse

@@ -22,9 +22,14 @@ struct WarawaraPerformanceParameters: Equatable {
     /// Composed with `eyeOpenness` at render time — deliberately outside
     /// the animator's smoothing so blinks stay visually complete.
     var blinkAmount: CGFloat = 0
-    /// Gaze direction, signed: -1...1 in each axis (right/up positive).
+    /// Signed gaze direction, -1...1 in each axis (right/up positive).
     var gazeX: CGFloat = 0
     var gazeY: CGFloat = 0
+    /// Spatial turning parameters (degrees). Yaw: positive turns the
+    /// character's volume to the RIGHT; pitch: positive looks UP. Derived
+    /// from the smoothed gaze; NOT screen-plane roll.
+    var yawDegrees: CGFloat = 0
+    var pitchDegrees: CGFloat = 0
     /// Mouth shape; transitions are crossfaded by the renderer.
     var mouthStyle: WarawaraMouthStyle = .soft
     /// Mouth opening amount on top of the style shape: 0...1.
@@ -65,6 +70,8 @@ struct WarawaraPerformanceParameters: Equatable {
         copy.blinkAmount = min(max(blinkAmount, 0), 1)
         copy.gazeX = min(max(gazeX, -1), 1)
         copy.gazeY = min(max(gazeY, -1), 1)
+        copy.yawDegrees = WarawaraTurnGeometry.clampedYaw(yawDegrees)
+        copy.pitchDegrees = WarawaraTurnGeometry.clampedPitch(pitchDegrees)
         copy.mouthOpenAmount = min(max(mouthOpenAmount, 0), 1)
         copy.drowsiness = min(max(drowsiness, 0), 1)
         copy.pressAmount = min(max(pressAmount, 0), 1)
