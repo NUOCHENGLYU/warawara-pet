@@ -29,8 +29,11 @@ final class WarawaraTurnGeometryTests: XCTestCase {
             height: bodyBounds.height * canvas.height
         )
         for strip in strips {
-            XCTAssertEqual(strip.source, strip.destination, accuracy: 0.0001,
+            XCTAssertEqual(strip.source.minX, strip.destination.minX, accuracy: 0.0001,
                            "zero yaw must reproduce the accepted artwork exactly")
+            XCTAssertEqual(strip.source.minY, strip.destination.minY, accuracy: 0.0001)
+            XCTAssertEqual(strip.source.width, strip.destination.width, accuracy: 0.0001)
+            XCTAssertEqual(strip.source.height, strip.destination.height, accuracy: 0.0001)
         }
         XCTAssertEqual(
             strips.last?.destination.maxX ?? 0, bodyRect.maxX, accuracy: 0.0001
