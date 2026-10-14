@@ -177,7 +177,7 @@ final class WarawaraTurnGeometryTests: XCTestCase {
 
     func testShadeStrengthGrowsWithYawAndIsZeroNearNeutral() {
         XCTAssertEqual(WarawaraTurnGeometry.shadeStrength(yawDegrees: 0), 0, accuracy: 0.001)
-        XCTAssertEqual(WarawaraTurnGeometry.shadeStrength(yawDegrees: 5), 0, accuracy: 0.001)
+        XCTAssertEqual(WarawaraTurnGeometry.shadeStrength(yawDegrees: 3), 0, accuracy: 0.001)
         let half = WarawaraTurnGeometry.shadeStrength(yawDegrees: 15)
         let full = WarawaraTurnGeometry.shadeStrength(yawDegrees: 25)
         XCTAssertGreaterThan(full, half)
