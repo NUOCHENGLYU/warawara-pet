@@ -9,6 +9,20 @@ final class CuriosityPoseTests: XCTestCase {
         return t
     }
 
+    func testDeadbandZeroesTinyDirections() {
+        XCTAssertEqual(
+            CuriosityPoseMath.deadbanded(CGVector(dx: 0.01, dy: 0), threshold: 0.02),
+            .zero
+        )
+        XCTAssertEqual(
+            CuriosityPoseMath.deadbanded(CGVector(dx: -0.015, dy: 0.01), threshold: 0.02),
+            .zero
+        )
+        let kept = CuriosityPoseMath.deadbanded(CGVector(dx: 0.5, dy: 0), threshold: 0.02)
+        XCTAssertEqual(kept.dx, 0.5, accuracy: 0.001)
+        XCTAssertEqual(kept.dy, 0, accuracy: 0.001)
+    }
+
     func testNeutralWhenNoDwellProgress() {
         let pose = CuriosityPoseMath.pose(
             direction: CGVector(dx: 1, dy: 0),
@@ -49,8 +63,7 @@ final class CuriosityPoseTests: XCTestCase {
         XCTAssertEqual(pose.stretchAngle, .pi / 2, accuracy: 0.0001)
     }
 
-    func testRotationIsClampedForLargeMagnitudes() {
-        let pose = CuriosityPoseMath.pose(
+    func testRotationIsClampedForLargeMagnitudes() {        let pose = CuriosityPoseMath.pose(
             direction: CGVector(dx: 3, dy: 0),
             dwellProgress: 1,
             tuning: tuning

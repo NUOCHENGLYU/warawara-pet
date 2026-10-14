@@ -468,12 +468,14 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         try renderRigDragReaction(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
         try renderRigMouthStyles(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
         try renderRigMainVsCompanion(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigSleepZ(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
 
         for name in ["18-rig-neutral.png", "19-rig-old-vs-recomposed.png",
                      "20-rig-gaze.png", "21-rig-blink.png", "22-rig-openness.png",
                      "23-rig-sleep-wake.png", "24-rig-wake.png",
                      "25-rig-press-rebound.png", "26-rig-drag.png",
-                     "27-rig-mouth-styles.png", "28-rig-main-vs-companion.png"] {
+                     "27-rig-mouth-styles.png", "28-rig-main-vs-companion.png",
+                     "29-rig-sleep-z.png"] {
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
                 "missing rig preview \(name)"
@@ -623,15 +625,23 @@ final class ArtPreviewGeneratorTests: XCTestCase {
     private func renderRigBlinkProgression(
         rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
     ) throws {
-        let samples: [(String, WarawaraPerformanceParameters)] = [
-            ("open", idleParameters(blink: 0)),
-            ("closing", idleParameters(blink: 0.4)),
-            ("half", idleParameters(blink: 0.75)),
-            ("closed", idleParameters(blink: 1)),
-            ("reopening", idleParameters(blink: 0.5))
+        // Samples taken from the REAL blink waveform (asymmetric close,
+        // closed hold, slower reopen).
+        let origin: TimeInterval = 0
+        let blinkSamples: [(String, TimeInterval)] = [
+            ("open", 0),
+            ("closing +0.03s", 0.03),
+            ("hold +0.08s", 0.08),
+            ("reopening +0.15s", 0.15),
+            ("open +0.4s", 0.4)
         ]
+        let samples = blinkSamples.map { name, offset in
+            (name, idleParameters(blink: WarawaraExpressionDriver.blinkPulse(
+                origin + offset, period: 100, phase: 0
+            )))
+        }
         try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
-                           title: "blink progression (continuous)", to: dir, named: "21-rig-blink.png")
+                           title: "blink progression (real waveform)", to: dir, named: "21-rig-blink.png")
     }
 
     @MainActor
@@ -779,6 +789,36 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         }
         try render(content, size: CGSize(width: 800, height: 420), scale: 1,
                    to: dir.appendingPathComponent("28-rig-main-vs-companion.png"))
+    }
+
+    @MainActor
+    private func renderRigSleepZ(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        // Demonstrates the sleep "Z" origin: above the head top, using
+        // the same PetMetrics constants as the live view.
+        let sleeping = WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+            inputs: WarawaraExpressionInputs(state: .sleeping), breathPhase: 0.7
+        ))
+        let content = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 6) {
+                Text("sleep Z origin (above head)").font(.headline)
+                ZStack {
+                    rigView(rig, rigLoader, sleeping, renderSize)
+                    Text("Z")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(Color(white: 0.55))
+                        .position(
+                            x: mainCanvas.width / 2 + 22,
+                            y: PetMetrics.sleepZBaseY
+                        )
+                }
+                .frame(width: mainCanvas.width, height: mainCanvas.height)
+            }
+        }
+        try render(content, size: CGSize(width: 460, height: 520), scale: 1,
+                   to: dir.appendingPathComponent("29-rig-sleep-z.png"))
     }
 
     private func renderComparisonNote(to dir: URL) throws {

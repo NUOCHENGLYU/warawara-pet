@@ -19,7 +19,7 @@
         "pressed": "eyes/eyes_pressed.png"
       },
       "anchor": [0.5, 0.5],
-      "gazeRange": [0.06, 0.03]
+      "gazeRange": [0.10, 0.05]
     },
     "mouth": {
       "kind": "mouth",

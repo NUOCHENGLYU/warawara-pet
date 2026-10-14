@@ -49,14 +49,27 @@ final class WarawaraExpressionMapperTests: XCTestCase {
         )
         XCTAssertEqual(p.gazeX, 0.6, accuracy: 0.001)
         XCTAssertEqual(p.gazeY, -0.4, accuracy: 0.001)
+        // Coordinated turn: body leans toward the gaze on top of the pose
+        // pipeline, mouth softens slightly when focused.
+        XCTAssertEqual(p.bodyTilt, 0.04 * 0.6, accuracy: 0.001)
+        let focus = WarawaraExpressionMapper.focusAmount(gazeX: 0.6, gazeY: -0.4)
+        XCTAssertEqual(p.mouthOpenAmount, 0.12 * focus, accuracy: 0.001)
+        XCTAssertEqual(p.mouthStyle, .neutral)
 
         let clamped = WarawaraExpressionMapper.targetParameters(
             for: context(state: .curious, gaze: CGVector(dx: 2.5, dy: -2.0))
         )
         XCTAssertEqual(clamped.gazeX, 1, accuracy: 0.001)
         XCTAssertEqual(clamped.gazeY, -1, accuracy: 0.001)
-        // Body lean is owned by the existing curiosity pose pipeline.
+    }
+
+    func testCuriousGazeOffProducesNoTurnOrMouthResponse() {
+        let p = WarawaraExpressionMapper.targetParameters(
+            for: context(state: .curious, gaze: .zero)
+        )
+        XCTAssertEqual(p.gazeX, 0, accuracy: 0.001)
         XCTAssertEqual(p.bodyTilt, 0, accuracy: 0.001)
+        XCTAssertEqual(p.mouthOpenAmount, 0, accuracy: 0.001)
     }
 
     // MARK: - Sleepy / sleeping
@@ -72,7 +85,7 @@ final class WarawaraExpressionMapperTests: XCTestCase {
 
     func testSleepingClosesEyesFully() {
         let p = WarawaraExpressionMapper.targetParameters(for: context(state: .sleeping))
-        XCTAssertEqual(p.eyeOpenness, 0.05, accuracy: 0.001)
+        XCTAssertEqual(p.eyeOpenness, 0, accuracy: 0.001)
         XCTAssertEqual(p.drowsiness, 1, accuracy: 0.001)
         XCTAssertEqual(p.mouthStyle, .sleepy)
     }
@@ -81,12 +94,14 @@ final class WarawaraExpressionMapperTests: XCTestCase {
         let idle = WarawaraExpressionMapper.targetParameters(
             for: context(state: .idle, blink: 1)
         )
-        XCTAssertEqual(idle.eyeOpenness, 0.2, accuracy: 0.001)
+        // Full blink leaves the eye layer nearly at the closed artwork
+        // (multiplier 0.95) so blinks are clearly readable.
+        XCTAssertEqual(idle.eyeOpenness, 0.05, accuracy: 0.001)
 
         let sleeping = WarawaraExpressionMapper.targetParameters(
             for: context(state: .sleeping, blink: 1)
         )
-        XCTAssertEqual(sleeping.eyeOpenness, 0.05, accuracy: 0.001)
+        XCTAssertEqual(sleeping.eyeOpenness, 0, accuracy: 0.001)
     }
 
     // MARK: - Clicked / pressed
@@ -188,5 +203,24 @@ final class WarawaraExpressionMapperTests: XCTestCase {
         XCTAssertEqual(maxValue, 1, accuracy: 0.01)
         XCTAssertGreaterThan(pulseCount, 3, "expects several blinks over 20 s")
         XCTAssertLessThan(pulseCount, 60, "blinks must be brief, not constant")
+    }
+
+    func testBlinkPulseIsAsymmetricWithClosedHold() {
+        // Close is faster than reopen, and the lid stays fully closed
+        // for a readable hold, so the blink is visible to a human.
+        let phase = 0.0
+        let close = WarawaraExpressionDriver.blinkPulse(phase + 0.03, period: 10, phase: 0)
+        let hold = WarawaraExpressionDriver.blinkPulse(phase + 0.08, period: 10, phase: 0)
+        let reopening = WarawaraExpressionDriver.blinkPulse(phase + 0.14, period: 10, phase: 0)
+        let after = WarawaraExpressionDriver.blinkPulse(phase + 0.4, period: 10, phase: 0)
+        XCTAssertGreaterThan(close, 0.5, "closing must be underway at 0.03 s")
+        XCTAssertEqual(hold, 1, accuracy: 0.001)
+        XCTAssertTrue(reopening > 0 && reopening < 1, "reopen must be gradual")
+        XCTAssertEqual(after, 0, accuracy: 0.001)
+        // Asymmetry: at symmetric offsets around the hold the closing
+        // value exceeds the reopening value (close faster than open).
+        let closingEarly = WarawaraExpressionDriver.blinkPulse(phase + 0.02, period: 10, phase: 0)
+        let reopeningLate = WarawaraExpressionDriver.blinkPulse(phase + 0.23, period: 10, phase: 0)
+        XCTAssertGreaterThan(closingEarly, reopeningLate)
     }
 }

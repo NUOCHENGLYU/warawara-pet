@@ -31,11 +31,12 @@ struct DeformationTuning {
     /// Gaps longer than this decay velocity toward zero (no spikes/freeze).
     var maxGapDuration: TimeInterval = 1.0
     /// Velocity (points/second) that produces exactly `maxStretch`.
-    var velocityAtMaxStretch: CGFloat = 600
+    var velocityAtMaxStretch: CGFloat = 800
     /// Speeds at or below this produce no deformation (noise gate).
     var minimumSpeed: CGFloat = 20
-    /// Maximum stretch amount: scaleAlong = 1 + maxStretch.
-    var maxStretch: CGFloat = 0.35
+    /// Maximum stretch amount: scaleAlong = 1 + maxStretch. Kept modest
+    /// so drags feel soft-but-firm rather than gooey.
+    var maxStretch: CGFloat = 0.24
     /// Hard cap for torque rotation in radians.
     var maxRotation: CGFloat = 0.12
     /// Radians per (grab-vector-unit * pt/s) of 2D torque.
@@ -47,8 +48,10 @@ struct DeformationTuning {
     /// in. Keeps normal movement (fast successive events) unaffected.
     var decayStartDelay: TimeInterval = 0.05
     /// Spring used to return deformation to neutral after release.
-    var releaseSpringResponse: Double = 0.3
-    var releaseSpringDamping: Double = 0.45
+    /// Slightly firmer than the pre-polish values: release settles
+    /// quicker with less wobble.
+    var releaseSpringResponse: Double = 0.25
+    var releaseSpringDamping: Double = 0.5
 
     static let `default` = DeformationTuning()
 }

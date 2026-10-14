@@ -26,6 +26,29 @@ final class WarawaraLayeredGeometryTests: XCTestCase {
         )
     }
 
+    func testFaceShiftIsBoundedAndSmall() {
+        for gaze in [CGFloat(-2), -1, -0.5, 0, 0.5, 1, 2] {
+            let shift = WarawaraLayeredGeometry.faceShiftOffset(
+                axis: .x, gaze: gaze, renderSize: renderSize
+            )
+            XCTAssertTrue(shift.isFinite)
+            XCTAssertTrue(
+                abs(shift) <= 0.02 * renderSize.width + 0.001,
+                "face shift must stay subtle"
+            )
+        }
+        XCTAssertEqual(
+            WarawaraLayeredGeometry.faceShiftOffset(axis: .x, gaze: 1, renderSize: renderSize),
+            0.02 * renderSize.width,
+            accuracy: 0.01
+        )
+        XCTAssertEqual(
+            WarawaraLayeredGeometry.faceShiftOffset(axis: .y, gaze: 1, renderSize: renderSize),
+            0.015 * renderSize.height,
+            accuracy: 0.01
+        )
+    }
+
     func testBreathScaleIsContinuousAndBounded() {
         for phase in stride(from: 0.0, through: 2.0, by: 0.1) {
             for drowsiness in [CGFloat(0), 0.5, 1] {

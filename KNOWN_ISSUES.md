@@ -41,13 +41,11 @@ are intentionally deferred:
 5. **Drag deformation envelope: worst-case corner overshoot.**
    The neutral artwork's body (≈115 pt wide × 118 pt tall) is wider than
    the Phase 1.6 placeholder (96 × 118) the deformation tuning was
-   verified against. At the absolute extreme (grab at the window edge +
-   max velocity + max torque rotation) the stretched corner can exceed
-   the 200 pt window by roughly 8–10 pt on one side; the placeholder
-   baseline already overshoots ~7 pt in the same corner case. All
-   normal-range deformation stays fully inside the window. Deformation
-   tuning was deliberately left unchanged; revisit only after real-Mac
-   testing if visible clipping occurs.
+   verified against. Phase 5C firmed the drag feel (maxStretch 0.35 →
+   0.24, velocity at max stretch 600 → 800 pt/s, slightly quicker release
+   spring), which also shrinks the theoretical extreme-corner overshoot
+   to a few points. All normal-range deformation stays fully inside the
+   window; revisit only if real-Mac testing shows visible clipping.
 
 6. **Phase 5B layered rig is active; limb art still pending.**
    The layered character system (continuous performance parameters,
@@ -57,8 +55,9 @@ are intentionally deferred:
    1024x1024 layers; --verify-sprites reports rig=loaded). Known
    limitations: eye multi-level crossfades (open/half/closed) and
    focused/pressed overlays are opacity blends of registered layers, so
-   brief transient semi-transparency is possible during fast blinks;
-   the blink pattern is a deterministic two-period placeholder awaiting
+   brief transient semi-transparency is possible during fast blinks
+   (blinks are now asymmetric close-hold-reopen and clearly readable);
+   the blink schedule is a deterministic two-period pattern awaiting
    real tuning; independent limb artwork (with shoulder/foot pivots and
    a masked body revision) is required before limbs can animate without
    duplicating the painted arms/feet — see the rig README for the exact

@@ -74,13 +74,19 @@ enum WarawaraExpressionMapper {
             p.mouthStyle = .neutral
             p.mouthOpenAmount = 0
         case .curious:
-            // Gaze follows the cursor direction (already smoothed by the
-            // curiosity tracker); the body lean is handled by the existing
-            // curiosity pose pipeline, so no double tilt here.
+            // Coordinated "turning to look": eyes track the cursor, the
+            // mouth softens slightly, and the body leans a little toward
+            // the gaze on top of the existing pose pipeline lean. The
+            // layered renderer additionally shifts the face group.
+            let gazeX = clamp(inputs.gaze.dx, -1, 1)
+            let gazeY = clamp(inputs.gaze.dy, -1, 1)
+            let focus = focusAmount(gazeX: gazeX, gazeY: gazeY)
             p.eyeOpenness = 1
-            p.gazeX = clamp(inputs.gaze.dx, -1, 1)
-            p.gazeY = clamp(inputs.gaze.dy, -1, 1)
+            p.gazeX = gazeX
+            p.gazeY = gazeY
             p.mouthStyle = .neutral
+            p.mouthOpenAmount = 0.12 * focus
+            p.bodyTilt = 0.04 * gazeX
         case .hop:
             // Mildly alert during flight; mouth opens mid-hop.
             p.eyeOpenness = 1
@@ -128,7 +134,7 @@ enum WarawaraExpressionMapper {
             p.bodySquashX = 1.02
             p.bodySquashY = 0.98
         case .sleeping:
-            p.eyeOpenness = 0.05
+            p.eyeOpenness = 0
             p.drowsiness = 1
             p.mouthStyle = .sleepy
             p.mouthOpenAmount = 0.15
@@ -137,8 +143,9 @@ enum WarawaraExpressionMapper {
         }
 
         // Blink multiplies openness everywhere except deep sleep (already
-        // closed) 鈥?continuous, never an open/closed flip.
-        let blinkDamp = 1 - 0.8 * clamp(context.blink, 0, 1)
+        // closed) — continuous, never an open/closed flip. The multiplier
+        // reaches near-zero so the closed-eye artwork is clearly readable.
+        let blinkDamp = 1 - 0.95 * clamp(context.blink, 0, 1)
         if inputs.state != .sleeping {
             p.eyeOpenness *= blinkDamp
         }
@@ -165,6 +172,14 @@ enum WarawaraExpressionMapper {
             dx: clamp(anchor.dx / limit, -1, 1),
             dy: clamp(anchor.dy / limit, -1, 1)
         )
+    }
+
+    /// Smooth 0...1 focus strength from the gaze magnitude (no threshold
+    /// snap when curiosity engages or disengages).
+    static func focusAmount(gazeX: CGFloat, gazeY: CGFloat) -> CGFloat {
+        let magnitude = min(hypot(gazeX, gazeY), 1)
+        let t = min(max((magnitude - 0.3) / 0.4, 0), 1)
+        return t * t * (3 - 2 * t)
     }
 
     private static func clamp(_ value: CGFloat, _ low: CGFloat, _ high: CGFloat) -> CGFloat {

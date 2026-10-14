@@ -284,8 +284,15 @@ final class PetController: ObservableObject {
             dwellProgress: 1,
             at: timestamp
         )
-        if curiosityPoseEstimator.direction != curiosityDirection {
-            curiosityDirection = curiosityPoseEstimator.direction
+        // Small deadband on the gaze publish only (the pose pipeline keeps
+        // the raw smoothed direction): a still cursor produces exactly
+        // zero gaze drift instead of micro-jitter.
+        let gaze = CuriosityPoseMath.deadbanded(
+            curiosityPoseEstimator.direction,
+            threshold: 0.02
+        )
+        if gaze != curiosityDirection {
+            curiosityDirection = gaze
         }
         publishCuriosityPoseIfChanged()
     }

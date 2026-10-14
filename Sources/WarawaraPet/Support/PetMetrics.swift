@@ -23,6 +23,14 @@ enum PetMetrics {
     /// origin), matching EllipseHitRegion's default region.
     static let visualCenter = CGPoint(x: size.width / 2, y: blobBottomPadding + blobHeight / 2)
 
+    /// Top-left Y (view coords) where the head top sits. The layered rig
+    /// and the placeholder share this line by construction (body bounds
+    /// and bottom padding agree), so the sleep "Z" is anchored to it.
+    static var headTopY: CGFloat { size.height - blobBottomPadding - blobHeight }
+
+    /// Base top-left Y for the sleep "Z": just above the head top.
+    static var sleepZBaseY: CGFloat { headTopY - 14 }
+
     /// Clearance between the blob's resting bottom and the window edge.
     static var bottomClearance: CGFloat { blobBottomPadding }
 

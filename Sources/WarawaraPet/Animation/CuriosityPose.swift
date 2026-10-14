@@ -30,6 +30,14 @@ enum CuriosityPoseMath {
             anchor: .zero
         )
     }
+
+    /// Zeroes tiny direction components so a stationary cursor produces
+    /// exactly no gaze drift (pure helper, used by the gaze publish only).
+    static func deadbanded(_ direction: CGVector, threshold: CGFloat) -> CGVector {
+        let magnitude = hypot(direction.dx, direction.dy)
+        guard magnitude > threshold else { return .zero }
+        return direction
+    }
 }
 
 /// Time-aware smoothing of the cursor direction into the curiosity pose.

@@ -75,6 +75,13 @@ final class PetMetricsTests: XCTestCase {
         XCTAssertEqual(PetMetrics.blobBottomPadding, 54)
     }
 
+    func testSleepZBaseYIsAboveTheHeadTop() {
+        // The sleep "Z" must emerge above the head, never from the body.
+        XCTAssertEqual(PetMetrics.headTopY, 54, accuracy: 0.01)
+        XCTAssertLessThan(PetMetrics.sleepZBaseY, PetMetrics.headTopY)
+        XCTAssertGreaterThan(PetMetrics.sleepZBaseY, 20, "Z must stay inside the window")
+    }
+
     func testVisualCenterIsDerivedFromPaddingAndHeight() {
         XCTAssertEqual(
             PetMetrics.visualCenter,

@@ -20,8 +20,14 @@ struct WarawaraLayeredCharacterView: View {
         // lean or breathing). Face-only offsets happen inside the group.
         ZStack {
             bodyLayer
-            eyesLayer
-            mouthLayer
+            // Eyes + mouth shift together toward the gaze direction: a
+            // small parallax that reads as the character turning to look,
+            // not just the eyes sliding.
+            Group {
+                eyesLayer
+                mouthLayer
+            }
+            .offset(x: faceShiftX, y: faceShiftY)
         }
         .frame(width: renderSize.width, height: renderSize.height)
         .scaleEffect(breathScale, anchor: bodyCenterUnit)
@@ -38,6 +44,18 @@ struct WarawaraLayeredCharacterView: View {
                 previousMouthOpacity = 0
             }
         }
+    }
+
+    private var faceShiftX: CGFloat {
+        WarawaraLayeredGeometry.faceShiftOffset(
+            axis: .x, gaze: parameters.gazeX, renderSize: renderSize
+        )
+    }
+
+    private var faceShiftY: CGFloat {
+        WarawaraLayeredGeometry.faceShiftOffset(
+            axis: .y, gaze: parameters.gazeY, renderSize: renderSize
+        )
     }
 
     // MARK: - Body
@@ -189,6 +207,20 @@ enum WarawaraLayeredGeometry {
         return 1 + 0.012 * sin(2 * .pi * breathPhase) * (0.4 + 0.6 * depth)
     }
 
+    /// Face-group parallax shift toward the gaze direction (eyes + mouth
+    /// move together; subtle, ~2% of the canvas per unit gaze).
+    static func faceShiftOffset(
+        axis: Axis,
+        gaze: CGFloat,
+        renderSize: CGSize
+    ) -> CGFloat {
+        let clamped = min(max(gaze, -1), 1)
+        switch axis {
+        case .x: return clamped * 0.02 * renderSize.width
+        case .y: return clamped * 0.015 * renderSize.height
+        }
+    }
+
     /// Eye layer gaze offset, bounded by the rig's gazeRange.
     static func gazeOffset(
         axis: Axis,
@@ -299,26 +331,41 @@ enum WarawaraExpressionDriver {
         return CGFloat(phase < 0 ? phase + 1 : phase)
     }
 
-    /// Blink strength 0...1: a raised-cosine pulse, mostly zero, with two
-    /// overlapping periods so blinks never feel metronomic. Deterministic
-    /// (placeholder until real tuning; no randomness in the render path).
+    /// Blink strength 0...1 with a natural asymmetric profile: quick
+    /// close (0.06 s), brief fully-closed hold (0.05 s), slower reopen
+    /// (0.15 s) — clearly visible to a human observer but still subtle.
+    /// Two overlapping periods avoid a metronomic feel. Deterministic
+    /// (no randomness in the render path).
     static func blink(at time: TimeInterval) -> CGFloat {
         max(
-            blinkPulse(time, period: 3.6, width: 0.16, phase: 0.3),
-            blinkPulse(time, period: 7.9, width: 0.16, phase: 5.1)
+            blinkPulse(time, period: 3.8, phase: 0.3),
+            blinkPulse(time, period: 7.6, phase: 5.1)
         )
     }
 
     static func blinkPulse(
         _ time: TimeInterval,
         period: TimeInterval,
-        width: TimeInterval,
+        width: TimeInterval = 0.26,
         phase: TimeInterval
     ) -> CGFloat {
         let x = (time + phase).truncatingRemainder(dividingBy: period)
         guard x >= 0, x < width else { return 0 }
-        let t = x / width
-        return CGFloat((1 - cos(2 * .pi * t)) / 2)
+        let closeDuration = 0.06
+        let holdDuration = 0.05
+        let reopenDuration = width - closeDuration - holdDuration
+        if x < closeDuration {
+            // Fast close, ease-in slightly for a natural lid drop.
+            let t = x / closeDuration
+            return CGFloat(t * (2 - t))
+        }
+        if x < closeDuration + holdDuration {
+            return 1
+        }
+        // Slower reopen with ease-out.
+        let t = (x - closeDuration - holdDuration) / reopenDuration
+        let eased = 1 - t * t * (3 - 2 * t)
+        return CGFloat(eased)
     }
 
     /// Canvas render size for the rig, matching the sprite pipeline's

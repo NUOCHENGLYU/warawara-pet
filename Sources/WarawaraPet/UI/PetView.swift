@@ -33,7 +33,6 @@ struct PetView: View {
                 .offset(y: bobOffset)
             if controller.state == .sleeping {
                 SleepIndicatorView()
-                    .offset(x: 22, y: 42)
             }
         }
         .frame(width: 200, height: 226, alignment: .bottom)
@@ -167,6 +166,9 @@ private struct PoseEffect: ViewModifier {
     }
 }
 
+/// The sleeping "Z" rises from just ABOVE the head (head top is fixed at
+/// blobBottomPadding + blobHeight below the window top for both the rig
+/// and the legacy renderers), then drifts further upward and fades.
 private struct SleepIndicatorView: View {
     @State private var rising = false
 
@@ -174,8 +176,12 @@ private struct SleepIndicatorView: View {
         Text("Z")
             .font(.system(size: 14, weight: .bold, design: .rounded))
             .foregroundColor(Color(white: 0.55))
+            .position(
+                x: PetMetrics.size.width / 2 + 22,
+                y: PetMetrics.sleepZBaseY
+            )
+            .offset(y: rising ? -30 : 0)
             .opacity(rising ? 0 : 0.7)
-            .offset(y: rising ? 26 : 0)
             .onAppear { rising = true }
             .animation(.easeOut(duration: 2.8).repeatForever(autoreverses: false), value: rising)
     }
