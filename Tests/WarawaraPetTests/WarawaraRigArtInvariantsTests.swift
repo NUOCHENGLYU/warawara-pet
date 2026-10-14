@@ -90,7 +90,8 @@ final class WarawaraRigArtInvariantsTests: XCTestCase {
     }
 
     func testEyeVariantsAreRegisteredWithinTolerance() throws {
-        let variants = ["eyes_open", "eyes_half", "eyes_closed", "eyes_focused", "eyes_pressed"]
+        let variants = ["eyes/eyes_open", "eyes/eyes_half", "eyes/eyes_closed",
+                        "eyes/eyes_focused", "eyes/eyes_pressed"]
         var centroids: [String: [(Double, Double)]] = [:]
         for name in variants {
             guard let rep = try bitmap(named: "\(name).png") else { continue }
@@ -98,7 +99,7 @@ final class WarawaraRigArtInvariantsTests: XCTestCase {
             XCTAssertEqual(centers.count, 2, "\(name) must have exactly two eye clusters")
             centroids[name] = centers
         }
-        guard let reference = centroids["eyes_open"] else {
+        guard let reference = centroids["eyes/eyes_open"] else {
             throw XCTSkip("eyes_open missing")
         }
         for (name, centers) in centroids where name != "eyes_open" {
