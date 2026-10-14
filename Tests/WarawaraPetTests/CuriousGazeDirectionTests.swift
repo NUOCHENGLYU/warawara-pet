@@ -78,7 +78,7 @@ final class CuriousGazeDirectionTests: XCTestCase {
 
         let renderSize = CGSize(width: 143.9, height: 143.9)
         let eyeY = WarawaraLayeredGeometry.gazeOffset(
-            axis: .y, gaze: params.gazeY, range: 0.04, renderSize: renderSize
+            axis: .y, gaze: params.gazeY, range: 0.012, renderSize: renderSize
         )
         let faceY = WarawaraLayeredGeometry.faceTurnOffset(
             axis: .y, gaze: params.gazeY, renderSize: renderSize
@@ -101,7 +101,7 @@ final class CuriousGazeDirectionTests: XCTestCase {
         ))
         let renderSize = CGSize(width: 143.9, height: 143.9)
         let eyeY = WarawaraLayeredGeometry.gazeOffset(
-            axis: .y, gaze: params.gazeY, range: 0.04, renderSize: renderSize
+            axis: .y, gaze: params.gazeY, range: 0.012, renderSize: renderSize
         )
         XCTAssertGreaterThan(eyeY, 0, "eyes must move DOWN (positive SwiftUI y)")
     }
@@ -116,7 +116,7 @@ final class CuriousGazeDirectionTests: XCTestCase {
         ))
         let renderSize = CGSize(width: 143.9, height: 143.9)
         let leftEyeX = WarawaraLayeredGeometry.gazeOffset(
-            axis: .x, gaze: leftParams.gazeX, range: 0.04, renderSize: renderSize
+            axis: .x, gaze: leftParams.gazeX, range: 0.012, renderSize: renderSize
         )
         XCTAssertLessThan(leftEyeX, 0, "cursor left must move eyes left")
         XCTAssertGreaterThan(leftParams.bodyTilt, 0, "lean sign follows the accepted pose convention")
@@ -127,7 +127,7 @@ final class CuriousGazeDirectionTests: XCTestCase {
             inputs: WarawaraExpressionInputs(state: .curious, gaze: rightGaze)
         ))
         let rightEyeX = WarawaraLayeredGeometry.gazeOffset(
-            axis: .x, gaze: rightParams.gazeX, range: 0.04, renderSize: renderSize
+            axis: .x, gaze: rightParams.gazeX, range: 0.012, renderSize: renderSize
         )
         XCTAssertGreaterThan(rightEyeX, 0, "cursor right must move eyes right")
         XCTAssertLessThan(rightParams.bodyTilt, 0)
@@ -142,7 +142,7 @@ final class CuriousGazeDirectionTests: XCTestCase {
         let renderSize = CGSize(width: 143.9, height: 143.9)
         let faceX = WarawaraLayeredGeometry.faceTurnOffset(axis: .x, gaze: 1, renderSize: renderSize)
         let bodyX = WarawaraLayeredGeometry.bodyTurnOffset(axis: .x, gaze: 1, renderSize: renderSize)
-        let eyeX = WarawaraLayeredGeometry.gazeOffset(axis: .x, gaze: 1, range: 0.04, renderSize: renderSize)
+        let eyeX = WarawaraLayeredGeometry.gazeOffset(axis: .x, gaze: 1, range: 0.012, renderSize: renderSize)
         XCTAssertGreaterThan(faceX, bodyX, "face must lead the body")
         XCTAssertGreaterThan(faceX, eyeX, "shared face motion must exceed eye-local gaze")
         XCTAssertGreaterThan(eyeX, 0)
@@ -199,4 +199,5 @@ final class CuriousGazeDirectionTests: XCTestCase {
         XCTAssertEqual(model.parameters.bodySquashX, 1, accuracy: 0.005)
     }
 }
+
 

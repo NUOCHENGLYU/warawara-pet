@@ -1,4 +1,4 @@
-# Warawara rig assets (Phase 5B)
+﻿# Warawara rig assets (Phase 5B)
 
 The layered character rig is **installed and active**. When the app
 launches, `WarawaraRigLoader` loads `manifest.json` and the layered
@@ -11,17 +11,17 @@ resources.
 
 ```
 Assets/WarawaraRig/
-├── manifest.json
-├── body/body_base.png
-├── eyes/eyes_open.png   eyes_half.png  eyes_closed.png
-│      eyes_focused.png  eyes_pressed.png
-└── mouth/mouth_soft.png   mouth_neutral.png  mouth_relaxed.png
+鈹溾攢鈹€ manifest.json
+鈹溾攢鈹€ body/body_base.png
+鈹溾攢鈹€ eyes/eyes_open.png   eyes_half.png  eyes_closed.png
+鈹?     eyes_focused.png  eyes_pressed.png
+鈹斺攢鈹€ mouth/mouth_soft.png   mouth_neutral.png  mouth_relaxed.png
          mouth_open.png    mouth_pressed.png  mouth_sleepy.png
 ```
 
 All 12 PNGs are the ChatGPT-supplied handoff layers
 (`art_handoff/Warawara_Phase5A_Art_Handoff_v1/`), copied byte-for-byte
-(SHA256SUMS verified), each a registered transparent 1024 × 1024 canvas.
+(SHA256SUMS verified), each a registered transparent 1024 脳 1024 canvas.
 `mouth_o_extra.png` is intentionally not installed (no role in the
 current schema).
 
@@ -42,7 +42,7 @@ current schema).
                            "closed": "eyes/eyes_closed.png",
                            "focused": "eyes/eyes_focused.png",
                            "pressed": "eyes/eyes_pressed.png" },
-               "anchor": [0.5, 0.5], "gazeRange": [0.04, 0.02] },
+               "anchor": [0.5, 0.5], "gazeRange": [0.012, 0.008] },
     "mouth": { "kind": "mouth",
                "images": { "soft": "mouth/mouth_soft.png",
                            "neutral": "mouth/mouth_neutral.png",
@@ -65,7 +65,7 @@ Rules:
   `[x, y]`, `CGSize` = `[w, h]`, `CGRect` = `[[x, y], [w, h]]`.
 - `anchor` is the REGISTRATION anchor. All handoff layers are registered
   to one full canvas, so positioning anchors are `[0.5, 0.5]` for every
-  layer — layers are never re-centered from their alpha bounding boxes.
+  layer 鈥?layers are never re-centered from their alpha bounding boxes.
 - `pivot` (optional): transform pivot for mouth width/height scaling
   (falls back to `anchor`). Mouth pivot = measured mouth center.
 - `gazeRange` (eyes): maximum gaze offset as canvas fractions.
@@ -104,7 +104,8 @@ registration:
   inserted between body and eyes);
 - deformation masks: the body revision used with limbs must have the
   painted arms/feet removed (clean silhouette) so rotated limbs do not
-  duplicate or leak the original outline — do not overlay limbs on the
+  duplicate or leak the original outline 鈥?do not overlay limbs on the
   current body until that mask revision exists.
 
 Do not draw limbs procedurally in the app.
+
