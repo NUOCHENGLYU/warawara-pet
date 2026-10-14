@@ -95,6 +95,47 @@ final class WarawaraExpressionDriverModelTests: XCTestCase {
         XCTAssertEqual(animator.parameters.blinkAmount, 0, accuracy: 0.001)
     }
 
+    func testTurnEasesInHoldsAndReturnsSmoothly() {
+        let model = WarawaraExpressionDriverModel()
+        let curious = WarawaraExpressionInputs(state: .curious, gaze: CGVector(dx: 0.6, dy: 0.2))
+        let start = 7000.0
+        // Ease in.
+        var previous: CGFloat = 0
+        var eased = false
+        for frame in 0..<90 {
+            model.tick(at: Date(timeIntervalSinceReferenceDate: start + Double(frame) / 30.0), inputs: curious)
+            let yaw = model.parameters.yawDegrees
+            XCTAssertGreaterThanOrEqual(yaw, previous - 0.0001, "yaw must approach monotonically")
+            if yaw > 12 { eased = true }
+            previous = yaw
+        }
+        XCTAssertTrue(eased, "yaw must settle into the turned pose")
+        XCTAssertEqual(model.parameters.yawDegrees, 15, accuracy: 0.5)
+        XCTAssertEqual(model.parameters.pitchDegrees, 2, accuracy: 0.5)
+
+        // Hold while the cursor stays still.
+        let held = model.parameters.yawDegrees
+        for frame in 90..<180 {
+            model.tick(at: Date(timeIntervalSinceReferenceDate: start + Double(frame) / 30.0), inputs: curious)
+        }
+        XCTAssertEqual(model.parameters.yawDegrees, held, accuracy: 0.005)
+
+        // Curious exits: smooth monotonic return to neutral.
+        let idle = WarawaraExpressionInputs(state: .idle)
+        previous = model.parameters.yawDegrees
+        var steps = 0
+        for frame in 180..<270 {
+            model.tick(at: Date(timeIntervalSinceReferenceDate: start + Double(frame) / 30.0), inputs: idle)
+            let yaw = model.parameters.yawDegrees
+            XCTAssertLessThanOrEqual(yaw, previous + 0.0001, "return must be monotonic")
+            if yaw < previous - 0.0001 { steps += 1 }
+            previous = yaw
+        }
+        XCTAssertGreaterThan(steps, 5, "return must be gradual")
+        XCTAssertEqual(model.parameters.yawDegrees, 0, accuracy: 0.1)
+        XCTAssertEqual(model.parameters.pitchDegrees, 0, accuracy: 0.05)
+    }
+
     func testFullBlinkReachesVisiblyClosedInProductionPipeline() {
         // Drive the REAL driver model through one blink window; the final
         // effective openness must reach the closed range.

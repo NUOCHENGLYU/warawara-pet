@@ -474,6 +474,9 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         try renderRigHeldGaze(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
         try renderRigBlinkTimeline(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
         try renderRigHeadTurn(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigYawSweep(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigPitchSamples(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigTurnSequence(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
 
         for name in ["18-rig-neutral.png", "19-rig-old-vs-recomposed.png",
                      "20-rig-gaze.png", "21-rig-blink.png", "22-rig-openness.png",
@@ -482,7 +485,9 @@ final class ArtPreviewGeneratorTests: XCTestCase {
                      "27-rig-mouth-styles.png", "28-rig-main-vs-companion.png",
                      "29-rig-sleep-z.png", "30-rig-static-composition.png",
                      "31-rig-openness-steps.png", "32-rig-held-gaze.png",
-                     "33-rig-blink-timeline.png", "34-rig-head-turn.png"] {
+                     "33-rig-blink-timeline.png", "34-rig-head-turn.png",
+                     "35-rig-yaw-sweep.png", "36-rig-pitch-samples.png",
+                     "37-rig-turn-sequence.png"] {
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
                 "missing rig preview \(name)"
@@ -959,6 +964,126 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         ]
         try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
                            title: "coordinated head turn (production renderer)", to: dir, named: "34-rig-head-turn.png")
+    }
+
+    @MainActor
+    private func renderRigYawSweep(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        // A: yaw -25, -15, 0, +15, +25 through the production pipeline.
+        func yawParams(_ yaw: CGFloat) -> WarawaraPerformanceParameters {
+            WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(
+                    state: .curious,
+                    gaze: CGVector(dx: yaw / WarawaraTurnGeometry.maxYawDegrees, dy: 0)
+                ),
+                breathPhase: 0.25
+            ))
+        }
+        let samples: [(String, WarawaraPerformanceParameters)] = [
+            ("-25 deg", yawParams(-25)),
+            ("-15 deg", yawParams(-15)),
+            ("0 deg", idleParameters()),
+            ("+15 deg", yawParams(15)),
+            ("+25 deg", yawParams(25))
+        ]
+        try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "yaw sweep (2.5D body turn, production renderer)", to: dir, named: "35-rig-yaw-sweep.png")
+    }
+
+    @MainActor
+    private func renderRigPitchSamples(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        // B: looking slightly up, neutral, slightly down.
+        func pitchParams(_ pitch: CGFloat) -> WarawaraPerformanceParameters {
+            WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(
+                    state: .curious,
+                    gaze: CGVector(dx: 0, dy: pitch / WarawaraTurnGeometry.maxPitchDegrees)
+                ),
+                breathPhase: 0.25
+            ))
+        }
+        let samples: [(String, WarawaraPerformanceParameters)] = [
+            ("up +10 deg", pitchParams(10)),
+            ("neutral", idleParameters()),
+            ("down -10 deg", pitchParams(-10))
+        ]
+        try rigSampleSheet(samples: samples, rig: rig, rigLoader: rigLoader, renderSize: renderSize,
+                           title: "pitch samples (looking up / down)", to: dir, named: "36-rig-pitch-samples.png")
+    }
+
+    @MainActor
+    private func renderRigTurnSequence(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        // C/D/E/F: nine intermediate frames of a continuous left-to-right
+        // turn, a 3 s held pose, and the neutral recovery — production
+        // driver model, real rig art, desktop size.
+        func driverParams(inputs: WarawaraExpressionInputs, seconds: Double) -> WarawaraPerformanceParameters {
+            let model = WarawaraExpressionDriverModel()
+            let start = 9000.0
+            let frames = Int(seconds * 30)
+            for frame in 0..<frames {
+                model.tick(at: Date(timeIntervalSinceReferenceDate: start + Double(frame) / 30.0), inputs: inputs)
+            }
+            return model.parameters
+        }
+        func staticParams(_ yaw: CGFloat) -> WarawaraPerformanceParameters {
+            WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(
+                    state: .curious,
+                    gaze: CGVector(dx: yaw / WarawaraTurnGeometry.maxYawDegrees, dy: 0)
+                ),
+                breathPhase: 0.25
+            ))
+        }
+
+        let sequence: [(String, WarawaraPerformanceParameters)] = stride(from: -25.0, through: 25.0, by: 6.25)
+            .map { (String(format: "%+.0f deg", $0), staticParams(CGFloat($0))) }
+        let held = ("held 3s", driverParams(
+            inputs: WarawaraExpressionInputs(state: .curious, gaze: CGVector(dx: 0.7, dy: 0.2)),
+            seconds: 3
+        ))
+        let recovery = ("recovery", driverParams(
+            inputs: WarawaraExpressionInputs(state: .idle), seconds: 1.2
+        ))
+
+        let row1 = Array(sequence.prefix(5))
+        let row2 = Array(sequence.dropFirst(5))
+        let content = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 6) {
+                Text("continuous left-to-right turn, held pose, recovery").font(.headline)
+                HStack(spacing: 24) {
+                    ForEach(row1.indices, id: \.self) { index in
+                        VStack(spacing: 4) {
+                            self.rigView(rig, rigLoader, row1[index].1, renderSize)
+                            Text(row1[index].0).font(.caption)
+                        }
+                    }
+                }
+                HStack(spacing: 24) {
+                    ForEach(row2.indices, id: \.self) { index in
+                        VStack(spacing: 4) {
+                            self.rigView(rig, rigLoader, row2[index].1, renderSize)
+                            Text(row2[index].0).font(.caption)
+                        }
+                    }
+                    VStack(spacing: 4) {
+                        self.rigView(rig, rigLoader, held.1, renderSize)
+                        Text(held.0).font(.caption)
+                    }
+                    VStack(spacing: 4) {
+                        self.rigView(rig, rigLoader, recovery.1, renderSize)
+                        Text(recovery.0).font(.caption)
+                    }
+                }
+            }
+        }
+        try render(content, size: CGSize(width: 1500, height: 760), scale: 1,
+                   to: dir.appendingPathComponent("37-rig-turn-sequence.png"))
     }
 
     private func renderComparisonNote(to dir: URL) throws {

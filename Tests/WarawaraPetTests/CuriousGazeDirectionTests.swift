@@ -80,15 +80,12 @@ final class CuriousGazeDirectionTests: XCTestCase {
         let eyeY = WarawaraLayeredGeometry.gazeOffset(
             axis: .y, gaze: params.gazeY, range: 0.012, renderSize: renderSize
         )
-        let faceY = WarawaraLayeredGeometry.faceTurnOffset(
-            axis: .y, gaze: params.gazeY, renderSize: renderSize
-        )
-        let bodyY = WarawaraLayeredGeometry.bodyTurnOffset(
-            axis: .y, gaze: params.gazeY, renderSize: renderSize
+        let face = WarawaraTurnGeometry.faceTransform(
+            yawDegrees: params.yawDegrees, pitchDegrees: params.pitchDegrees
         )
         XCTAssertLessThan(eyeY, 0, "eyes must move UP (negative SwiftUI y)")
-        XCTAssertLessThan(faceY, 0, "face must move UP")
-        XCTAssertLessThan(bodyY, 0, "body bias must move UP")
+        XCTAssertLessThan(face.offsetYFrac, 0, "face must move UP")
+        XCTAssertGreaterThan(params.pitchDegrees, 0, "cursor above must pitch up")
     }
 
     func testCursorBelowProducesDownwardRenderedMotion() {
@@ -99,6 +96,7 @@ final class CuriousGazeDirectionTests: XCTestCase {
         let params = WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
             inputs: WarawaraExpressionInputs(state: .curious, gaze: gaze)
         ))
+        XCTAssertLessThan(params.pitchDegrees, 0, "cursor below must pitch down")
         let renderSize = CGSize(width: 143.9, height: 143.9)
         let eyeY = WarawaraLayeredGeometry.gazeOffset(
             axis: .y, gaze: params.gazeY, range: 0.012, renderSize: renderSize
@@ -114,46 +112,58 @@ final class CuriousGazeDirectionTests: XCTestCase {
         let leftParams = WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
             inputs: WarawaraExpressionInputs(state: .curious, gaze: leftGaze)
         ))
-        let renderSize = CGSize(width: 143.9, height: 143.9)
-        let leftEyeX = WarawaraLayeredGeometry.gazeOffset(
-            axis: .x, gaze: leftParams.gazeX, range: 0.012, renderSize: renderSize
+        XCTAssertLessThan(leftParams.yawDegrees, 0, "cursor left must yaw left")
+        let leftFace = WarawaraTurnGeometry.faceTransform(
+            yawDegrees: leftParams.yawDegrees, pitchDegrees: 0
         )
-        XCTAssertLessThan(leftEyeX, 0, "cursor left must move eyes left")
-        XCTAssertGreaterThan(leftParams.bodyTilt, 0, "lean sign follows the accepted pose convention")
+        XCTAssertLessThan(leftFace.offsetXFrac, 0, "face rides left")
 
         let rightGaze = settleGaze(controller, cursor: CGPoint(x: 100, y: 0))
         XCTAssertGreaterThan(rightGaze.dx, 0.5)
         let rightParams = WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
             inputs: WarawaraExpressionInputs(state: .curious, gaze: rightGaze)
         ))
-        let rightEyeX = WarawaraLayeredGeometry.gazeOffset(
-            axis: .x, gaze: rightParams.gazeX, range: 0.012, renderSize: renderSize
+        XCTAssertGreaterThan(rightParams.yawDegrees, 0, "cursor right must yaw right")
+        let rightFace = WarawaraTurnGeometry.faceTransform(
+            yawDegrees: rightParams.yawDegrees, pitchDegrees: 0
         )
-        XCTAssertGreaterThan(rightEyeX, 0, "cursor right must move eyes right")
-        XCTAssertLessThan(rightParams.bodyTilt, 0)
-        // Consistent with the accepted pose pipeline (right cursor ->
-        // negative rotation), so the leans ADD instead of cancelling.
-        XCTAssertEqual(leftParams.bodyTilt, -rightParams.bodyTilt, accuracy: 0.0001)
+        XCTAssertGreaterThan(rightFace.offsetXFrac, 0, "face rides right")
+        // Mirror symmetry of the shared facial remap.
+        XCTAssertEqual(leftFace.offsetXFrac, -rightFace.offsetXFrac, accuracy: 0.0001)
+        XCTAssertEqual(leftFace.scaleX, rightFace.scaleX, accuracy: 0.0001)
     }
 
     // MARK: - Face/body hierarchy
 
-    func testFaceShiftLeadsBodyAndEyes() {
+    func testFaceRidesNearSideBeyondEyeLocalGaze() {
         let renderSize = CGSize(width: 143.9, height: 143.9)
-        let faceX = WarawaraLayeredGeometry.faceTurnOffset(axis: .x, gaze: 1, renderSize: renderSize)
-        let bodyX = WarawaraLayeredGeometry.bodyTurnOffset(axis: .x, gaze: 1, renderSize: renderSize)
+        let face = WarawaraTurnGeometry.faceTransform(yawDegrees: 25, pitchDegrees: 0)
+        let faceX = face.offsetXFrac * renderSize.width
         let eyeX = WarawaraLayeredGeometry.gazeOffset(axis: .x, gaze: 1, range: 0.012, renderSize: renderSize)
-        XCTAssertGreaterThan(faceX, bodyX, "face must lead the body")
         XCTAssertGreaterThan(faceX, eyeX, "shared face motion must exceed eye-local gaze")
         XCTAssertGreaterThan(eyeX, 0)
     }
 
-    func testFaceAndBodyMoveInTheSameDirection() {
-        let renderSize = CGSize(width: 143.9, height: 143.9)
-        for gaze in [CGFloat(-1), -0.5, 0.5, 1] {
-            let face = WarawaraLayeredGeometry.faceTurnOffset(axis: .x, gaze: gaze, renderSize: renderSize)
-            let body = WarawaraLayeredGeometry.bodyTurnOffset(axis: .x, gaze: gaze, renderSize: renderSize)
-            XCTAssertEqual(face * body >= 0, true, "face and body must never oppose")
+    func testFaceAndBodyWarpShareTheYawDirection() {
+        let canvas = CGSize(width: 143.9, height: 143.9)
+        let bounds = CGRect(x: 0.10, y: 0.09, width: 0.80, height: 0.82)
+        for yaw in [CGFloat(-25), -10, 10, 25] {
+            let face = WarawaraTurnGeometry.faceTransform(yawDegrees: yaw, pitchDegrees: 0)
+            let strips = WarawaraTurnGeometry.strips(
+                count: 14, canvasSize: canvas, bodyBounds: bounds,
+                yawDegrees: yaw, pitchDegrees: 0
+            )
+            // Face offset and silhouette redistribution must agree on the
+            // turn direction.
+            XCTAssertEqual(face.offsetXFrac * yaw >= 0, true, "face must ride the near side")
+            XCTAssertGreaterThan(
+                strips.last!.destination.width - strips.first!.destination.width,
+                yaw > 0 ? 0 : -100,
+                "silhouette must redistribute toward the turn"
+            )
+            if yaw < 0 {
+                XCTAssertLessThan(strips.last!.destination.width, strips.first!.destination.width)
+            }
         }
     }
 

@@ -57,9 +57,12 @@ are intentionally deferred:
    channel composed at render time (full closure guaranteed), eye-layer
    composition uses normalized mutually-exclusive weights (no additive
    double eyes), and curious gaze is a coordinated head-turn hierarchy
-   (Phase 5E): body silhouette bias -> shared face-group lead -> minimal
-   eye-local gaze -> whole-group lean/squash, with a single documented
-   Y-up parameter convention converted to screen space exactly once.
+   (Phase 5E). Phase 5F replaces the flat turn cues with a continuous
+   2.5D body turn: yaw (±25 deg) and pitch (±10 deg) parameters derived
+   from the smoothed gaze drive a perspective-aware strip warp of the
+   body raster (near side expands, far side narrows, total width
+   preserved, far-side shading) plus ONE affine remap of the shared
+   facial frame — zero angle stays exactly the accepted frontal art.
    Remaining limitations: the blink schedule is a
    deterministic two-period pattern awaiting real tuning; independent
    limb artwork (with shoulder/foot pivots and a masked body revision)

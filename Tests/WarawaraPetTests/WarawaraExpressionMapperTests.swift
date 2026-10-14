@@ -49,11 +49,12 @@ final class WarawaraExpressionMapperTests: XCTestCase {
         )
         XCTAssertEqual(p.gazeX, 0.6, accuracy: 0.001)
         XCTAssertEqual(p.gazeY, -0.4, accuracy: 0.001)
-        // Coordinated turn: lean sign follows the accepted pose-pipeline
-        // convention (cursor right -> negative rotation -> leans toward),
-        // plus a slight horizontal squash.
-        XCTAssertEqual(p.bodyTilt, -0.05 * 0.6, accuracy: 0.001)
-        XCTAssertEqual(p.bodySquashX, 1 - 0.03 * 0.6, accuracy: 0.001)
+        // Coordinated 2.5D turn: gaze drives spatial yaw/pitch (degrees),
+        // not screen-plane roll.
+        XCTAssertEqual(p.yawDegrees, 0.6 * 25, accuracy: 0.001)
+        XCTAssertEqual(p.pitchDegrees, -0.4 * 10, accuracy: 0.001)
+        XCTAssertEqual(p.bodyTilt, 0, accuracy: 0.001)
+        XCTAssertEqual(p.bodySquashX, 1, accuracy: 0.001)
         let focus = WarawaraExpressionMapper.focusAmount(gazeX: 0.6, gazeY: -0.4)
         XCTAssertEqual(p.mouthOpenAmount, 0.12 * focus, accuracy: 0.001)
         XCTAssertEqual(p.mouthStyle, .neutral)
@@ -70,8 +71,31 @@ final class WarawaraExpressionMapperTests: XCTestCase {
             for: context(state: .curious, gaze: .zero)
         )
         XCTAssertEqual(p.gazeX, 0, accuracy: 0.001)
+        XCTAssertEqual(p.yawDegrees, 0, accuracy: 0.001)
+        XCTAssertEqual(p.pitchDegrees, 0, accuracy: 0.001)
         XCTAssertEqual(p.bodyTilt, 0, accuracy: 0.001)
         XCTAssertEqual(p.mouthOpenAmount, 0, accuracy: 0.001)
+    }
+
+    func testNonCuriousStatesNeverTurnSpatially() {
+        // Drag robustness and zero-angle regression: no state other than
+        // curious may produce yaw/pitch, even with deformation active.
+        for state in [PetState.idle, .hop, .float, .clicked, .dragged,
+                      .settling, .sleepy, .sleeping] {
+            var ctx = context(state: state)
+            if state == .dragged {
+                ctx.inputs.dragDeformation = PetDeformation(
+                    stretchAngle: 0.3,
+                    stretchScale: 1.2,
+                    perpendicularScale: 0.83,
+                    rotation: 0.05,
+                    anchor: CGVector(dx: 0.5, dy: 0.2)
+                )
+            }
+            let p = WarawaraExpressionMapper.targetParameters(for: ctx)
+            XCTAssertEqual(p.yawDegrees, 0, accuracy: 0.0001, "state \(state) must not yaw")
+            XCTAssertEqual(p.pitchDegrees, 0, accuracy: 0.0001, "state \(state) must not pitch")
+        }
     }
 
     // MARK: - Sleepy / sleeping
