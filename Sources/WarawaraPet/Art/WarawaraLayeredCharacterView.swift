@@ -261,7 +261,19 @@ enum WarawaraLayeredGeometry {
         let e = min(max(openness, 0), 1)
         let f = min(max(focus, 0), 1)
         let p = min(max(press, 0), 1)
-        let baseScale = (1 - f) * (1 - p)
+
+        // The overlays replace part of the base pair: overlay total is
+        // clamped and the pair is scaled down, so the whole composite
+        // sums to exactly 1 (no additive double eyes).
+        let overlayTotal = min(f + p, 1)
+        let baseScale = 1 - overlayTotal
+        var focusedWeight = f
+        var pressedWeight = p
+        if f + p > 1, f + p > 0 {
+            let scale = overlayTotal / (f + p)
+            focusedWeight *= scale
+            pressedWeight *= scale
+        }
 
         var lower: Double
         var upper: Double
@@ -279,8 +291,8 @@ enum WarawaraLayeredGeometry {
             lowerWeight: lower * baseScale,
             upperWeight: upper * baseScale,
             lowerIsOpen: lowerIsOpen,
-            focusedWeight: Double(f),
-            pressedWeight: Double(p)
+            focusedWeight: Double(focusedWeight),
+            pressedWeight: Double(pressedWeight)
         )
     }
 
