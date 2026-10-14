@@ -26,16 +26,16 @@ final class WarawaraRigArtInvariantsTests: XCTestCase {
     }
 
     /// Scans a canvas-space region (top-left origin) and returns the
-    /// minimum luminance of opaque pixels.
+    /// minimum luminance of opaque pixels. NSBitmapImageRep rows are
+    /// top-to-bottom, so canvas Y maps 1:1.
     private func minLuminance(
         in canvasRegion: CGRect, of rep: NSBitmapImageRep
     ) -> Double {
         var minLum = Double.greatestFiniteMagnitude
         for canvasY in Int(canvasRegion.minY)..<Int(canvasRegion.maxY) {
-            let bitmapY = rep.pixelsHigh - 1 - canvasY
-            guard bitmapY >= 0, bitmapY < rep.pixelsHigh else { continue }
+            guard canvasY >= 0, canvasY < rep.pixelsHigh else { continue }
             for canvasX in Int(canvasRegion.minX)..<Int(canvasRegion.maxX) {
-                guard let color = rep.colorAt(x: canvasX, y: bitmapY),
+                guard let color = rep.colorAt(x: canvasX, y: canvasY),
                       color.alphaComponent > 0.5 else { continue }
                 let lum = 0.2126 * Double(color.redComponent)
                     + 0.7152 * Double(color.greenComponent)
@@ -52,10 +52,9 @@ final class WarawaraRigArtInvariantsTests: XCTestCase {
         var leftSumX = 0.0, leftSumY = 0.0, leftCount = 0.0
         var rightSumX = 0.0, rightSumY = 0.0, rightCount = 0.0
         for canvasY in 380..<520 {
-            let bitmapY = rep.pixelsHigh - 1 - canvasY
-            guard bitmapY >= 0, bitmapY < rep.pixelsHigh else { continue }
+            guard canvasY >= 0, canvasY < rep.pixelsHigh else { continue }
             for canvasX in 250..<800 {
-                guard let color = rep.colorAt(x: canvasX, y: bitmapY),
+                guard let color = rep.colorAt(x: canvasX, y: canvasY),
                       color.alphaComponent > 0.5 else { continue }
                 let lum = 0.2126 * Double(color.redComponent)
                     + 0.7152 * Double(color.greenComponent)
