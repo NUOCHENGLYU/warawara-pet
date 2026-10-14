@@ -256,15 +256,26 @@ struct WarawaraWarpedBodyView: View {
             guard let cgImage = image.cgImage(
                 forProposedRect: nil, context: nil, hints: nil
             ) else { return }
-            let drawable = Image(decorative: cgImage, scale: 1)
 
             var silhouette = Path()
             for strip in strips {
                 silhouette.addRect(strip.destination)
             }
             context.clip(to: silhouette)
+
+            // Strip source rects are in view coordinates; CGImage crops
+            // use pixel coordinates (top-left origin, same as the view).
+            let pixelsPerPointX = CGFloat(cgImage.width) / size.width
+            let pixelsPerPointY = CGFloat(cgImage.height) / size.height
             for strip in strips {
-                context.draw(drawable, in: strip.destination, from: strip.source)
+                let pixelRect = CGRect(
+                    x: strip.source.minX * pixelsPerPointX,
+                    y: strip.source.minY * pixelsPerPointY,
+                    width: strip.source.width * pixelsPerPointX,
+                    height: strip.source.height * pixelsPerPointY
+                )
+                guard let crop = cgImage.cropping(to: pixelRect) else { continue }
+                context.draw(Image(decorative: crop, scale: 1), in: strip.destination)
             }
 
             // Far-side depth shading over the warped silhouette only.
