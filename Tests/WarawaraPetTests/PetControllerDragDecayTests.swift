@@ -1,4 +1,4 @@
-import XCTest
+﻿import XCTest
 @testable import WarawaraPet
 
 final class PetControllerDragDecayTests: XCTestCase {
@@ -37,10 +37,10 @@ final class PetControllerDragDecayTests: XCTestCase {
         var t: TimeInterval = 1000
         for _ in 0..<60 {
             t += 0.016
-            controller.handleDragMoved(deltaX: 9.6, deltaY: 0, at: t)
+            controller.handleDragMoved(deltaX: DeformationTuning.default.velocityAtMaxStretch * 0.016, deltaY: 0, at: t)
         }
         let saturated = controller.dragDeformation
-        XCTAssertGreaterThan(saturated.stretchScale, 1.3)
+        XCTAssertGreaterThan(saturated.stretchScale, 1 + 0.8 * DeformationTuning.default.maxStretch)
 
         // A tick within the decay start delay changes nothing.
         controller.dragTick(at: t + 0.03)
@@ -65,11 +65,11 @@ final class PetControllerDragDecayTests: XCTestCase {
         var maxObserved = controller.dragDeformation.stretchScale
         for _ in 0..<60 {
             t += 0.016
-            controller.handleDragMoved(deltaX: 9.6, deltaY: 0, at: t)
+            controller.handleDragMoved(deltaX: DeformationTuning.default.velocityAtMaxStretch * 0.016, deltaY: 0, at: t)
             maxObserved = max(maxObserved, controller.dragDeformation.stretchScale)
         }
         XCTAssertLessThanOrEqual(maxObserved, 1 + DeformationTuning.default.maxStretch + 0.001)
-        XCTAssertGreaterThan(controller.dragDeformation.stretchScale, 1.3)
+        XCTAssertGreaterThan(controller.dragDeformation.stretchScale, 1 + 0.8 * DeformationTuning.default.maxStretch)
     }
 
     func testDragEndStopsTheDecayTick() {
@@ -80,9 +80,9 @@ final class PetControllerDragDecayTests: XCTestCase {
         var t: TimeInterval = 1000
         for _ in 0..<60 {
             t += 0.016
-            controller.handleDragMoved(deltaX: 9.6, deltaY: 0, at: t)
+            controller.handleDragMoved(deltaX: DeformationTuning.default.velocityAtMaxStretch * 0.016, deltaY: 0, at: t)
         }
-        XCTAssertGreaterThan(controller.dragDeformation.stretchScale, 1.3)
+        XCTAssertGreaterThan(controller.dragDeformation.stretchScale, 1 + 0.8 * DeformationTuning.default.maxStretch)
 
         controller.handleDragEnded()
         XCTAssertEqual(controller.state, .settling)
@@ -93,3 +93,5 @@ final class PetControllerDragDecayTests: XCTestCase {
         XCTAssertEqual(controller.dragDeformation, .neutral)
     }
 }
+
+

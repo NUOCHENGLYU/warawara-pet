@@ -1,14 +1,15 @@
-import XCTest
+﻿import XCTest
 @testable import WarawaraPet
 
 final class DragDeformationEstimatorTests: XCTestCase {
     private let tuning = DeformationTuning.default
 
-    private func dragRight(_ estimator: inout DragDeformationEstimator, samples: Int, speed: CGFloat = 600) {
+    private func dragRight(_ estimator: inout DragDeformationEstimator, samples: Int, speed: CGFloat = 0) {
+        let effectiveSpeed = speed > 0 ? speed : tuning.velocityAtMaxStretch
         var t: TimeInterval = 0
         for _ in 0..<samples {
             t += 0.016
-            estimator.update(deltaX: speed * 0.016, deltaY: 0, at: t)
+            estimator.update(deltaX: effectiveSpeed * 0.016, deltaY: 0, at: t)
         }
     }
 
@@ -36,7 +37,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
         var t: TimeInterval = 0
         for _ in 0..<60 {
             t += 0.016
-            estimator.update(deltaX: 9.6, deltaY: 0, at: t)
+            estimator.update(deltaX: tuning.velocityAtMaxStretch * 0.016, deltaY: 0, at: t)
             XCTAssertGreaterThanOrEqual(estimator.deformation.stretchScale, previousStretch)
             XCTAssertGreaterThanOrEqual(
                 abs(estimator.deformation.rotation), previousRotationMagnitude
@@ -56,7 +57,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
 
         var fast = DragDeformationEstimator()
         fast.beginDrag(grabVector: .zero)
-        dragRight(&fast, samples: 60, speed: 800)
+        dragRight(&fast, samples: 60, speed: tuning.velocityAtMaxStretch)
         XCTAssertEqual(fast.deformation.stretchScale, 1 + tuning.maxStretch, accuracy: 0.01)
     }
 
@@ -64,7 +65,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
         dragRight(&estimator, samples: 60, speed: 600)
-        XCTAssertGreaterThan(estimator.deformation.stretchScale, 1.3)
+        XCTAssertGreaterThan(estimator.deformation.stretchScale, 1 + 0.8 * tuning.maxStretch)
 
         var smallestStretch = estimator.deformation.stretchScale
         var smallestRotation = abs(estimator.deformation.rotation)
@@ -85,7 +86,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
         dragRight(&estimator, samples: 60, speed: 600)
-        XCTAssertGreaterThan(estimator.deformation.stretchScale, 1.3)
+        XCTAssertGreaterThan(estimator.deformation.stretchScale, 1 + 0.8 * tuning.maxStretch)
 
         var t: TimeInterval = 60 * 0.016
         t += 5
@@ -99,7 +100,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
         // high-speed sample must lag well behind its raw value.
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
-        estimator.update(deltaX: 9.6, deltaY: 0, at: 0)
+        estimator.update(deltaX: tuning.velocityAtMaxStretch * 0.016, deltaY: 0, at: 0)
         estimator.update(deltaX: 19.2, deltaY: 0, at: 0.016)  // raw 1200 pt/s spike
         XCTAssertLessThan(abs(estimator.deformation.rotation), tuning.maxRotation)
         XCTAssertLessThan(estimator.deformation.stretchScale, 1 + tuning.maxStretch)
@@ -145,7 +146,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
         dragRight(&estimator, samples: 60, speed: 600)
-        XCTAssertGreaterThan(estimator.deformation.stretchScale, 1.3)
+        XCTAssertGreaterThan(estimator.deformation.stretchScale, 1 + 0.8 * tuning.maxStretch)
 
         estimator.reset()
         XCTAssertEqual(estimator.deformation, .neutral)
@@ -187,7 +188,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
         var estimator = DragDeformationEstimator()
         estimator.beginDrag(grabVector: CGVector(dx: 0, dy: 1))
         dragRight(&estimator, samples: 60, speed: 600)
-        XCTAssertGreaterThan(estimator.deformation.stretchScale, 1.3)
+        XCTAssertGreaterThan(estimator.deformation.stretchScale, 1 + 0.8 * tuning.maxStretch)
         XCTAssertEqual(abs(estimator.deformation.rotation), tuning.maxRotation, accuracy: 0.001)
 
         var previous = estimator.deformation
@@ -232,13 +233,13 @@ final class DragDeformationEstimatorTests: XCTestCase {
         // low. (If decay advanced the baseline, this would jump upward.)
         var t: TimeInterval = 1.36
         t += 0.016
-        estimator.update(deltaX: 9.6, deltaY: 0, at: t)
+        estimator.update(deltaX: tuning.velocityAtMaxStretch * 0.016, deltaY: 0, at: t)
         XCTAssertLessThanOrEqual(estimator.deformation.stretchScale, decayedScale + 0.001)
         XCTAssertLessThanOrEqual(abs(estimator.deformation.rotation), tuning.maxRotation + 0.001)
 
         for _ in 1..<60 {
             t += 0.016
-            estimator.update(deltaX: 9.6, deltaY: 0, at: t)
+            estimator.update(deltaX: tuning.velocityAtMaxStretch * 0.016, deltaY: 0, at: t)
             XCTAssertLessThanOrEqual(estimator.deformation.stretchScale, 1 + tuning.maxStretch + 0.001)
             XCTAssertLessThanOrEqual(abs(estimator.deformation.rotation), tuning.maxRotation + 0.001)
         }
@@ -247,3 +248,5 @@ final class DragDeformationEstimatorTests: XCTestCase {
         XCTAssertEqual(estimator.deformation.rotation, -tuning.maxRotation, accuracy: 0.01)
     }
 }
+
+

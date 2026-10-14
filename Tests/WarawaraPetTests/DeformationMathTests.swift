@@ -1,4 +1,4 @@
-import XCTest
+﻿import XCTest
 @testable import WarawaraPet
 
 final class DeformationMathTests: XCTestCase {
@@ -22,7 +22,7 @@ final class DeformationMathTests: XCTestCase {
     }
 
     func testHorizontalDragStretchesHorizontally() {
-        let d = deformation(velocity: CGVector(dx: 600, dy: 0), grab: .zero)
+        let d = deformation(velocity: CGVector(dx: tuning.velocityAtMaxStretch, dy: 0), grab: .zero)
         XCTAssertEqual(d.stretchAngle, 0, accuracy: 0.001)
         XCTAssertEqual(d.stretchScale, 1 + tuning.maxStretch, accuracy: 0.0001)
         XCTAssertEqual(d.perpendicularScale, 1 / (1 + tuning.maxStretch), accuracy: 0.0001)
@@ -30,13 +30,13 @@ final class DeformationMathTests: XCTestCase {
     }
 
     func testVerticalDragStretchesVertically() {
-        let d = deformation(velocity: CGVector(dx: 0, dy: 600), grab: .zero)
+        let d = deformation(velocity: CGVector(dx: 0, dy: tuning.velocityAtMaxStretch), grab: .zero)
         XCTAssertEqual(d.stretchAngle, .pi / 2, accuracy: 0.001)
         XCTAssertEqual(d.stretchScale, 1 + tuning.maxStretch, accuracy: 0.0001)
     }
 
     func testDiagonalDragAxisMatchesDirection() {
-        let speed: CGFloat = 424.264
+        let speed: CGFloat = tuning.velocityAtMaxStretch / CGFloat(2.0).squareRoot()
         let d = deformation(velocity: CGVector(dx: speed, dy: speed), grab: .zero)
         XCTAssertEqual(d.stretchAngle, .pi / 4, accuracy: 0.001)
         XCTAssertEqual(d.stretchScale, 1 + tuning.maxStretch, accuracy: 0.001)
@@ -76,7 +76,7 @@ final class DeformationMathTests: XCTestCase {
     }
 
     func testGrabNearCenterYieldsTinyRotation() {
-        let d = deformation(velocity: CGVector(dx: 600, dy: 0), grab: CGVector(dx: 0.01, dy: 0))
+        let d = deformation(velocity: CGVector(dx: tuning.velocityAtMaxStretch, dy: 0), grab: CGVector(dx: 0.01, dy: 0))
         XCTAssertLessThan(abs(d.rotation), 0.005)
     }
 
@@ -134,13 +134,13 @@ final class DeformationMathTests: XCTestCase {
         // Velocity direction crossing the -x axis (the atan2 wrap point),
         // at full speed so deformation is actually active.
         let e: CGFloat = 1.2
-        let justAbove = deformation(velocity: CGVector(dx: -600, dy: e), grab: .zero)
-        let justBelow = deformation(velocity: CGVector(dx: -600, dy: -e), grab: .zero)
+        let justAbove = deformation(velocity: CGVector(dx: -tuning.velocityAtMaxStretch, dy: e), grab: .zero)
+        let justBelow = deformation(velocity: CGVector(dx: -tuning.velocityAtMaxStretch, dy: -e), grab: .zero)
 
         for d in [justAbove, justBelow] {
             XCTAssertGreaterThanOrEqual(d.stretchAngle, 0)
             XCTAssertLessThan(d.stretchAngle, .pi)
-            XCTAssertGreaterThan(d.stretchScale, 1.3)
+            XCTAssertGreaterThan(d.stretchScale, 1 + 0.8 * tuning.maxStretch)
         }
 
         // The two axes are the same undirected line: the angle difference
@@ -167,3 +167,4 @@ final class DeformationMathTests: XCTestCase {
         XCTAssertEqual(d.rotation, expectedRotation, accuracy: 0.0001)
     }
 }
+
