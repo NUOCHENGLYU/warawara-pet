@@ -72,7 +72,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
         var t: TimeInterval = 60 * 0.016
         for _ in 0..<60 {
             t += 0.016
-            estimator.update(deltaX: -9.6, deltaY: 0, at: t)
+            estimator.update(deltaX: -tuning.velocityAtMaxStretch * 0.016, deltaY: 0, at: t)
             smallestStretch = min(smallestStretch, estimator.deformation.stretchScale)
             smallestRotation = min(smallestRotation, abs(estimator.deformation.rotation))
         }
@@ -248,6 +248,7 @@ final class DragDeformationEstimatorTests: XCTestCase {
         XCTAssertEqual(estimator.deformation.rotation, -tuning.maxRotation, accuracy: 0.01)
     }
 }
+
 
 
 
