@@ -14,7 +14,10 @@ let package = Package(
                 .process("Resources/Sprites"),
                 // Rig resources are copied verbatim so the declared layer
                 // paths (body/, eyes/, mouth/) survive packaging.
-                .copy("Resources/Assets")
+                .copy("Resources/Assets"),
+                // Birthday props + letter text (UTF-8, never baked into
+                // artwork).
+                .copy("Resources/Birthday")
             ]
         ),
         .testTarget(
