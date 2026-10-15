@@ -1,8 +1,8 @@
-import XCTest
+﻿import XCTest
 @testable import WarawaraPet
 
 /// Deterministic tests for birthday eligibility, persistence, trigger
-/// semantics, and the event phase machine — using an injectable clock
+/// semantics, and the event phase machine 鈥?using an injectable clock
 /// and a recording presenter spy (no real windows).
 final class BirthdayEventCoordinatorTests: XCTestCase {
     private var defaults: UserDefaults!
@@ -24,13 +24,15 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
     // MARK: - Fixtures
 
     private final class FixedClock: BirthdayClock {
-        var now: Date
+        var currentNow: Date
         let calendar: Calendar
 
         init(now: Date, calendar: Calendar) {
-            self.now = now
+            self.currentNow = now
             self.calendar = calendar
         }
+
+        func now() -> Date { currentNow }
     }
 
     private final class Spy: BirthdayEventPresenting {
@@ -121,7 +123,7 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
     func testDSTAdjacentDatesStayOctober17Locally() {
         let zone = TimeZone(identifier: "America/New_York")!
         let cal = calendar(zone)
-        // DST ends Nov 1 2026; October 17 is well inside DST — verify
+        // DST ends Nov 1 2026; October 17 is well inside DST 鈥?verify
         // the local calendar reports month/day 10/17 across the day.
         for hour in [0, 6, 12, 18, 23] {
             let d = date(2026, 10, 17, hour, timeZone: zone)
@@ -187,7 +189,7 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
         coordinator.servicePendingTrigger()
         XCTAssertEqual(coordinator.phase, .idle, "no trigger before midnight")
 
-        clock.now = date(2026, 10, 17, 0, timeZone: zone, minute: 5)
+        clock.currentNow = date(2026, 10, 17, 0, timeZone: zone, minute: 5)
         coordinator.checkAutomaticTrigger()
         XCTAssertFalse(coordinator.isRunning, "trigger is pending, not started while unserviced")
         coordinator.servicePendingTrigger()
@@ -232,22 +234,22 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.phase, .surprise)
         XCTAssertEqual(spy.calls.filter { $0 == "hop" }.count, 1)
 
-        clock.now = start.addingTimeInterval(2.5)
-        coordinator.advance(at: clock.now)
+        clock.currentNow = start.addingTimeInterval(2.5)
+        coordinator.advance(at: clock.currentNow)
         XCTAssertEqual(spy.calls.filter { $0 == "hop" }.count, 2, "second hop in surprise")
 
-        clock.now = start.addingTimeInterval(3.5)
-        coordinator.advance(at: clock.now)
+        clock.currentNow = start.addingTimeInterval(3.5)
+        coordinator.advance(at: clock.currentNow)
         XCTAssertEqual(coordinator.phase, .cakeArriving)
         XCTAssertTrue(spy.calls.contains("presentCake"))
 
-        clock.now = start.addingTimeInterval(5.0)
-        coordinator.advance(at: clock.now)
+        clock.currentNow = start.addingTimeInterval(5.0)
+        coordinator.advance(at: clock.currentNow)
         XCTAssertEqual(coordinator.phase, .gathering)
         XCTAssertTrue(spy.calls.contains("startCompanionGroup"))
 
-        clock.now = start.addingTimeInterval(10.5)
-        coordinator.advance(at: clock.now)
+        clock.currentNow = start.addingTimeInterval(10.5)
+        coordinator.advance(at: clock.currentNow)
         XCTAssertEqual(spy.calls.filter { $0 == "hop" }.count, 3, "celebration hop")
 
         coordinator.companionGroupDidStart()
@@ -258,8 +260,8 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
         XCTAssertTrue(spy.calls.contains("presentEnvelope"))
         XCTAssertTrue(spy.calls.contains("hideCake"))
 
-        clock.now = start.addingTimeInterval(14.0)
-        coordinator.advance(at: clock.now)
+        clock.currentNow = start.addingTimeInterval(14.0)
+        coordinator.advance(at: clock.currentNow)
         XCTAssertEqual(coordinator.phase, .idle)
         XCTAssertTrue(spy.calls.contains("envelopeDidBecomeAvailable"))
         XCTAssertTrue(persistence.envelopeUnlocked)
@@ -335,3 +337,4 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
         XCTAssertTrue(offBirthday.shouldShowEnvelope, "unlocked envelope persists any date")
     }
 }
+

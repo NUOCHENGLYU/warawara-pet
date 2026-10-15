@@ -1,0 +1,189 @@
+{
+  "version": "birthday-props-natural-lavender-v2",
+  "status": "CANDIDATE_NEEDS_MAC_VISUAL_ACCEPTANCE",
+  "artDirection": "restrained everyday hand-painted Japanese animation atmosphere; warm paper, muted lavender, natural wood and warm light; no princess ornament",
+  "source": "Edited candidate assets v1 using muted natural palette; letter paper rebuilt as plain parchment",
+  "assets": [
+    {
+      "file": "assets/cake_lit.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha_bounds": [
+        0,
+        24,
+        993,
+        959
+      ],
+      "sha256": "53792b4cba7919fea6842a0c1617d21ea04c9a7308b266a2b4726f09a1160b02",
+      "note": "Cake contains baked-in flame: no overlay"
+    },
+    {
+      "file": "assets/candle_flame_standalone.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_bounds": [
+        53,
+        7,
+        496,
+        470
+      ],
+      "sha256": "2506177be3de01758c75aa48d3faccaa74b9cc9028e4a10a8c148661bb8ed927",
+      "note": ""
+    },
+    {
+      "file": "assets/envelope_closed.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha_bounds": [
+        0,
+        16,
+        1024,
+        1006
+      ],
+      "sha256": "7019698ad9a7266a770ae9f52b7fb987c494c91851df864434fd598c29392470",
+      "note": ""
+    },
+    {
+      "file": "assets/envelope_open.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha_bounds": [
+        0,
+        56,
+        1011,
+        1024
+      ],
+      "sha256": "50cc42a7376cc5786b9b3acfe5eba44543aab667b39320ff3d4a5d2e5e0bcdaa",
+      "note": ""
+    },
+    {
+      "file": "assets/letter_paper_blank.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha_bounds": [
+        157,
+        55,
+        861,
+        968
+      ],
+      "sha256": "95cd1ec3b88fe8786ef22e29aa367903902078e6d0acd81f27c49ae26a9ecb97",
+      "note": ""
+    },
+    {
+      "file": "assets/sparkle_gold_large.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_bounds": [
+        39,
+        44,
+        473,
+        467
+      ],
+      "sha256": "2dd7ba88c8f5eb37941ec864e4021bb2a3ff55ccbb49dcb1d584aa6607a933c1",
+      "note": ""
+    },
+    {
+      "file": "assets/sparkle_gold_lower.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_bounds": [
+        45,
+        38,
+        470,
+        476
+      ],
+      "sha256": "b21afc54f285e75f95d1e2d9b83980315894f3e5bbb55aab991c228c0e3c0486",
+      "note": ""
+    },
+    {
+      "file": "assets/sparkle_gold_star.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_bounds": [
+        66,
+        38,
+        448,
+        474
+      ],
+      "sha256": "2709e4170f3f47065161b5dfc53483050c1bf50f21fa4d6ff4641cfb567262e6",
+      "note": ""
+    },
+    {
+      "file": "assets/sparkle_pink_large.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_bounds": [
+        80,
+        39,
+        431,
+        473
+      ],
+      "sha256": "d93619dbe8739a78d5e55501b27c06755eab286f186f1b58954dc9de931e2111",
+      "note": ""
+    },
+    {
+      "file": "assets/sparkle_pink_lower.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_bounds": [
+        55,
+        38,
+        457,
+        474
+      ],
+      "sha256": "3480585cf7bac8ec58005f623a6f0c1ebb3bf28b08e7416c72474dddd1f10a5d",
+      "note": ""
+    },
+    {
+      "file": "assets/sparkle_shooting.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_bounds": [
+        38,
+        151,
+        473,
+        360
+      ],
+      "sha256": "d21a8b700f307e06c16ed57d2547dfef64ba86954318cc6ef85742684bd8b69f",
+      "note": ""
+    },
+    {
+      "file": "assets/sparkles_sheet.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha_bounds": [
+        0,
+        14,
+        1016,
+        1024
+      ],
+      "sha256": "a0509bf7a219b97706dedec32e439054fc7160fc9f567f60b3ab057714392505",
+      "note": ""
+    }
+  ],
+  "acceptedCharacterAsset": "existing app Phase 5 layered Rig; not included and not replaced"
+}

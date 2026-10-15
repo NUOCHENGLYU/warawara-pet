@@ -39,7 +39,8 @@ final class BirthdayAssetStore {
     private var resolvedBaseURL: URL?
 
     /// Base URLs probed in order: SPM module bundle, main bundle
-    /// Resources, explicit bundle path — each with a /Birthday suffix.
+    /// Resources, explicit bundle path — each with a /Birthday suffix —
+    /// plus the repo checkout path (development/test environments).
     static func candidateBaseURLs() -> [URL] {
         var roots: [URL] = []
         #if SWIFT_PACKAGE
@@ -48,6 +49,10 @@ final class BirthdayAssetStore {
         if let url = Bundle.main.resourceURL { roots.append(url) }
         roots.append(
             Bundle.main.bundleURL.appendingPathComponent("Contents/Resources")
+        )
+        roots.append(
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                .appendingPathComponent("Sources/WarawaraPet/Resources")
         )
         var result: [URL] = []
         for root in roots {

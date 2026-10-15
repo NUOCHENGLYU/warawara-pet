@@ -127,7 +127,7 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
                     rigView(rig, rigLoader, idleParams(), mainSize)
                         .position(x: 250, y: 230)
                     ForEach(Array(offsets.enumerated()), id: \.offset) { _, vector in
-                        rigView(rig, rigLoader, idleParams(), companionSize)
+                        self.rigView(rig, rigLoader, self.idleParams(), companionSize)
                             .position(x: 250 + vector.dx, y: 230 + vector.dy)
                     }
                 }

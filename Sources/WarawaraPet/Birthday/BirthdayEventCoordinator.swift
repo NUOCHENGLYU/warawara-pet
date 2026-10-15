@@ -29,8 +29,6 @@ struct BirthdayTiming {
     /// Cake starts fading in at this offset.
     var cakeDelay: TimeInterval = 3.4
     var cakeFadeDuration: TimeInterval = 1.4
-    /// Companions start gathering at this offset.
-    var gatherDelay: TimeInterval = 5.0
     /// Celebration hops relative to the gather start.
     var celebrationHopOffsets: [TimeInterval] = [5.0, 8.0]
     /// Warm pause between ascent and envelope appearance.
