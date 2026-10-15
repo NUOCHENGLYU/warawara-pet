@@ -13,6 +13,22 @@ enum WarawaraPetMain {
             // keeping the accepted gaze/face behavior.
             WarawaraTurnGeometry.turnDisabled = true
         }
+        if arguments.contains("--verify-birthday") {
+            // Headless check used by CI against the packaged .app:
+            // verifies every v2 birthday asset and the letter text are
+            // loadable from the real bundled resources.
+            let store = BirthdayAssetStore.shared
+            store.reset()
+            let required = store.verifyAllRequiredAssets()
+            let hashes = store.verifySHA256()
+            let letterLength = store.letterText()?.count ?? -1
+            if required.ok && hashes.ok && letterLength > 0 {
+                print("BIRTHDAY_OK assets=\(BirthdayAssetStore.requiredFileNames.count) letterChars=\(letterLength)")
+                exit(0)
+            }
+            print("BIRTHDAY_FAIL required=[\(required.details)] hashes=[\(hashes.details)] letterChars=\(letterLength)")
+            exit(1)
+        }
         if arguments.contains("--verify-sprites") {
             // Headless self-check used by CI against the packaged .app:
             // runs the real startup loader against the real bundled
@@ -48,6 +64,14 @@ enum WarawaraPetMain {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         app.delegate = appDelegate
+        if arguments.contains("--replay-birthday") {
+            // Manual replay: runs the genuine sequence on any date and
+            // never consumes annual eligibility.
+            appDelegate.requestBirthdayReplay()
+        }
+        if arguments.contains("--show-letter") {
+            appDelegate.requestShowLetter()
+        }
         app.run()
     }
 

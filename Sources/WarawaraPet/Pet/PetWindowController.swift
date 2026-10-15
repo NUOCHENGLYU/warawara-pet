@@ -13,9 +13,38 @@ final class PetWindowController: NSObject {
     private var positionStore: PetPositionStore?
     private var screenObserver: NSObjectProtocol?
     private var groupSequenceController: GroupSequenceController?
+    private var groupActiveObservers: [(Bool) -> Void] = []
 
     var currentFrame: CGRect {
         panel?.frame ?? .zero
+    }
+
+    /// True while the user is actively dragging the main pet (birthday
+    /// triggering is deferred while this is true).
+    var isPetDragging: Bool {
+        controller?.state == .dragged
+    }
+
+    /// Registers an observer for companion-group activity (birthday
+    /// coordinator uses this to know when gathering/ascension ends).
+    func addGroupActiveObserver(_ observer: @escaping (Bool) -> Void) {
+        groupActiveObservers.append(observer)
+    }
+
+    /// Starts the companion group sequence through the existing Phase 3
+    /// infrastructure (never a second group system).
+    func startCompanionGroupSequence() {
+        groupSequenceController?.start()
+    }
+
+    func cancelCompanionGroupSequence() {
+        groupSequenceController?.cancel()
+    }
+
+    /// Small celebratory hop of the main pet (public birthday hook into
+    /// the existing hop motion).
+    func performBirthdayHop() {
+        controller?.performBirthdayHop()
     }
 
     func setWindowFrame(_ frame: CGRect, animated: Bool) {
@@ -76,7 +105,11 @@ final class PetWindowController: NSObject {
     private func wireGroupSequence() {
         let sequence = GroupSequenceController(windowController: self)
         sequence.onActiveChanged = { [weak self] active in
-            self?.controller?.setGroupSequenceActive(active)
+            guard let self else { return }
+            self.controller?.setGroupSequenceActive(active)
+            for observer in self.groupActiveObservers {
+                observer(active)
+            }
         }
         controller?.onUserInteraction = { [weak self] in
             // User interaction always wins: cancel the group sequence.

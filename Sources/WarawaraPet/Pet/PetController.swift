@@ -327,6 +327,14 @@ final class PetController: ObservableObject {
 
     // MARK: - Hop
 
+    /// Public birthday hook: a small celebratory hop of the main pet.
+    /// Inert unless the pet is idle (the event never fights the state
+    /// machine).
+    func performBirthdayHop() {
+        guard stateMachine.state == .idle else { return }
+        beginHop()
+    }
+
     private func beginHop() {
         guard stateMachine.transition(to: .hop) else { return }
         state = stateMachine.state
