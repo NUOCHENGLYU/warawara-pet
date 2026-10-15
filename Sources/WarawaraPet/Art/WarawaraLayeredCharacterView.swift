@@ -271,7 +271,7 @@ struct WarawaraWarpedBodyView: View {
 
     private func stripSlice(_ strip: WarawaraTurnGeometry.Strip, index: Int) -> some View {
         let baseMinY = strips.first?.destination.minY ?? strip.destination.minY
-        ZStack(alignment: .topLeading) {
+        return ZStack(alignment: .topLeading) {
             Image(nsImage: image)
                 .resizable()
                 .interpolation(.high)
