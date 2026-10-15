@@ -203,7 +203,12 @@ final class WarawaraWarpRasterTests: XCTestCase {
         )
         for yaw in [CGFloat(-25), 25] {
             let rep = try rep(of: render(yaw: yaw, scale: scale))
-            for y in stride(from: Int(bodyRect.minY) + 6, to: Int(bodyRect.maxY) - 6, by: 5) {
+            // Torso core only (0.32...0.48 of body height): above the
+            // arms, below the neck - one solid blob with no legitimate
+            // multiple-lobe rows (feet/arms legitimately split rows).
+            let yStart = Int(bodyRect.minY + bodyRect.height * 0.32)
+            let yEnd = Int(bodyRect.minY + bodyRect.height * 0.48)
+            for y in stride(from: yStart, to: yEnd, by: 3) {
                 var runs = 0
                 var inRun = false
                 for x in Int(bodyRect.minX)..<Int(bodyRect.maxX) {
@@ -215,7 +220,7 @@ final class WarawaraWarpRasterTests: XCTestCase {
                         inRun = false
                     }
                 }
-                XCTAssertEqual(runs, 1, "yaw \(yaw) row \(y): silhouette must be one continuous body")
+                XCTAssertEqual(runs, 1, "yaw \(yaw) row \(y): torso must be one continuous body")
             }
         }
     }
@@ -248,7 +253,10 @@ final class WarawaraWarpRasterTests: XCTestCase {
 
     func testInteriorLuminanceHasNoSharpSteps() throws {
         let scale: CGFloat = 2
-        let y = Int(bodyBounds.midY * canvas.height * scale)
+        // Feature-free torso row (0.46 of body height): between the eye
+        // band (0.416) and the mouth (0.512), so luminance steps can only
+        // come from strip discontinuities.
+        let y = Int((bodyBounds.minY + bodyBounds.height * 0.46) * canvas.height * scale)
         for yaw in [CGFloat(-25), 25] {
             let rep = try rep(of: render(yaw: yaw, scale: scale))
             var previous: CGFloat = -1
