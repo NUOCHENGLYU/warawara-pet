@@ -1239,7 +1239,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
             let h = rep.pixelsHigh
             let leftRect = CGRect(x: 0, y: 0, width: 90, height: h)
             let rightRect = CGRect(x: rep.pixelsWide - 90, y: 0, width: 90, height: h)
-            func zoom(_ rect: CGRect) -> Image {
+            func zoom(_ rect: CGRect) -> some View {
                 Image(nsImage: NSImage(cgImage: cg.cropping(to: rect)!, size: rect.size))
                     .resizable()
                     .frame(width: 240, height: 380)
