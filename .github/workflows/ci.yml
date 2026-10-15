@@ -24,6 +24,11 @@ jobs:
         env:
           ART_PREVIEW_OUT: dist/art-preview
 
+      - name: Generate birthday previews
+        run: swift test --filter BirthdayPreviewGeneratorTests
+        env:
+          BIRTHDAY_PREVIEW_OUT: dist/birthday-preview
+
       - name: Package .app and zip
         run: bash Scripts/package-app.sh
 
@@ -33,6 +38,9 @@ jobs:
           echo "$OUTPUT"
           echo "$OUTPUT" | grep -q "SPRITES_OK" || { echo "sprites not loaded"; exit 1; }
           echo "$OUTPUT" | grep -q "rig=loaded" || { echo "layered rig not loaded"; exit 1; }
+          BIRTHDAY="$("dist/WarawaraPet.app/Contents/MacOS/WarawaraPet" --verify-birthday)"
+          echo "$BIRTHDAY"
+          echo "$BIRTHDAY" | grep -q "BIRTHDAY_OK" || { echo "birthday assets not loaded"; exit 1; }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -46,4 +54,11 @@ jobs:
         with:
           name: WarawaraPet-Art-Preview
           path: dist/art-preview
+          retention-days: 30
+
+      - name: Upload birthday preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WarawaraPet-Birthday-Preview
+          path: dist/birthday-preview
           retention-days: 30
