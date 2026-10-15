@@ -251,25 +251,46 @@ final class WarawaraWarpRasterTests: XCTestCase {
         }
     }
 
-    func testInteriorLuminanceHasNoSharpSteps() throws {
+    func testNoPersistentVerticalSeamLines() throws {
+        // Strip seams would appear as sharp luminance steps at CONSTANT x
+        // positions across many rows (strip boundaries are vertical).
+        // Legitimate features (outline edges, shading falloff) move with
+        // the silhouette per row. Count rows sharing the same step x:
+        // a true seam lights up many rows, a legitimate edge only a few.
         let scale: CGFloat = 2
-        // Feature-free torso row (0.46 of body height): between the eye
-        // band (0.416) and the mouth (0.512), so luminance steps can only
-        // come from strip discontinuities.
-        let y = Int((bodyBounds.minY + bodyBounds.height * 0.46) * canvas.height * scale)
+        let bodyRect = CGRect(
+            x: bodyBounds.minX * canvas.width * scale,
+            y: bodyBounds.minY * canvas.height * scale,
+            width: bodyBounds.width * canvas.width * scale,
+            height: bodyBounds.height * canvas.height * scale
+        )
+        let rowStart = Int(bodyRect.minY + bodyRect.height * 0.32)
+        let rowEnd = Int(bodyRect.minY + bodyRect.height * 0.48)
         for yaw in [CGFloat(-25), 25] {
             let rep = try rep(of: render(yaw: yaw, scale: scale))
-            var previous: CGFloat = -1
-            var maxStep: CGFloat = 0
-            for x in 0..<rep.pixelsWide {
-                guard alpha(rep, x: x, y: y) > 0.5 else { continue }
-                let lum = luminance(rep, x: x, y: y)
-                if previous >= 0 {
-                    maxStep = max(maxStep, abs(lum - previous))
+            var stepCount: [Int: Int] = [:]
+            for y in stride(from: rowStart, to: rowEnd, by: 3) {
+                var previous: CGFloat = -1
+                var previousX = 0
+                for x in Int(bodyRect.minX)..<Int(bodyRect.maxX) {
+                    guard alpha(rep, x: x, y: y) > 0.5 else {
+                        previous = -1
+                        continue
+                    }
+                    let lum = luminance(rep, x: x, y: y)
+                    if previous >= 0, abs(lum - previous) > 0.3 {
+                        stepCount[x, default: 0] += 1
+                    }
+                    previous = lum
+                    previousX = x
                 }
-                previous = lum
+                _ = previousX
             }
-            XCTAssertLessThan(maxStep, 0.30, "yaw \(yaw): interior must have no seam steps")
+            let seamLines = stepCount.filter { $0.value >= 5 }.keys.sorted()
+            XCTAssertTrue(
+                seamLines.isEmpty,
+                "yaw \(yaw): persistent vertical seam lines at x = \(seamLines)"
+            )
         }
     }
 
