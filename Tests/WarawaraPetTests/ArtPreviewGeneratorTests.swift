@@ -477,6 +477,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         try renderRigYawSweep(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
         try renderRigPitchSamples(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
         try renderRigTurnSequence(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigYawContrast(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
 
         for name in ["18-rig-neutral.png", "19-rig-old-vs-recomposed.png",
                      "20-rig-gaze.png", "21-rig-blink.png", "22-rig-openness.png",
@@ -487,7 +488,8 @@ final class ArtPreviewGeneratorTests: XCTestCase {
                      "31-rig-openness-steps.png", "32-rig-held-gaze.png",
                      "33-rig-blink-timeline.png", "34-rig-head-turn.png",
                      "35-rig-yaw-sweep.png", "36-rig-pitch-samples.png",
-                     "37-rig-turn-sequence.png"] {
+                     "37-rig-turn-sequence.png", "38-rig-yaw-light-bg.png",
+                     "39-rig-yaw-dark-bg.png"] {
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
                 "missing rig preview \(name)"
@@ -1084,6 +1086,44 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         }
         try render(content, size: CGSize(width: 1500, height: 760), scale: 1,
                    to: dir.appendingPathComponent("37-rig-turn-sequence.png"))
+    }
+
+    @MainActor
+    private func renderRigYawContrast(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        // Yaw sweep against contrasting solid backgrounds: any window
+        // halo or strip-seam artifact must be visible here.
+        func yawParams(_ yaw: CGFloat) -> WarawaraPerformanceParameters {
+            WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(
+                    state: .curious,
+                    gaze: CGVector(dx: yaw / WarawaraTurnGeometry.maxYawDegrees, dy: 0)
+                ),
+                breathPhase: 0.25
+            ))
+        }
+        let yaws: [CGFloat] = [-25, -15, 0, 15, 25]
+        func sheet(background: Color, named: String) throws {
+            let content = ZStack {
+                background
+                VStack(spacing: 6) {
+                    Text("yaw on \(named.contains("light") ? "light" : "dark") background").font(.headline)
+                    HStack(spacing: 20) {
+                        ForEach(yaws.indices, id: \.self) { index in
+                            VStack(spacing: 4) {
+                                self.rigView(rig, rigLoader, yawParams(yaws[index]), renderSize)
+                                Text(String(format: "%+.0f deg", yaws[index])).font(.caption)
+                            }
+                        }
+                    }
+                }
+            }
+            try render(content, size: CGSize(width: 1300, height: 380), scale: 1,
+                       to: dir.appendingPathComponent(named))
+        }
+        try sheet(background: Color(white: 0.93), named: "38-rig-yaw-light-bg.png")
+        try sheet(background: Color(white: 0.18), named: "39-rig-yaw-dark-bg.png")
     }
 
     private func renderComparisonNote(to dir: URL) throws {

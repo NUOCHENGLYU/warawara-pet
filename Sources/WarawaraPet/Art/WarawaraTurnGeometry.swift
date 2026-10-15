@@ -138,4 +138,17 @@ enum WarawaraTurnGeometry {
         let t = max((yawFrac - 0.15) / 0.85, 0)
         return t * t * (3 - 2 * t) * 0.11
     }
+
+    /// Per-strip volume shading: strongest at the far-side edge, fading
+    /// smoothly to zero at the near-side edge. Zero at neutral. This is
+    /// INTENTIONAL in-body volume shading — never a window shadow.
+    static func stripShade(at index: Int, count: Int, yawDegrees: CGFloat) -> CGFloat {
+        let strength = shadeStrength(yawDegrees: yawDegrees)
+        guard strength > 0.001 else { return 0 }
+        let u = (CGFloat(index) + 0.5) / CGFloat(max(count, 2)) * 2 - 1
+        // Far side depends on the turn direction; near side stays bright.
+        let falloff: CGFloat = yawDegrees >= 0 ? (1 - u) / 2 : (1 + u) / 2
+        let eased = falloff * falloff * (3 - 2 * falloff)
+        return strength * eased
+    }
 }

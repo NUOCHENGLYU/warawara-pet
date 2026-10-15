@@ -183,4 +183,32 @@ final class WarawaraTurnGeometryTests: XCTestCase {
         XCTAssertGreaterThan(full, half)
         XCTAssertLessThanOrEqual(full, 0.12)
     }
+
+    func testStripShadeIsInBodyVolumeOnlyAndSymmetric() {
+        // Zero at neutral; bounded by the global strength; strongest at
+        // the far edge and fading to the near edge; mirrored for the
+        // opposite turn direction.
+        for i in 0..<14 {
+            XCTAssertEqual(
+                WarawaraTurnGeometry.stripShade(at: i, count: 14, yawDegrees: 0),
+                0, accuracy: 0.0001
+            )
+        }
+        let right = (0..<14).map { WarawaraTurnGeometry.stripShade(at: $0, count: 14, yawDegrees: 25) }
+        let left = (0..<14).map { WarawaraTurnGeometry.stripShade(at: $0, count: 14, yawDegrees: -25) }
+        let strength = WarawaraTurnGeometry.shadeStrength(yawDegrees: 25)
+        for i in 0..<14 {
+            XCTAssertLessThanOrEqual(right[i], strength + 0.0001)
+            XCTAssertGreaterThanOrEqual(right[i], 0)
+            XCTAssertEqual(right[i], left[13 - i], accuracy: 0.0001,
+                           "strip shading must mirror with the turn")
+        }
+        // Monotonic falloff from the far (left) edge to the near side.
+        for i in 1..<14 {
+            XCTAssertLessThanOrEqual(right[i], right[i - 1] + 0.0001)
+        }
+        // The far-edge strip is shaded, the near-edge strip is (nearly) not.
+        XCTAssertGreaterThan(right[0], right[13])
+        XCTAssertLessThan(right[13], 0.01)
+    }
 }

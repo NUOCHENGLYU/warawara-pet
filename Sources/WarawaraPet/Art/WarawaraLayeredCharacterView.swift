@@ -230,11 +230,13 @@ struct WarawaraLayeredCharacterView: View {
     }
 }
 
-/// Draws the body raster with a perspective-aware strip warp: 14
-/// vertical strips whose widths follow WarawaraTurnGeometry's smooth
-/// profile, plus a far-side shading gradient clipped to the warped
-/// silhouette. Pure redraw per frame of a handful of image slices —
-/// no bitmap generation, deterministic, cheap.
+/// Draws the body raster with a perspective-aware strip warp using PURE
+/// SwiftUI image slices (no Canvas, no offscreen surface): each strip is
+/// the full body image clipped to its warped destination, so sampling at
+/// slice boundaries stays contiguous (no dark seams) and the transparent
+/// window compositing path is identical to the plain body image (no
+/// window halo). Far-side volume shading is per-strip alpha derived from
+/// the same yaw.
 struct WarawaraWarpedBodyView: View {
     let image: NSImage
     let renderSize: CGSize
@@ -245,59 +247,50 @@ struct WarawaraWarpedBodyView: View {
     private let stripCount = 14
 
     var body: some View {
-        Canvas { context, size in
-            let strips = WarawaraTurnGeometry.strips(
-                count: stripCount,
-                canvasSize: size,
-                bodyBounds: bodyBounds,
-                yawDegrees: yawDegrees,
-                pitchDegrees: pitchDegrees
-            )
-            guard let cgImage = image.cgImage(
-                forProposedRect: nil, context: nil, hints: nil
-            ) else { return }
-
-            var silhouette = Path()
-            for strip in strips {
-                silhouette.addRect(strip.destination)
-            }
-            context.clip(to: silhouette)
-
-            // Strip source rects are in view coordinates; CGImage crops
-            // use pixel coordinates (top-left origin, same as the view).
-            let pixelsPerPointX = CGFloat(cgImage.width) / size.width
-            let pixelsPerPointY = CGFloat(cgImage.height) / size.height
-            for strip in strips {
-                let pixelRect = CGRect(
-                    x: strip.source.minX * pixelsPerPointX,
-                    y: strip.source.minY * pixelsPerPointY,
-                    width: strip.source.width * pixelsPerPointX,
-                    height: strip.source.height * pixelsPerPointY
-                )
-                guard let crop = cgImage.cropping(to: pixelRect) else { continue }
-                context.draw(Image(decorative: crop, scale: 1), in: strip.destination)
-            }
-
-            // Far-side depth shading over the warped silhouette only.
-            let shade = WarawaraTurnGeometry.shadeStrength(yawDegrees: yawDegrees)
-            if shade > 0.001 {
-                let farSideOnLeft = yawDegrees >= 0
-                let gradient = Gradient(stops: [
-                    .init(color: Color.black.opacity(Double(shade)), location: farSideOnLeft ? 0 : 1),
-                    .init(color: .clear, location: farSideOnLeft ? 0.45 : 0.55)
-                ])
-                let farEdge = farSideOnLeft ? 0.0 : 1.0
-                context.fill(
-                    silhouette,
-                    with: .linearGradient(
-                        gradient,
-                        startPoint: CGPoint(x: farEdge * size.width, y: 0),
-                        endPoint: CGPoint(x: (1 - farEdge) * size.width, y: 0)
-                    )
-                )
+        HStack(spacing: 0) {
+            ForEach(Array(strips.enumerated()), id: \.offset) { index, strip in
+                stripSlice(strip, index: index)
             }
         }
-        .frame(width: renderSize.width, height: renderSize.height)
+        .frame(width: totalWidth, alignment: .leading)
+    }
+
+    private var strips: [WarawaraTurnGeometry.Strip] {
+        WarawaraTurnGeometry.strips(
+            count: stripCount,
+            canvasSize: renderSize,
+            bodyBounds: bodyBounds,
+            yawDegrees: yawDegrees,
+            pitchDegrees: pitchDegrees
+        )
+    }
+
+    private var totalWidth: CGFloat {
+        strips.reduce(0) { $0 + $1.destination.width }
+    }
+
+    private func stripSlice(_ strip: WarawaraTurnGeometry.Strip, index: Int) -> some View {
+        let baseMinY = strips.first?.destination.minY ?? strip.destination.minY
+        ZStack(alignment: .topLeading) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: renderSize.width, height: renderSize.height)
+                .offset(
+                    x: -strip.source.minX,
+                    y: -strip.source.minY + (strip.destination.minY - baseMinY)
+                )
+            Color.black.opacity(Double(WarawaraTurnGeometry.stripShade(
+                at: index, count: stripCount, yawDegrees: yawDegrees
+            )))
+        }
+        .frame(
+            width: strip.destination.width,
+            height: strip.destination.height,
+            alignment: .topLeading
+        )
+        .clipped()
+        .allowsHitTesting(false)
     }
 }
 
