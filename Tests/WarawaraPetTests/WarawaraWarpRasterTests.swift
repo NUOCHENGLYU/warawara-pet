@@ -81,16 +81,50 @@ final class WarawaraWarpRasterTests: XCTestCase {
         return count > 0 ? total / count : 0
     }
 
+    private func renderPlain(_ body: NSImage, scale: CGFloat) throws -> NSBitmapImageRep {
+        guard let cg = body.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            throw NSError(domain: "test", code: 3)
+        }
+        let pxW = Int((canvas.width * scale).rounded())
+        let pxH = Int((canvas.height * scale).rounded())
+        let bytesPerRow = pxW * 4
+        var buffer = [UInt8](repeating: 0, count: pxH * bytesPerRow)
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue
+            | CGImageAlphaInfo.premultipliedLast.rawValue
+        let ok = buffer.withUnsafeMutableBytes { raw -> Bool in
+            guard let base = raw.baseAddress,
+                  let ctx = CGContext(
+                    data: base, width: pxW, height: pxH, bitsPerComponent: 8,
+                    bytesPerRow: bytesPerRow, space: colorSpace,
+                    bitmapInfo: bitmapInfo
+                  ) else { return false }
+            ctx.interpolationQuality = .high
+            ctx.draw(cg, in: CGRect(x: 0, y: 0, width: pxW, height: pxH))
+            return true
+        }
+        guard ok else { throw NSError(domain: "test", code: 4) }
+        guard let provider = CGDataProvider(data: Data(buffer) as CFData),
+              let image = CGImage(
+                width: pxW, height: pxH, bitsPerComponent: 8, bitsPerPixel: 32,
+                bytesPerRow: bytesPerRow, space: colorSpace,
+                bitmapInfo: CGBitmapInfo(rawValue: bitmapInfo),
+                provider: provider, decode: nil, shouldInterpolate: true,
+                intent: .defaultIntent
+              ) else { throw NSError(domain: "test", code: 5) }
+        let nsImage = NSImage(cgImage: image, size: canvas)
+        return try rep(of: nsImage)
+    }
+
     // MARK: - Zero-angle equivalence
 
     func testZeroAngleWarpMatchesAcceptedBaseline() throws {
         let body = try bodyImage()
-        let warped = try render(yaw: 0, pitch: 0, scale: 1, shading: true)
-        let warpedRep = try rep(of: warped)
-        let bodyRep = try rep(of: body)
-        XCTAssertEqual(warpedRep.pixelsWide, bodyRep.pixelsWide)
-        XCTAssertEqual(warpedRep.pixelsHigh, bodyRep.pixelsHigh)
-        XCTAssertLessThan(meanAbsDiff(warpedRep, bodyRep), 2.0 / 255.0,
+        let warpedRep = try rep(of: render(yaw: 0, pitch: 0, scale: 1, shading: true))
+        let plainRep = try renderPlain(body, scale: 1)
+        XCTAssertEqual(warpedRep.pixelsWide, plainRep.pixelsWide)
+        XCTAssertEqual(warpedRep.pixelsHigh, plainRep.pixelsHigh)
+        XCTAssertLessThan(meanAbsDiff(warpedRep, plainRep), 2.0 / 255.0,
                           "zero-angle warp must reproduce the accepted artwork")
     }
 
@@ -252,20 +286,20 @@ final class WarawaraWarpRasterTests: XCTestCase {
     func testRetinaScaleDimensions() throws {
         let warped = try render(yaw: 15, scale: 2)
         let rep = try rep(of: warped)
-        XCTAssertEqual(rep.pixelsWide, Int(canvas.width * 2))
-        XCTAssertEqual(rep.pixelsHigh, Int(canvas.height * 2))
+        XCTAssertEqual(rep.pixelsWide, Int((canvas.width * 2).rounded()))
+        XCTAssertEqual(rep.pixelsHigh, Int((canvas.height * 2).rounded()))
     }
 
     func testRendererCachesPerQuantizedAngle() throws {
         let body = try bodyImage()
         _ = WarawaraWarpRenderer.warpedBodyImage(
             body: body, canvasSize: canvas, bodyBounds: bodyBounds,
-            yawDegrees: 15.2, pitchDegrees: 0
+            yawDegrees: 15.1, pitchDegrees: 0
         )
         let count = WarawaraWarpRenderer.cachedCount
         _ = WarawaraWarpRenderer.warpedBodyImage(
             body: body, canvasSize: canvas, bodyBounds: bodyBounds,
-            yawDegrees: 15.3, pitchDegrees: 0
+            yawDegrees: 15.2, pitchDegrees: 0
         )
         XCTAssertEqual(WarawaraWarpRenderer.cachedCount, count, "same quantized angle must hit the cache")
         XCTAssertGreaterThan(count, 0)

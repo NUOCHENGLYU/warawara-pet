@@ -104,9 +104,11 @@ enum WarawaraWarpRenderer {
                     bitmapInfo: bitmapInfo
                   ) else { return false }
 
-            // Draw in TOP-LEFT coordinates (matching WarawaraTurnGeometry).
-            ctx.translateBy(x: 0, y: CGFloat(pxH))
-            ctx.scaleBy(x: 1, y: -1)
+            // CGBitmapContext: memory row 0 is the TOP scanline, while
+            // the CG coordinate origin is bottom-left. Image draws use
+            // the normal (unflipped) CTM so they render upright; strip
+            // destinations are converted from top-left geometry to
+            // bottom-left CG coordinates here.
             ctx.interpolationQuality = .high
 
             // Pixel-aligned strip edges: computed once from the same
@@ -123,10 +125,11 @@ enum WarawaraWarpRenderer {
             for index in 0..<strips.count {
                 let strip = strips[index]
                 let destX = pixelEdges[index]
-                let destY = (strip.destination.minY * scale).rounded()
+                let destYTop = (strip.destination.minY * scale).rounded()
                 let destWidth = pixelEdges[index + 1] - destX
                 let destHeight = (strip.destination.height * scale).rounded()
                 guard destWidth > 0, destHeight > 0 else { continue }
+                let destYBottom = CGFloat(pxH) - destYTop - destHeight
 
                 let srcX = sourcePixelEdges[index]
                 let srcWidth = sourcePixelEdges[index + 1] - srcX
@@ -136,7 +139,7 @@ enum WarawaraWarpRenderer {
 
                 let sourceRect = CGRect(x: srcX, y: srcY, width: srcWidth, height: srcHeight)
                 guard let crop = cg.cropping(to: sourceRect) else { continue }
-                ctx.draw(crop, in: CGRect(x: destX, y: destY, width: destWidth, height: destHeight))
+                ctx.draw(crop, in: CGRect(x: destX, y: destYBottom, width: destWidth, height: destHeight))
             }
             return true
         }
