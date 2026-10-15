@@ -478,6 +478,7 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         try renderRigPitchSamples(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
         try renderRigTurnSequence(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
         try renderRigYawContrast(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
+        try renderRigWarpDiagnostics(rig: rig, rigLoader: rigLoader, renderSize: renderSize, to: outputDir)
 
         for name in ["18-rig-neutral.png", "19-rig-old-vs-recomposed.png",
                      "20-rig-gaze.png", "21-rig-blink.png", "22-rig-openness.png",
@@ -489,7 +490,11 @@ final class ArtPreviewGeneratorTests: XCTestCase {
                      "33-rig-blink-timeline.png", "34-rig-head-turn.png",
                      "35-rig-yaw-sweep.png", "36-rig-pitch-samples.png",
                      "37-rig-turn-sequence.png", "38-rig-yaw-light-bg.png",
-                     "39-rig-yaw-dark-bg.png"] {
+                     "39-rig-yaw-dark-bg.png", "40-rig-alpha-viz.png",
+                     "41-rig-warp-black-white.png", "41-rig-warp-white-bg.png",
+                     "42-rig-silhouette-zoom.png", "42b-rig-silhouette-zoom-left.png",
+                     "43-rig-shade-off-on.png", "44-rig-turn-sweep.png",
+                     "45-rig-turn-drag-stress.png"] {
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
                 "missing rig preview \(name)"
@@ -1124,6 +1129,208 @@ final class ArtPreviewGeneratorTests: XCTestCase {
         }
         try sheet(background: Color(white: 0.93), named: "38-rig-yaw-light-bg.png")
         try sheet(background: Color(white: 0.18), named: "39-rig-yaw-dark-bg.png")
+    }
+
+    @MainActor
+    private func renderRigWarpDiagnostics(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, renderSize: CGSize, to dir: URL
+    ) throws {
+        guard let bodyImage = rigLoader.image(forLayer: rig.bodyLayer!, role: "base") else {
+            throw XCTSkip("body artwork unavailable for warp diagnostics")
+        }
+        let yaws: [CGFloat] = [-25, -15, 0, 15, 25]
+
+        func warp(_ yaw: CGFloat, pitch: CGFloat = 0, shading: Bool = true) -> NSImage? {
+            WarawaraWarpRenderer.renderWarp(
+                body: bodyImage,
+                canvasSize: renderSize,
+                bodyBounds: rig.bodyBounds,
+                yawDegrees: yaw,
+                pitchDegrees: pitch,
+                scale: 2,
+                shadingEnabled: shading
+            )
+        }
+
+        // 40: alpha visualization (white = alpha) at 0/+-15/+-25.
+        func alphaViz(_ yaw: CGFloat) -> NSImage? {
+            guard let warped = warp(yaw),
+                  let tiff = warped.tiffRepresentation,
+                  let source = NSBitmapImageRep(data: tiff) else { return nil }
+            guard let viz = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: source.pixelsWide,
+                pixelsHigh: source.pixelsHigh,
+                bitsPerSample: 8,
+                samplesPerPixel: 4,
+                hasAlpha: true,
+                isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: source.pixelsWide * 4,
+                bitsPerPixel: 32
+            ) else { return nil }
+            for y in 0..<source.pixelsHigh {
+                for x in 0..<source.pixelsWide {
+                    let a = source.colorAt(x: x, y: y)?.alphaComponent ?? 0
+                    viz.setColor(NSColor(white: a, alpha: 1), atX: x, y: y)
+                }
+            }
+            guard let cg = viz.cgImage else { return nil }
+            return NSImage(cgImage: cg, size: NSSize(width: source.pixelsWide, height: source.pixelsHigh))
+        }
+        let alphaCells = yaws.map { yaw -> (String, NSImage?) in
+            (String(format: "%+.0f deg", yaw), alphaViz(yaw))
+        }
+        let alphaContent = ZStack {
+            Color.black
+            VStack(spacing: 6) {
+                Text("alpha visualization (white = alpha)").font(.headline).foregroundColor(.white)
+                HStack(spacing: 16) {
+                    ForEach(alphaCells.indices, id: \.self) { index in
+                        VStack(spacing: 4) {
+                            if let image = alphaCells[index].1 {
+                                Image(nsImage: image)
+                                    .resizable()
+                                    .frame(width: renderSize.width, height: renderSize.height)
+                            }
+                            Text(alphaCells[index].0).font(.caption).foregroundColor(.white)
+                        }
+                    }
+                }
+            }
+        }
+        try render(alphaContent, size: CGSize(width: 1300, height: 400), scale: 1,
+                   to: dir.appendingPathComponent("40-rig-alpha-viz.png"))
+
+        // 41: yaw set against pure black and pure white.
+        func backgroundSheet(background: Color, named: String, captionColor: Color) throws {
+            let content = ZStack {
+                background
+                VStack(spacing: 6) {
+                    Text(named.contains("black") ? "warp on pure black" : "warp on pure white")
+                        .font(.headline).foregroundColor(captionColor)
+                    HStack(spacing: 16) {
+                        ForEach(yaws.indices, id: \.self) { index in
+                            VStack(spacing: 4) {
+                                if let image = warp(yaws[index]) {
+                                    Image(nsImage: image)
+                                        .resizable()
+                                        .frame(width: renderSize.width, height: renderSize.height)
+                                }
+                                Text(String(format: "%+.0f deg", yaws[index]))
+                                    .font(.caption).foregroundColor(captionColor)
+                            }
+                        }
+                    }
+                }
+            }
+            try render(content, size: CGSize(width: 1300, height: 400), scale: 1,
+                       to: dir.appendingPathComponent(named))
+        }
+        try backgroundSheet(background: .black, named: "41-rig-warp-black-white.png", captionColor: .white)
+        try backgroundSheet(background: .white, named: "41-rig-warp-white-bg.png", captionColor: .black)
+
+        // 42: enlarged left/right silhouette boundaries at +-25.
+        func boundarySheet(yaw: CGFloat, side: String, named: String) throws {
+            guard let warped = warp(yaw),
+                  let tiff = warped.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let cg = rep.cgImage else { return }
+            let h = rep.pixelsHigh
+            let leftRect = CGRect(x: 0, y: 0, width: 90, height: h)
+            let rightRect = CGRect(x: rep.pixelsWide - 90, y: 0, width: 90, height: h)
+            func zoom(_ rect: CGRect) -> Image {
+                Image(nsImage: NSImage(cgImage: cg.cropping(to: rect)!, size: rect.size))
+                    .resizable()
+                    .frame(width: 240, height: 380)
+            }
+            let content = ZStack {
+                CheckerboardBackground()
+                VStack(spacing: 6) {
+                    Text("silhouette boundaries \(side) \(yaw) deg (4x zoom)").font(.headline)
+                    HStack(spacing: 20) {
+                        zoom(leftRect)
+                        zoom(rightRect)
+                    }
+                }
+            }
+            try render(content, size: CGSize(width: 700, height: 470), scale: 1,
+                       to: dir.appendingPathComponent(named))
+        }
+        try boundarySheet(yaw: 25, side: "right", named: "42-rig-silhouette-zoom.png")
+        try boundarySheet(yaw: -25, side: "left", named: "42b-rig-silhouette-zoom-left.png")
+
+        // 43: far-side shading disabled vs enabled at +-25.
+        let shadeCells: [(String, NSImage?)] = [
+            ("-25 no shade", warp(-25, shading: false)),
+            ("-25 shaded", warp(-25, shading: true)),
+            ("+25 no shade", warp(25, shading: false)),
+            ("+25 shaded", warp(25, shading: true))
+        ]
+        let shadeContent = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 6) {
+                Text("far-side shading: disabled vs enabled").font(.headline)
+                HStack(spacing: 16) {
+                    ForEach(shadeCells.indices, id: \.self) { index in
+                        VStack(spacing: 4) {
+                            if let image = shadeCells[index].1 {
+                                Image(nsImage: image)
+                                    .resizable()
+                                    .frame(width: renderSize.width, height: renderSize.height)
+                            }
+                            Text(shadeCells[index].0).font(.caption)
+                        }
+                    }
+                }
+            }
+        }
+        try render(shadeContent, size: CGSize(width: 1100, height: 400), scale: 1,
+                   to: dir.appendingPathComponent("43-rig-shade-off-on.png"))
+
+        // 44: 24-frame continuous yaw sweep via the production layered view.
+        func yawParams(_ yaw: CGFloat) -> WarawaraPerformanceParameters {
+            WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+                inputs: WarawaraExpressionInputs(
+                    state: .curious,
+                    gaze: CGVector(dx: yaw / WarawaraTurnGeometry.maxYawDegrees, dy: 0)
+                ),
+                breathPhase: 0.25
+            ))
+        }
+        let sweep: [CGFloat] = (0..<24).map { -25 + CGFloat($0) * 50.0 / 23.0 }
+        let sweepContent = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 4) {
+                Text("24-frame continuous yaw sweep").font(.headline)
+                HStack(spacing: 2) {
+                    ForEach(sweep.indices, id: \.self) { index in
+                        self.rigView(rig, rigLoader, yawParams(sweep[index]), renderSize)
+                            .frame(width: 52)
+                    }
+                }
+                .clipped()
+            }
+        }
+        try render(sweepContent, size: CGSize(width: 1400, height: 400), scale: 1,
+                   to: dir.appendingPathComponent("44-rig-turn-sweep.png"))
+
+        // 45: yaw combined with drag-like deformation (rotation + squash),
+        // rendered through the production layered view at desktop size.
+        let stressParams = yawParams(20)
+        let stressContent = ZStack {
+            CheckerboardBackground()
+            HStack(spacing: 40) {
+                self.rigView(rig, rigLoader, stressParams, renderSize)
+                    .rotationEffect(.radians(0.08))
+                    .scaleEffect(x: 1.12, y: 0.9)
+                self.rigView(rig, rigLoader, yawParams(-20), renderSize)
+                    .rotationEffect(.radians(-0.08))
+                    .scaleEffect(x: 1.12, y: 0.9)
+            }
+        }
+        try render(stressContent, size: CGSize(width: 700, height: 380), scale: 1,
+                   to: dir.appendingPathComponent("45-rig-turn-drag-stress.png"))
     }
 
     private func renderComparisonNote(to dir: URL) throws {

@@ -11,6 +11,11 @@ enum WarawaraTurnGeometry {
     static let maxYawDegrees: CGFloat = 25
     static let maxPitchDegrees: CGFloat = 10
 
+    /// Stable fallback switch (launch argument `--no-2d5-turn`): forces
+    /// yaw/pitch to zero everywhere, keeping the accepted gaze/face
+    /// behavior without the experimental 2.5D warp.
+    static var turnDisabled = false
+
     static func clampedYaw(_ degrees: CGFloat) -> CGFloat {
         min(max(degrees, -maxYawDegrees), maxYawDegrees)
     }

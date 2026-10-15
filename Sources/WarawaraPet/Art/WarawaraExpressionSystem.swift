@@ -87,8 +87,13 @@ enum WarawaraExpressionMapper {
             p.eyeOpenness = 1
             p.gazeX = gazeX
             p.gazeY = gazeY
-            p.yawDegrees = gazeX * WarawaraTurnGeometry.maxYawDegrees
-            p.pitchDegrees = gazeY * WarawaraTurnGeometry.maxPitchDegrees
+            if WarawaraTurnGeometry.turnDisabled {
+                p.yawDegrees = 0
+                p.pitchDegrees = 0
+            } else {
+                p.yawDegrees = gazeX * WarawaraTurnGeometry.maxYawDegrees
+                p.pitchDegrees = gazeY * WarawaraTurnGeometry.maxPitchDegrees
+            }
             p.mouthStyle = .neutral
             p.mouthOpenAmount = 0.12 * focus
             p.bodyTilt = 0

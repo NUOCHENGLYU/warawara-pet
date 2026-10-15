@@ -57,13 +57,16 @@ are intentionally deferred:
    channel composed at render time (full closure guaranteed), eye-layer
    composition uses normalized mutually-exclusive weights (no additive
    double eyes), and curious gaze is a coordinated head-turn hierarchy
-   (Phase 5E). Phase 5F replaces the flat turn cues with a continuous
-   2.5D body turn: yaw (±25 deg) and pitch (±10 deg) parameters derived
-   from the smoothed gaze drive a perspective-aware strip warp of the
-   body raster (near side expands, far side narrows, total width
-   preserved, far-side shading) plus ONE affine remap of the shared
-   facial frame — zero angle stays exactly the accepted frontal art.
-   Remaining limitations: the blink schedule is a
+   (Phase 5E). Phase 5F adds a continuous 2.5D body turn: yaw (±25 deg)
+   and pitch (±10 deg) parameters derived from the smoothed gaze drive a
+   perspective-aware warp of the body raster. Phase 5F-R replaced the
+   per-strip SwiftUI compositing with ONE unified CoreGraphics pass
+   (WarawaraWarpRenderer): the silhouette is rasterized coherently
+   (pixel-aligned strip edges, no seams) and far-side shading is
+   multiplied in-buffer onto alpha>0 pixels only (can never escape the
+   outline — no halo). A stable fallback launch argument
+   `--no-2d5-turn` disables only the warp (accepted gaze/face behavior
+   remains). Remaining limitations: the blink schedule is a
    deterministic two-period pattern awaiting real tuning; independent
    limb artwork (with shoulder/foot pivots and a masked body revision)
    is required before limbs can animate without duplicating the painted

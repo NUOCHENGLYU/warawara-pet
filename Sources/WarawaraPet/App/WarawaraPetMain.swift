@@ -8,6 +8,11 @@ enum WarawaraPetMain {
 
     static func main() {
         let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--no-2d5-turn") {
+            // Stable fallback: disable the experimental 2.5D body warp,
+            // keeping the accepted gaze/face behavior.
+            WarawaraTurnGeometry.turnDisabled = true
+        }
         if arguments.contains("--verify-sprites") {
             // Headless self-check used by CI against the packaged .app:
             // runs the real startup loader against the real bundled

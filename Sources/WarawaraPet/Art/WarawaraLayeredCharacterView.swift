@@ -87,15 +87,25 @@ struct WarawaraLayeredCharacterView: View {
             if WarawaraTurnGeometry.isActive(
                 yawDegrees: parameters.yawDegrees,
                 pitchDegrees: parameters.pitchDegrees
-            ) {
-                // Perspective-aware volume warp of the real body raster.
-                WarawaraWarpedBodyView(
-                    image: image,
-                    renderSize: renderSize,
-                    bodyBounds: rig.bodyBounds,
-                    yawDegrees: parameters.yawDegrees,
-                    pitchDegrees: parameters.pitchDegrees
-                )
+            ),
+               let warped = WarawaraWarpRenderer.warpedBodyImage(
+                   body: image,
+                   canvasSize: renderSize,
+                   bodyBounds: rig.bodyBounds,
+                   yawDegrees: parameters.yawDegrees,
+                   pitchDegrees: parameters.pitchDegrees
+               ) {
+                // ONE coherent pre-rendered surface: continuous outline,
+                // shading confined to the silhouette, composited exactly
+                // like the accepted neutral artwork.
+                Image(nsImage: warped)
+                    .resizable()
+                    .interpolation(.none)
+                    .frame(width: renderSize.width, height: renderSize.height)
+                    .offset(
+                        x: renderSize.width / 2 - layer.anchor.x * renderSize.width,
+                        y: renderSize.height / 2 - layer.anchor.y * renderSize.height
+                    )
             } else {
                 layerImage(image, layer: layer)
             }
@@ -227,70 +237,6 @@ struct WarawaraLayeredCharacterView: View {
                 x: renderSize.width / 2 - layer.anchor.x * renderSize.width,
                 y: renderSize.height / 2 - layer.anchor.y * renderSize.height
             )
-    }
-}
-
-/// Draws the body raster with a perspective-aware strip warp using PURE
-/// SwiftUI image slices (no Canvas, no offscreen surface): each strip is
-/// the full body image clipped to its warped destination, so sampling at
-/// slice boundaries stays contiguous (no dark seams) and the transparent
-/// window compositing path is identical to the plain body image (no
-/// window halo). Far-side volume shading is per-strip alpha derived from
-/// the same yaw.
-struct WarawaraWarpedBodyView: View {
-    let image: NSImage
-    let renderSize: CGSize
-    let bodyBounds: CGRect
-    let yawDegrees: CGFloat
-    let pitchDegrees: CGFloat
-
-    private let stripCount = 14
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(strips.enumerated()), id: \.offset) { index, strip in
-                stripSlice(strip, index: index)
-            }
-        }
-        .frame(width: totalWidth, alignment: .leading)
-    }
-
-    private var strips: [WarawaraTurnGeometry.Strip] {
-        WarawaraTurnGeometry.strips(
-            count: stripCount,
-            canvasSize: renderSize,
-            bodyBounds: bodyBounds,
-            yawDegrees: yawDegrees,
-            pitchDegrees: pitchDegrees
-        )
-    }
-
-    private var totalWidth: CGFloat {
-        strips.reduce(0) { $0 + $1.destination.width }
-    }
-
-    private func stripSlice(_ strip: WarawaraTurnGeometry.Strip, index: Int) -> some View {
-        let baseMinY = strips.first?.destination.minY ?? strip.destination.minY
-        return ZStack(alignment: .topLeading) {
-            Image(nsImage: image)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: renderSize.width, height: renderSize.height)
-                .offset(
-                    x: -strip.source.minX,
-                    y: -strip.source.minY + (strip.destination.minY - baseMinY)
-                )
-            Color.black.opacity(Double(WarawaraTurnGeometry.stripShade(
-                at: index, count: stripCount, yawDegrees: yawDegrees
-            )))
-        }
-        .frame(
-            width: strip.destination.width,
-            height: strip.destination.height,
-            alignment: .topLeading
-        )
-        .clipped()
-        .allowsHitTesting(false)
     }
 }
 
