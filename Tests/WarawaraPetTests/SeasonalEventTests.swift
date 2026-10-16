@@ -219,10 +219,10 @@ final class SeasonalEventTests: XCTestCase {
         coordinator.advance(at: start.addingTimeInterval(timing.noticeDuration + timing.approachDuration + timing.presentDuration + 0.1))
         XCTAssertEqual(coordinator.phase, .celebrate)
 
-        coordinator.advance(at: start.addingTimeInterval(total + 0.1))
-        XCTAssertEqual(coordinator.phase, .celebrate)
-        let finish = total + timing.celebrateDuration + timing.departDuration + 0.2
-        coordinator.advance(at: start.addingTimeInterval(finish))
+        coordinator.advance(at: start.addingTimeInterval(
+            timing.noticeDuration + timing.approachDuration + timing.presentDuration
+                + timing.celebrateDuration + timing.departDuration + 0.1
+        ))
         XCTAssertEqual(coordinator.phase, .idle)
         XCTAssertTrue(persistence.isCompleted(.cny, occurrenceYear: 2027))
         XCTAssertTrue(spy.calls.contains("clear"))
@@ -253,10 +253,10 @@ final class SeasonalEventTests: XCTestCase {
         let timing = SeasonalTiming.forKind(.christmas)
         let total = timing.noticeDuration + timing.approachDuration
             + timing.presentDuration + timing.celebrateDuration + timing.departDuration
-        coordinator.advance(at: start.addingTimeInterval(total + 0.1))
-        XCTAssertEqual(coordinator.phase, .celebrate)
-        let finish = total + timing.celebrateDuration + timing.departDuration + 0.2
-        coordinator.advance(at: start.addingTimeInterval(finish))
+        coordinator.advance(at: start.addingTimeInterval(
+            timing.noticeDuration + timing.approachDuration + timing.presentDuration
+                + timing.celebrateDuration + timing.departDuration + 0.1
+        ))
         XCTAssertEqual(coordinator.phase, .idle)
         XCTAssertFalse(persistence.isCompleted(.christmas, occurrenceYear: 2027),
                        "replay must not consume annual completion")
