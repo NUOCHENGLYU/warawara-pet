@@ -82,6 +82,12 @@ struct GroupTuning {
     // Companion visual variety
     var companionScaleRange: ClosedRange<CGFloat> = 0.85...1.15
 
+    // Approach hop/bob (Phase 6B birthday polish): companions bounce
+    // naturally while translating; amplitude follows their speed so the
+    // settle is soft and continuous.
+    var approachBobAmplitude: CGFloat = 11
+    var approachBobPeriod: TimeInterval = 0.55
+
     // Developer trigger
     var triggerDelayRange: ClosedRange<TimeInterval> = 2...4
 

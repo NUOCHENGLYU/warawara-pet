@@ -381,6 +381,23 @@ enum GroupMotionMath {
         return current + blend * (target - current)
     }
 
+    /// Continuous vertical hop/bob for the companion APPROACH motion:
+    /// a springy sine bob whose intensity follows the current speed, so
+    /// fast-approaching companions bounce lively and decelerating ones
+    /// settle softly (no teleportation, no synchronized identical
+    /// motion — the phase is per-companion).
+    static func approachBob(
+        speed: CGFloat,
+        maxAmplitude: CGFloat,
+        phase: CGFloat,
+        time: TimeInterval,
+        hopPeriod: TimeInterval
+    ) -> CGFloat {
+        guard speed > 1, maxAmplitude > 0 else { return 0 }
+        let intensity = min(max(speed / 25, 0), 1)
+        return sin(2 * .pi * (time / hopPeriod) + phase) * maxAmplitude * intensity
+    }
+
     // MARK: - Fades
 
     /// Fade-out used only for user cancellation: 1 -> 0.

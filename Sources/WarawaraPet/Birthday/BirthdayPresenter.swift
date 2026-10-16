@@ -25,6 +25,10 @@ final class BirthdayPresenter: BirthdayEventPresenting {
     /// so tests can exercise the post-delivery lifecycle directly).
     var delivered = false
     private var envelopeActive = false
+    /// True after the prop panels were re-ordered ABOVE the companion
+    /// panels (regression flag: the cake must render in FRONT of its
+    /// carrier companion).
+    private(set) var propsRaisedAboveCompanions = false
     private(set) var letterReadCount = 0
     private(set) var letterPresentedCount = 0
     private(set) var envelopeRetiredThisSession = false
@@ -211,10 +215,23 @@ final class BirthdayPresenter: BirthdayEventPresenting {
     /// Called by the app wiring when the group sequence ends.
     func groupActivityChanged(_ active: Bool) {
         if active {
+            raisePropsAboveCompanions()
             coordinator?.companionGroupDidStart()
         } else {
             coordinator?.companionGroupDidEnd()
         }
+    }
+
+    /// The companion panels are ordered front when the group starts
+    /// (AFTER the props were first shown), which would put the carrier
+    /// body ON TOP of the carried cake. Re-order the prop panels above
+    /// the companions once, so the cake/tray/envelope render in FRONT
+    /// of the carrier silhouette. One-time correction — no permanent
+    /// global window forcing.
+    private func raisePropsAboveCompanions() {
+        cakePanel?.orderFrontRegardless()
+        envelopePanel?.orderFrontRegardless()
+        propsRaisedAboveCompanions = true
     }
 
     // MARK: - Panels

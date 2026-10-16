@@ -200,7 +200,7 @@ final class GroupSequenceController {
                     )
                     updatePose(index: index, now: now)
                     updatePanel(id: config.id) {
-                        $0.setFrameOrigin(self.origin(for: self.runtimes[index].kinematics.position))
+                        $0.setFrameOrigin(self.origin(for: self.renderedPosition(of: self.runtimes[index])))
                     }
                 }
             }
@@ -312,7 +312,7 @@ final class GroupSequenceController {
             updatePose(index: index, now: now)
             updatePanel(id: config.id) {
                 $0.alphaValue = 1
-                $0.setFrameOrigin(self.origin(for: self.runtimes[index].kinematics.position))
+                $0.setFrameOrigin(self.origin(for: self.renderedPosition(of: self.runtimes[index])))
             }
         }
     }
@@ -446,9 +446,28 @@ final class GroupSequenceController {
         guard let onCompanionCenters else { return }
         var centers: [Int: CGPoint] = [:]
         for runtime in runtimes {
-            centers[runtime.config.id] = runtime.kinematics.position
+            centers[runtime.config.id] = renderedPosition(of: runtime)
         }
         onCompanionCenters(centers)
+    }
+
+    /// The RENDERED companion center: kinematic position plus the
+    /// approach hop/bob (appearing and gathering only). Carried props
+    /// follow THIS position so they share the exact same hop motion.
+    private func renderedPosition(of runtime: CompanionRuntime) -> CGPoint {
+        var position = runtime.kinematics.position
+        if model.state == .appearing || model.state == .gathering {
+            let elapsed = Date().timeIntervalSince(phaseStart)
+            let bob = GroupMotionMath.approachBob(
+                speed: runtime.kinematics.speed,
+                maxAmplitude: tuning.approachBobAmplitude,
+                phase: CGFloat(runtime.config.releaseDelay) * 7,
+                time: elapsed,
+                hopPeriod: tuning.approachBobPeriod
+            )
+            position.y += bob
+        }
+        return position
     }
 
     // MARK: - Geometry helpers

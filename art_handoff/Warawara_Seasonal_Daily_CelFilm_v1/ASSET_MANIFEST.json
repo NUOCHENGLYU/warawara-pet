@@ -1,0 +1,251 @@
+{
+  "pack_name": "Warawara_Seasonal_Daily_CelFilm_v1",
+  "version": 1,
+  "art_direction": "Match accepted Birthday CelFilm v5 foreground prop language (animated ink outlines and gentle cel shading), not generic vector sticker or ornate watercolor design",
+  "assets": {
+    "cny_lantern.png": {
+      "sha256": "d4b78043499594c008ff334f62e5f624ab18749927eb435a6f7d17a3a24ed1aa",
+      "size_px": [
+        1024,
+        1024
+      ],
+      "pixel_mode": "RGBA",
+      "alpha_bbox_threshold_10": [
+        207,
+        69,
+        817,
+        967
+      ],
+      "source_filename": "手绘红色中国灯笼png插画.png",
+      "category": "CNY",
+      "description": "Chinese New Year lantern",
+      "suggested_usage": "decor / carried / slight sway",
+      "suggested_display_points": 82,
+      "status": "candidate_for_real_mac_acceptance"
+    },
+    "cny_hongbao.png": {
+      "sha256": "dbaa917c2fd37f9725a6983d96b2653e65a26a62dbcc73e67306c3433cea1cf9",
+      "size_px": [
+        1024,
+        1024
+      ],
+      "pixel_mode": "RGBA",
+      "alpha_bbox_threshold_10": [
+        115,
+        258,
+        909,
+        787
+      ],
+      "source_filename": "水彩风红色新春红包.png",
+      "category": "CNY",
+      "description": "Chinese New Year red envelope",
+      "suggested_usage": "carried / offered / retired",
+      "suggested_display_points": 55,
+      "status": "candidate_for_real_mac_acceptance"
+    },
+    "cny_plum_branch.png": {
+      "sha256": "a5c884ae79a75b2644d2e87842a1928bc3b6e751a62a07698b091ee0665bc5aa",
+      "size_px": [
+        1024,
+        1024
+      ],
+      "pixel_mode": "RGBA",
+      "alpha_bbox_threshold_10": [
+        76,
+        42,
+        970,
+        989
+      ],
+      "source_filename": "水彩粉色梅花枝插画.png",
+      "category": "CNY",
+      "description": "Plum blossom branch",
+      "suggested_usage": "decor / carried / drift",
+      "suggested_display_points": 80,
+      "status": "candidate_for_real_mac_acceptance"
+    },
+    "cny_firecracker_hanging.png": {
+      "sha256": "cd1d0aa76f4a100ec30c9a8b2d7a53eedfb6df63ff0dcffd1fcf6e23ad0b7c06",
+      "size_px": [
+        1024,
+        1024
+      ],
+      "pixel_mode": "RGBA",
+      "alpha_bbox_threshold_10": [
+        301,
+        29,
+        754,
+        993
+      ],
+      "source_filename": "红金福字鞭炮挂饰.png",
+      "category": "CNY",
+      "description": "Hanging decorative firecrackers",
+      "suggested_usage": "decor only; no sound or explosive effects",
+      "suggested_display_points": 68,
+      "status": "candidate_for_real_mac_acceptance"
+    },
+    "xmas_wreath.png": {
+      "sha256": "2335bf4387e2303609f29fb67c0d458323c8c7daf793cf4f8f29dfe3e74922fe",
+      "size_px": [
+        1024,
+        1024
+      ],
+      "pixel_mode": "RGBA",
+      "alpha_bbox_threshold_10": [
+        81,
+        125,
+        949,
+        921
+      ],
+      "source_filename": "水彩圣诞花环与红色蝴蝶结.png",
+      "category": "Christmas",
+      "description": "Christmas wreath",
+      "suggested_usage": "arrive / hover / retire",
+      "suggested_display_points": 80,
+      "status": "candidate_for_real_mac_acceptance"
+    },
+    "xmas_gift.png": {
+      "sha256": "1fa394127fefc6abe2dca44b4f60c466a82e166790b965cf6ee70f588c7f76c8",
+      "size_px": [
+        1024,
+        1024
+      ],
+      "pixel_mode": "RGBA",
+      "alpha_bbox_threshold_10": [
+        134,
+        174,
+        906,
+        934
+      ],
+      "source_filename": "手绘水彩红缎带绿礼盒.png",
+      "category": "Christmas",
+      "description": "Christmas gift",
+      "suggested_usage": "carried / delivered / retire",
+      "suggested_display_points": 72,
+      "status": "candidate_for_real_mac_acceptance"
+    },
+    "newyear_calendar_jan1.png": {
+      "sha256": "7e2e3f87c4a0088a3b9da32e423d25eb4653730f0dd7f5830ce623360ee1071e",
+      "size_px": [
+        1024,
+        1024
+      ],
+      "pixel_mode": "RGBA",
+      "alpha_bbox_threshold_10": [
+        152,
+        181,
+        897,
+        907
+      ],
+      "source_filename": "手绘水彩风三角台历1号.png",
+      "category": "Gregorian New Year",
+      "description": "New Year Jan 1 desk calendar",
+      "suggested_usage": "display / page flip optional",
+      "suggested_display_points": 65,
+      "status": "candidate_for_real_mac_acceptance"
+    },
+    "newyear_party_popper.png": {
+      "sha256": "5c512c58ef2e570666476a99d67ad0ab37403e11d61c4dbac06043e52e122382",
+      "size_px": [
+        1024,
+        1024
+      ],
+      "pixel_mode": "RGBA",
+      "alpha_bbox_threshold_10": [
+        199,
+        91,
+        983,
+        910
+      ],
+      "source_filename": "水彩红色波点派对礼炮与彩纸彩带.png",
+      "category": "Gregorian New Year",
+      "description": "New Year confetti cone",
+      "suggested_usage": "brief confetti motion; silent",
+      "suggested_display_points": 66,
+      "status": "candidate_for_real_mac_acceptance"
+    },
+    "daily_umbrella.png": {
+      "sha256": "bf53b2aeb8e1e6c3aea6e6df2b80023a33277625506a0f474e1f97a92b201160",
+      "size_px": [
+        1024,
+        1024
+      ],
+      "pixel_mode": "RGBA",
+      "alpha_bbox_threshold_10": [
+        69,
+        69,
+        956,
+        954
+      ],
+      "source_filename": "手绘水彩蓝灰伞插画.png",
+      "category": "Daily",
+      "description": "Blue-grey umbrella",
+      "suggested_usage": "pretend-rain whimsical prop only; no actual weather assertion",
+      "suggested_display_points": 90,
+      "status": "candidate_for_real_mac_acceptance"
+    },
+    "daily_hot_cocoa.png": {
+      "sha256": "ee1a10728cad661b6c0c9c159f28cff430f3fb64f32873e7c59f1ffb0c51e036",
+      "size_px": [
+        1024,
+        1024
+      ],
+      "pixel_mode": "RGBA",
+      "alpha_bbox_threshold_10": [
+        164,
+        57,
+        942,
+        965
+      ],
+      "source_filename": "手绘蓝点棉花糖热可可杯.png",
+      "category": "Daily",
+      "description": "Hot cocoa mug",
+      "suggested_usage": "sit and enjoy / retire",
+      "suggested_display_points": 70,
+      "status": "candidate_for_real_mac_acceptance"
+    },
+    "daily_sprout.png": {
+      "sha256": "09be867a03324115eed693f2969733594ba9633d1a73200a0878fb74bbb6cc3b",
+      "size_px": [
+        1024,
+        1024
+      ],
+      "pixel_mode": "RGBA",
+      "alpha_bbox_threshold_10": [
+        273,
+        262,
+        752,
+        909
+      ],
+      "source_filename": "破壳而出的萌芽幼苗.png",
+      "category": "Daily",
+      "description": "Sprout in eggshell",
+      "suggested_usage": "peek / gentle growth bounce / retire",
+      "suggested_display_points": 56,
+      "status": "candidate_for_real_mac_acceptance"
+    },
+    "daily_paper_airplane.png": {
+      "sha256": "2c64f562853a6fbf4019ca5d4b8301722f74e8f9a3b303acc3b0df031958268d",
+      "size_px": [
+        1024,
+        1024
+      ],
+      "pixel_mode": "RGBA",
+      "alpha_bbox_threshold_10": [
+        76,
+        258,
+        943,
+        776
+      ],
+      "source_filename": "暖色水彩纸飞机winvalid.png",
+      "category": "Daily",
+      "description": "Paper airplane carrying a small note",
+      "suggested_usage": "glide / loop / retire",
+      "suggested_display_points": 60,
+      "status": "candidate_for_real_mac_acceptance"
+    }
+  },
+  "image_count": 12,
+  "contains_character_art": false,
+  "requires_network": false,
+  "event_spec": "EVENT_TIMING_AND_STORY_SPEC.md"
+}

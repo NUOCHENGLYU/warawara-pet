@@ -222,4 +222,54 @@ final class BirthdaySecondFixTests: XCTestCase {
         XCTAssertNil(BirthdayAssetStore.shared.optionalImage(named: "carry_tray.png"))
         XCTAssertNil(BirthdayAssetStore.shared.optionalImage(named: "envelope_band.png"))
     }
+
+    // MARK: - Phase 6B birthday polish
+
+    func testApproachBobIsContinuousBoundedAndSettles() {
+        // Zero at rest; bounded by the amplitude; intensity follows
+        // speed so decelerating companions settle softly.
+        XCTAssertEqual(
+            GroupMotionMath.approachBob(speed: 0, maxAmplitude: 11, phase: 0, time: 1, hopPeriod: 0.55),
+            0,
+            accuracy: 0.0001
+        )
+        var previous: CGFloat = 0
+        var maxValue: CGFloat = 0
+        for step in 0..<120 {
+            let t = TimeInterval(step) / 60.0
+            let bob = GroupMotionMath.approachBob(
+                speed: 60, maxAmplitude: 11, phase: 0.4, time: t, hopPeriod: 0.55
+            )
+            XCTAssertLessThanOrEqual(abs(bob), 11 + 0.001, "bob must stay bounded")
+            XCTAssertLessThanOrEqual(abs(bob - previous), 11 * 2 * .pi / 60.0 / 0.55 + 0.1,
+                                     "bob must be continuous between 60 Hz samples")
+            maxValue = max(maxValue, abs(bob))
+            previous = bob
+        }
+        XCTAssertGreaterThan(maxValue, 5, "fast companions must visibly bounce")
+
+        let slow = GroupMotionMath.approachBob(
+            speed: 8, maxAmplitude: 11, phase: 0.4, time: 2, hopPeriod: 0.55
+        )
+        XCTAssertLessThan(abs(slow), abs(previous) + 0.001, "slow companions settle toward no bob")
+    }
+
+    func testPropsRaiseAboveCompanionsWhenGroupStarts() {
+        let windowController = PetWindowController()
+        let persistence = BirthdayPersistence(defaults: defaults)
+        let coordinator = BirthdayEventCoordinator(persistence: persistence)
+        let presenter = BirthdayPresenter(
+            windowController: windowController,
+            coordinator: coordinator,
+            store: .shared,
+            persistence: persistence
+        )
+        presenter.presentCarriedProps()
+        XCTAssertFalse(presenter.propsRaisedAboveCompanions)
+        presenter.groupActivityChanged(true)
+        XCTAssertTrue(
+            presenter.propsRaisedAboveCompanions,
+            "props must be re-ordered in front of the carrier companions"
+        )
+    }
 }
