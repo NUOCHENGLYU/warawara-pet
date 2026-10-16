@@ -126,6 +126,7 @@ final class BirthdaySecondFixTests: XCTestCase {
             persistence: persistence
         )
         presenter.reassertPetVisibility = {}
+        presenter.delivered = true
         presenter.activateEnvelope()
         XCTAssertEqual(presenter.letterReadCount, 0)
 

@@ -21,7 +21,9 @@ final class BirthdayPresenter: BirthdayEventPresenting {
     private var letterWindowController: LetterWindowController?
 
     private var attached = false
-    private var delivered = false
+    /// True once the props were delivered to the front layout (internal
+    /// so tests can exercise the post-delivery lifecycle directly).
+    var delivered = false
     private var envelopeActive = false
     private(set) var letterReadCount = 0
     private(set) var letterPresentedCount = 0
