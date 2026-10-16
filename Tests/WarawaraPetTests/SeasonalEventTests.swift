@@ -251,11 +251,15 @@ final class SeasonalEventTests: XCTestCase {
         XCTAssertEqual(coordinator.phase, .noticing)
 
         let timing = SeasonalTiming.forKind(.christmas)
-        let total = timing.noticeDuration + timing.approachDuration
-            + timing.presentDuration + timing.celebrateDuration + timing.departDuration
+        // Enter celebrate at a distinct earlier timestamp...
+        coordinator.advance(at: start.addingTimeInterval(
+            timing.noticeDuration + timing.approachDuration + timing.presentDuration + 0.1
+        ))
+        XCTAssertEqual(coordinator.phase, .celebrate)
+        // ...then let celebrate + depart elapse.
         coordinator.advance(at: start.addingTimeInterval(
             timing.noticeDuration + timing.approachDuration + timing.presentDuration
-                + timing.celebrateDuration + timing.departDuration + 0.1
+                + timing.celebrateDuration + timing.departDuration + 0.2
         ))
         XCTAssertEqual(coordinator.phase, .idle)
         XCTAssertFalse(persistence.isCompleted(.christmas, occurrenceYear: 2027),
