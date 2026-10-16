@@ -76,4 +76,83 @@ final class BirthdayAssetTests: XCTestCase {
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         )
     }
+
+    func testWaxSealMasterIsReferenceOnlyAndNotPackaged() {
+        XCTAssertFalse(
+            BirthdayAssetStore.requiredFileNames.contains("wax_seal_master.png"),
+            "the master seal must never be rendered on top of a stamped envelope"
+        )
+        XCTAssertNil(
+            BirthdayAssetStore.shared.image(named: "wax_seal_master.png"),
+            "the master seal must not be bundled"
+        )
+    }
+
+    func testCakeTrayIsRequiredAndTransparent() {
+        XCTAssertTrue(BirthdayAssetStore.requiredFileNames.contains("cake_tray.png"))
+        guard let tray = BirthdayAssetStore.shared.image(named: "cake_tray.png") else {
+            XCTFail("cake_tray.png missing")
+            return
+        }
+        guard let tiff = tray.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff) else {
+            XCTFail("cake_tray.png not decodable")
+            return
+        }
+        XCTAssertEqual(rep.colorAt(x: 0, y: 0)?.alphaComponent ?? 0, 0, accuracy: 0.01)
+    }
+
+    func testBirthdayHatPackagedButOptional() {
+        XCTAssertFalse(
+            BirthdayAssetStore.requiredFileNames.contains("birthday_hat.png"),
+            "the hat is optional and must not gate verification"
+        )
+        XCTAssertNotNil(
+            BirthdayAssetStore.shared.optionalImage(named: "birthday_hat.png"),
+            "the hat is packaged for a later phase"
+        )
+    }
+
+    func testEnvelopeStatesShareDisplayedWidthAndBaseline() {
+        guard let closed = BirthdayAssetStore.shared.image(named: "envelope_closed.png"),
+              let open = BirthdayAssetStore.shared.image(named: "envelope_open.png") else {
+            XCTSkip("v5 envelopes missing")
+            return
+        }
+        let envelopeSize: CGFloat = 62
+        let targetWidth = envelopeSize * 0.92
+        let closedScale = BirthdayImageAlignment.scaleForContentWidth(
+            of: closed, canvasPoints: envelopeSize,
+            targetContentWidth: targetWidth, cacheKey: "envelope_closed_test"
+        )
+        let openScale = BirthdayImageAlignment.scaleForContentWidth(
+            of: open, canvasPoints: envelopeSize,
+            targetContentWidth: targetWidth, cacheKey: "envelope_open_test"
+        )
+        let closedWidth = BirthdayImageAlignment.displayedContentWidth(
+            of: closed, canvasPoints: envelopeSize, scale: closedScale,
+            cacheKey: "envelope_closed_test"
+        )
+        let openWidth = BirthdayImageAlignment.displayedContentWidth(
+            of: open, canvasPoints: envelopeSize, scale: openScale,
+            cacheKey: "envelope_open_test"
+        )
+        XCTAssertEqual(openWidth, closedWidth, accuracy: 1.0,
+                       "open/closed states must share one displayed width")
+
+        // Shared bottom-aligned baseline: scaled bottom gaps must match.
+        guard let closedBounds = BirthdayImageAlignment.contentBounds(
+            of: closed, cacheKey: "envelope_closed_test"
+        ), let openBounds = BirthdayImageAlignment.contentBounds(
+            of: open, cacheKey: "envelope_open_test"
+        ) else {
+            XCTFail("content bounds unavailable")
+            return
+        }
+        let pointsPerPixel = envelopeSize / 1024
+        let closedGap = CGFloat(closedBounds.bottomGap) * pointsPerPixel * closedScale
+        let openGap = CGFloat(openBounds.bottomGap) * pointsPerPixel * openScale
+        XCTAssertEqual(openGap, closedGap, accuracy: 2.0,
+                       "open/closed states must share the same visual baseline")
+    }
 }

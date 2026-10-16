@@ -11,10 +11,14 @@ struct CakePropView: View {
     var body: some View {
         ZStack {
             if let helper = carryHelper {
+                let aspect = BirthdayImageAlignment.aspectRatio(of: helper, cacheKey: "cake_tray") ?? 1.59
                 Image(nsImage: helper)
                     .resizable()
                     .interpolation(.high)
-                    .frame(width: cakeSize * 1.35, height: cakeSize * 1.35)
+                    .frame(width: cakeSize * 1.28, height: cakeSize * 1.28 / aspect)
+                    // The tray sits slightly below the cake so the cake
+                    // rests ON it with visible contact.
+                    .offset(y: cakeSize * 0.16)
             }
             if let cake = store.image(named: "cake_lit.png") {
                 Image(nsImage: cake)
@@ -56,11 +60,47 @@ struct EnvelopePropView: View {
     let store: BirthdayAssetStore
     let envelopeSize: CGFloat
     var carryHelper: NSImage? = nil
+    var initiallyOpened: Bool = false
     let onOpenLetter: () -> Void
 
-    @State private var opened = false
+    @State private var opened: Bool
+
+    init(
+        store: BirthdayAssetStore,
+        envelopeSize: CGFloat,
+        carryHelper: NSImage? = nil,
+        initiallyOpened: Bool = false,
+        onOpenLetter: @escaping () -> Void
+    ) {
+        self.store = store
+        self.envelopeSize = envelopeSize
+        self.carryHelper = carryHelper
+        self.initiallyOpened = initiallyOpened
+        self.onOpenLetter = onOpenLetter
+        _opened = State(initialValue: initiallyOpened)
+    }
 
     var body: some View {
+        let closedImage = store.image(named: "envelope_closed.png")
+        let openImage = store.image(named: "envelope_open.png")
+        // Content-aware alignment: both states share ONE displayed
+        // content width and a common baseline, so switching never jumps
+        // in position or apparent size. The open variant's extra height
+        // (the letter emerging) grows UPWARD from the shared baseline.
+        let targetWidth = envelopeSize * 0.92
+        let closedScale = closedImage.map {
+            BirthdayImageAlignment.scaleForContentWidth(
+                of: $0, canvasPoints: envelopeSize,
+                targetContentWidth: targetWidth, cacheKey: "envelope_closed"
+            )
+        } ?? 1
+        let openScale = openImage.map {
+            BirthdayImageAlignment.scaleForContentWidth(
+                of: $0, canvasPoints: envelopeSize,
+                targetContentWidth: targetWidth, cacheKey: "envelope_open"
+            )
+        } ?? 1
+
         ZStack {
             if let helper = carryHelper {
                 Image(nsImage: helper)
@@ -68,18 +108,20 @@ struct EnvelopePropView: View {
                     .interpolation(.high)
                     .frame(width: envelopeSize * 1.4, height: envelopeSize * 1.4)
             }
-            if let closed = store.image(named: "envelope_closed.png") {
+            if let closed = closedImage {
                 Image(nsImage: closed)
                     .resizable()
                     .interpolation(.high)
                     .frame(width: envelopeSize, height: envelopeSize)
+                    .scaleEffect(closedScale, anchor: .bottom)
                     .opacity(opened ? 0 : 1)
             }
-            if let open = store.image(named: "envelope_open.png") {
+            if let open = openImage {
                 Image(nsImage: open)
                     .resizable()
                     .interpolation(.high)
                     .frame(width: envelopeSize, height: envelopeSize)
+                    .scaleEffect(openScale, anchor: .bottom)
                     .opacity(opened ? 1 : 0)
             }
         }

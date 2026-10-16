@@ -285,17 +285,16 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
     }
 
     private func renderEnvelopeReveal(store: BirthdayAssetStore, to dir: URL) throws {
+        // Production EnvelopePropView: content-aware consistent-width
+        // closed/open states (v5 shared wax seal).
         let content = ZStack {
             CheckerboardBackground()
             VStack(spacing: 6) {
-                Text("6. envelope reveal (v3, closed -> open crossfade)").font(.headline)
+                Text("6. envelope reveal (v5, content-aware same-width states)").font(.headline)
                 HStack(spacing: 50) {
-                    if let closed = store.image(named: "envelope_closed.png") {
-                        Image(nsImage: closed).resizable().frame(width: 62, height: 62)
-                    }
-                    if let open = store.image(named: "envelope_open.png") {
-                        Image(nsImage: open).resizable().frame(width: 62, height: 62)
-                    }
+                    EnvelopePropView(store: store, envelopeSize: 62, carryHelper: nil) {}
+                    EnvelopePropView(store: store, envelopeSize: 62, carryHelper: nil, initiallyOpened: true) {}
+                        .disabled(true)
                 }
             }
         }

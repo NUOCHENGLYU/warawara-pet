@@ -35,9 +35,9 @@ final class BirthdayPresenter: BirthdayEventPresenting {
     private let cakeSize: CGFloat = 85
     private let envelopeSize: CGFloat = 62
 
-    /// Optional carry-helper artwork (e.g. a tray or paper band). Nil
-    /// until the v4 art package supplies them — no logic changes then.
-    private var cakeCarryHelper: NSImage? { store.optionalImage(named: "carry_tray.png") }
+    /// Optional carry-helper artwork. The v5 wooden tray is integrated;
+    /// the envelope band slot stays nil until art exists.
+    private var cakeCarryHelper: NSImage? { store.optionalImage(named: "cake_tray.png") }
     private var envelopeCarryHelper: NSImage? { store.optionalImage(named: "envelope_band.png") }
 
     init(

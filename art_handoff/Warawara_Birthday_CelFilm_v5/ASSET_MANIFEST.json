@@ -1,0 +1,139 @@
+{
+  "pack": "Warawara_Birthday_CelFilm_v5",
+  "status": "art-direction candidate; program integration and Mac acceptance pending",
+  "sourceStyle": "cinematic cel animation foreground props, not Studio Ghibli official assets",
+  "canvas": 1024,
+  "artDirection": [
+    "Use original approved Warawara Rig unchanged",
+    "Simple foreground ink contour and broad natural shadow planes",
+    "Paper, cream and wood have distinct material shading",
+    "Avoid ornate violet floral watercolor illustration"
+  ],
+  "waxSeal": {
+    "master": "wax_seal_master.png",
+    "closedAndOpenFromSamePixelSource": true,
+    "hueScaleShared": true,
+    "openedHasCentralSplit": true,
+    "renderedDiameterPx": 132
+  },
+  "assets": [
+    {
+      "file": "birthday_hat.png",
+      "sizePx": [
+        1024,
+        1024
+      ],
+      "alpha": true,
+      "sha256": "4aa3c81bc454e4b39f200876dd29a7d45b64be8a6ed39e4941cff87d51751151",
+      "displayPtHint": [
+        36,
+        40
+      ]
+    },
+    {
+      "file": "cake_lit.png",
+      "sizePx": [
+        1024,
+        1024
+      ],
+      "alpha": true,
+      "sha256": "2ffd3b40cac4bcc69024cc6bc4198c7f0f79c74c76b773c7180d841b6d3a82fe",
+      "displayPtHint": [
+        96,
+        96
+      ]
+    },
+    {
+      "file": "cake_tray.png",
+      "sizePx": [
+        1024,
+        1024
+      ],
+      "alpha": true,
+      "sha256": "580aeeb8d32e8f28506f9d95c06f5e1f0c2ed744fa7a9de6f988f26e0ae17d78",
+      "displayPtHint": [
+        110,
+        60
+      ]
+    },
+    {
+      "file": "envelope_closed.png",
+      "sizePx": [
+        1024,
+        1024
+      ],
+      "alpha": true,
+      "sha256": "b53e6a926aa8c679c5652c99adfd8692ec7d6ca8218f31caa2c9fa6126b3f822",
+      "displayPtHint": [
+        82,
+        82
+      ]
+    },
+    {
+      "file": "envelope_open.png",
+      "sizePx": [
+        1024,
+        1024
+      ],
+      "alpha": true,
+      "sha256": "e4959e860c9107bb9bb09c68f7bc2791705ff502a94e1ca838b2454b9159f1b5",
+      "displayPtHint": [
+        82,
+        82
+      ]
+    },
+    {
+      "file": "letter_paper_blank.png",
+      "sizePx": [
+        1024,
+        1024
+      ],
+      "alpha": true,
+      "sha256": "b091a30e198f3b7c709f2f693fb1695cbbb9ee05538c265795b35854baae1446",
+      "displayPtHint": [
+        400,
+        520
+      ]
+    },
+    {
+      "file": "sparkle_gold_large.png",
+      "sizePx": [
+        512,
+        512
+      ],
+      "alpha": true,
+      "sha256": "2dd7ba88c8f5eb37941ec864e4021bb2a3ff55ccbb49dcb1d584aa6607a933c1",
+      "displayPtHint": null
+    },
+    {
+      "file": "sparkle_gold_lower.png",
+      "sizePx": [
+        512,
+        512
+      ],
+      "alpha": true,
+      "sha256": "b21afc54f285e75f95d1e2d9b83980315894f3e5bbb55aab991c228c0e3c0486",
+      "displayPtHint": null
+    },
+    {
+      "file": "sparkle_gold_star.png",
+      "sizePx": [
+        512,
+        512
+      ],
+      "alpha": true,
+      "sha256": "2709e4170f3f47065161b5dfc53483050c1bf50f21fa4d6ff4641cfb567262e6",
+      "displayPtHint": null
+    },
+    {
+      "file": "wax_seal_master.png",
+      "sizePx": [
+        120,
+        120
+      ],
+      "alpha": true,
+      "sha256": "1c5e43360e26f95c3633a91168ba895299025e02c661f3ce844550e2899faa05",
+      "displayPtHint": null
+    }
+  ]
+}
