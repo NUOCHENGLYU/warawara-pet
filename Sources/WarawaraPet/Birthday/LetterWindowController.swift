@@ -23,6 +23,7 @@ final class LetterWindowController: NSWindowController {
         let text = store.letterText() ?? ""
         let hosting = NSHostingView(rootView: LetterView(text: text, store: store))
         window.contentView = hosting
+        window.delegate = self
     }
 
     required init?(coder: NSCoder) {
@@ -34,5 +35,13 @@ final class LetterWindowController: NSWindowController {
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+extension LetterWindowController: NSWindowDelegate {
+    /// Closing the reading window only resets the envelope illustration:
+    /// the main pet stays visible and the envelope stays accessible.
+    func windowWillClose(_ notification: Notification) {
+        NotificationCenter.default.post(name: .birthdayLetterDidClose, object: nil)
     }
 }

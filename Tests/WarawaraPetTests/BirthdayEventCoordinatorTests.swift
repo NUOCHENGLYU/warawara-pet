@@ -2,7 +2,7 @@
 @testable import WarawaraPet
 
 /// Deterministic tests for birthday eligibility, persistence, trigger
-/// semantics, and the event phase machine 鈥?using an injectable clock
+/// semantics, and the event phase machine — using an injectable clock
 /// and a recording presenter spy (no real windows).
 final class BirthdayEventCoordinatorTests: XCTestCase {
     private var defaults: UserDefaults!
@@ -37,15 +37,15 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
 
     private final class Spy: BirthdayEventPresenting {
         var calls: [String] = []
-        func presentCake() { calls.append("presentCake") }
+        func noticeCompanionsArriving() { calls.append("notice") }
+        func presentCarriedProps() { calls.append("presentCarriedProps") }
+        func deliverPropsToPet() { calls.append("deliverProps") }
+        func activateEnvelope() { calls.append("activateEnvelope") }
         func hideCake() { calls.append("hideCake") }
-        func presentSparkles() { calls.append("presentSparkles") }
-        func hideSparkles() { calls.append("hideSparkles") }
-        func presentEnvelope() { calls.append("presentEnvelope") }
-        func hideEnvelope() { calls.append("hideEnvelope") }
         func startCompanionGroup() { calls.append("startCompanionGroup") }
         func cancelCompanionGroup() { calls.append("cancelCompanionGroup") }
         func performMainPetHop() { calls.append("hop") }
+        func clearAttention() { calls.append("clearAttention") }
         func envelopeDidBecomeAvailable() { calls.append("envelopeDidBecomeAvailable") }
     }
 
@@ -94,13 +94,9 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
     }
 
     func testEligibilityUsesEachLocalTimezoneNotUTC() {
-        // 2026-10-16T22:30 -05:00 == 2026-10-17T03:30 UTC: still not the
-        // birthday in New York, but IS the birthday in Honolulu where the
-        // local date is October 16... the point: the SAME instant must be
-        // judged by each local calendar independently.
         let newYork = TimeZone(identifier: "America/New_York")!
         let chicago = TimeZone(identifier: "America/Chicago")!
-        let instant = Date(timeIntervalSince1970: 1_792_648_200) // arbitrary fixed instant
+        let instant = Date(timeIntervalSince1970: 1_792_648_200)
         let nyCal = calendar(newYork)
         let chicagoCal = calendar(chicago)
         let nyComponents = nyCal.dateComponents([.month, .day], from: instant)
@@ -110,10 +106,8 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
             BirthdayDateMath.isBirthday(chicagoComponents),
             "October 17 is the same local date in both US zones at any instant"
         )
-        // Deterministic boundary: construct 2026-10-17T00:30 in New York.
         let nyMidnight = date(2026, 10, 17, 0, timeZone: newYork, minute: 30)
         XCTAssertTrue(BirthdayDateMath.isBirthday(date: nyMidnight, calendar: nyCal))
-        // Same instant in Honolulu is 2026-10-16T18:30 -> NOT birthday there.
         let honolulu = TimeZone(identifier: "Pacific/Honolulu")!
         XCTAssertFalse(
             BirthdayDateMath.isBirthday(date: nyMidnight, calendar: calendar(honolulu))
@@ -123,8 +117,6 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
     func testDSTAdjacentDatesStayOctober17Locally() {
         let zone = TimeZone(identifier: "America/New_York")!
         let cal = calendar(zone)
-        // DST ends Nov 1 2026; October 17 is well inside DST 鈥?verify
-        // the local calendar reports month/day 10/17 across the day.
         for hour in [0, 6, 12, 18, 23] {
             let d = date(2026, 10, 17, hour, timeZone: zone)
             XCTAssertTrue(
@@ -162,8 +154,6 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
         let zone = TimeZone(identifier: "America/New_York")!
         let persistence = BirthdayPersistence(defaults: defaults)
         persistence.markCompleted(year: 2026)
-        // The user travels to Chicago on the birthday: local calendar is
-        // still October 17, 2026 -> completed record still applies.
         let chicago = TimeZone(identifier: "America/Chicago")!
         let clock = FixedClock(
             now: date(2026, 10, 17, 14, timeZone: chicago),
@@ -193,13 +183,13 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
         coordinator.checkAutomaticTrigger()
         XCTAssertFalse(coordinator.isRunning, "trigger is pending, not started while unserviced")
         coordinator.servicePendingTrigger()
-        XCTAssertEqual(coordinator.phase, .surprise)
+        XCTAssertEqual(coordinator.phase, .noticing)
+        XCTAssertTrue(spy.calls.contains("notice"), "the pet must notice the arrival")
         XCTAssertTrue(spy.calls.contains("hop"))
 
-        // Duplicate trigger attempts are ignored while running.
         coordinator.checkAutomaticTrigger()
         coordinator.servicePendingTrigger()
-        XCTAssertEqual(spy.calls.filter { $0 == "hop" }.count, 1)
+        XCTAssertEqual(spy.calls.filter { $0 == "hop" }.count, 1, "duplicate triggers are ignored")
     }
 
     func testTriggerDeferredWhilePetIsDragging() {
@@ -217,12 +207,12 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
 
         dragging = false
         coordinator.servicePendingTrigger()
-        XCTAssertEqual(coordinator.phase, .surprise)
+        XCTAssertEqual(coordinator.phase, .noticing)
     }
 
-    // MARK: - Phase lifecycle
+    // MARK: - Phase lifecycle (companions bring the gifts)
 
-    func testFullSequencePhaseOrderingAndCompletion() {
+    func testFullSequenceGiftDeliveryPhaseOrdering() {
         let zone = TimeZone(identifier: "America/New_York")!
         let start = date(2026, 10, 17, 9, timeZone: zone)
         let clock = FixedClock(now: start, calendar: calendar(zone))
@@ -231,38 +221,43 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
 
         coordinator.requestTrigger(.automatic)
         coordinator.servicePendingTrigger()
-        XCTAssertEqual(coordinator.phase, .surprise)
+        XCTAssertEqual(coordinator.phase, .noticing)
+        XCTAssertTrue(spy.calls.contains("notice"))
         XCTAssertEqual(spy.calls.filter { $0 == "hop" }.count, 1)
 
-        clock.currentNow = start.addingTimeInterval(2.5)
+        // Second hop during the noticing beat.
+        clock.currentNow = start.addingTimeInterval(1.5)
         coordinator.advance(at: clock.currentNow)
-        XCTAssertEqual(spy.calls.filter { $0 == "hop" }.count, 2, "second hop in surprise")
+        XCTAssertEqual(spy.calls.filter { $0 == "hop" }.count, 2)
 
-        clock.currentNow = start.addingTimeInterval(3.5)
-        coordinator.advance(at: clock.currentNow)
-        XCTAssertEqual(coordinator.phase, .cakeArriving)
-        XCTAssertTrue(spy.calls.contains("presentCake"))
-
-        clock.currentNow = start.addingTimeInterval(5.0)
+        // Companions enter carrying the props.
+        clock.currentNow = start.addingTimeInterval(3.0)
         coordinator.advance(at: clock.currentNow)
         XCTAssertEqual(coordinator.phase, .gathering)
+        XCTAssertTrue(spy.calls.contains("presentCarriedProps"))
         XCTAssertTrue(spy.calls.contains("startCompanionGroup"))
-
-        clock.currentNow = start.addingTimeInterval(10.5)
-        coordinator.advance(at: clock.currentNow)
-        XCTAssertEqual(spy.calls.filter { $0 == "hop" }.count, 3, "celebration hop")
+        XCTAssertFalse(spy.calls.contains("deliverProps"), "props arrive WITH the companions first")
 
         coordinator.companionGroupDidStart()
-        XCTAssertEqual(coordinator.phase, .ascending)
+        let gatherStart = clock.currentNow
 
-        coordinator.companionGroupDidEnd()
-        XCTAssertEqual(coordinator.phase, .envelopeReveal)
-        XCTAssertTrue(spy.calls.contains("presentEnvelope"))
-        XCTAssertTrue(spy.calls.contains("hideCake"))
-
-        clock.currentNow = start.addingTimeInterval(14.0)
+        // Delivery to the front-of-pet layout after the carriers settle.
+        clock.currentNow = gatherStart.addingTimeInterval(5.2)
         coordinator.advance(at: clock.currentNow)
+        XCTAssertEqual(coordinator.phase, .celebrating)
+        XCTAssertTrue(spy.calls.contains("deliverProps"))
+
+        // Staggered celebration hops.
+        clock.currentNow = gatherStart.addingTimeInterval(9.0)
+        coordinator.advance(at: clock.currentNow)
+        XCTAssertEqual(spy.calls.filter { $0 == "hop" }.count, 4, "both celebration hops")
+
+        // Ascent ends: envelope activated, cake fades, pet released.
+        coordinator.companionGroupDidEnd()
         XCTAssertEqual(coordinator.phase, .idle)
+        XCTAssertTrue(spy.calls.contains("activateEnvelope"))
+        XCTAssertTrue(spy.calls.contains("hideCake"))
+        XCTAssertTrue(spy.calls.contains("clearAttention"))
         XCTAssertTrue(spy.calls.contains("envelopeDidBecomeAvailable"))
         XCTAssertTrue(persistence.envelopeUnlocked)
         XCTAssertTrue(persistence.isCompleted(year: 2026), "automatic trigger consumes the annual record")
@@ -277,27 +272,27 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
 
         coordinator.requestTrigger(.replay)
         coordinator.servicePendingTrigger()
-        XCTAssertEqual(coordinator.phase, .surprise, "replay works on any date")
+        XCTAssertEqual(coordinator.phase, .noticing, "replay works on any date")
 
-        // Fast-forward the whole sequence.
-        coordinator.advance(at: start.addingTimeInterval(3.5))
-        coordinator.advance(at: start.addingTimeInterval(5.0))
+        clock.currentNow = start.addingTimeInterval(3.0)
+        coordinator.advance(at: clock.currentNow)
         coordinator.companionGroupDidStart()
+        let gatherStart = clock.currentNow
+        clock.currentNow = gatherStart.addingTimeInterval(5.2)
+        coordinator.advance(at: clock.currentNow)
         coordinator.companionGroupDidEnd()
-        coordinator.advance(at: start.addingTimeInterval(10.0))
         XCTAssertEqual(coordinator.phase, .idle)
         XCTAssertTrue(persistence.envelopeUnlocked)
         XCTAssertFalse(persistence.isCompleted(year: 2026), "replay must not consume the annual record")
 
-        // Repeatable.
         let hopsBefore = spy.calls.filter { $0 == "hop" }.count
         coordinator.requestTrigger(.replay)
         coordinator.servicePendingTrigger()
-        XCTAssertEqual(coordinator.phase, .surprise)
+        XCTAssertEqual(coordinator.phase, .noticing)
         XCTAssertGreaterThan(spy.calls.filter { $0 == "hop" }.count, hopsBefore)
     }
 
-    func testInterruptionCleansUpWithoutCompletion() {
+    func testInterruptionBeforeDeliveryCleansUpWithoutCompletion() {
         let zone = TimeZone(identifier: "America/New_York")!
         let start = date(2026, 10, 17, 9, timeZone: zone)
         let clock = FixedClock(now: start, calendar: calendar(zone))
@@ -306,14 +301,40 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
 
         coordinator.requestTrigger(.automatic)
         coordinator.servicePendingTrigger()
-        coordinator.advance(at: start.addingTimeInterval(5.0))
+        clock.currentNow = start.addingTimeInterval(3.0)
+        coordinator.advance(at: clock.currentNow)
         coordinator.companionGroupDidStart()
 
         coordinator.requestCancellation()
         XCTAssertEqual(coordinator.phase, .idle)
         XCTAssertTrue(spy.calls.contains("cancelCompanionGroup"))
-        XCTAssertFalse(persistence.isCompleted(year: 2026), "interruption must not complete")
+        XCTAssertTrue(spy.calls.contains("clearAttention"))
+        XCTAssertFalse(spy.calls.contains("activateEnvelope"), "undelivered gift is not left behind")
+        XCTAssertFalse(persistence.isCompleted(year: 2026))
         XCTAssertFalse(persistence.envelopeUnlocked)
+    }
+
+    func testInterruptionAfterDeliveryKeepsTheEnvelope() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        let start = date(2026, 10, 17, 9, timeZone: zone)
+        let clock = FixedClock(now: start, calendar: calendar(zone))
+        let persistence = BirthdayPersistence(defaults: defaults)
+        let (coordinator, spy) = makeCoordinator(clock: clock, persistence: persistence)
+
+        coordinator.requestTrigger(.replay)
+        coordinator.servicePendingTrigger()
+        clock.currentNow = start.addingTimeInterval(3.0)
+        coordinator.advance(at: clock.currentNow)
+        coordinator.companionGroupDidStart()
+        let gatherStart = clock.currentNow
+        clock.currentNow = gatherStart.addingTimeInterval(5.2)
+        coordinator.advance(at: clock.currentNow)
+        XCTAssertTrue(coordinator.propsDelivered)
+
+        coordinator.requestCancellation()
+        XCTAssertTrue(spy.calls.contains("activateEnvelope"), "delivered gift remains readable")
+        XCTAssertFalse(persistence.isCompleted(year: 2026), "interruption is not completion")
+        XCTAssertTrue(persistence.envelopeUnlocked, "the delivered gift unlocks the envelope")
     }
 
     func testEnvelopeAvailabilityRule() {
@@ -337,4 +358,3 @@ final class BirthdayEventCoordinatorTests: XCTestCase {
         XCTAssertTrue(offBirthday.shouldShowEnvelope, "unlocked envelope persists any date")
     }
 }
-

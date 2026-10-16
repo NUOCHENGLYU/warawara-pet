@@ -4,7 +4,7 @@ import XCTest
 @testable import WarawaraPet
 
 /// Birthday preview generator: renders the PRODUCTION views (approved
-/// rig, v2 props, letter surface) into inspectable contact sheets.
+/// rig, v3 props, letter surface) into inspectable contact sheets.
 /// Gated by BIRTHDAY_PREVIEW_OUT (CI sets it).
 @MainActor
 final class BirthdayPreviewGeneratorTests: XCTestCase {
@@ -33,16 +33,17 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
             throw XCTSkip("birthday assets unavailable")
         }
 
-        try renderSurprise(rig: rig, rigLoader: rigLoader, mainSize: mainSize, to: outputDir)
-        try renderGathering(rig: rig, rigLoader: rigLoader, mainSize: mainSize, companionSize: companionSize, to: outputDir)
-        try renderCakeAndCelebration(rig: rig, rigLoader: rigLoader, mainSize: mainSize, companionSize: companionSize, store: store, to: outputDir)
+        try renderNoticing(rig: rig, rigLoader: rigLoader, mainSize: mainSize, to: outputDir)
+        try renderCarriedProps(rig: rig, rigLoader: rigLoader, mainSize: mainSize, companionSize: companionSize, store: store, to: outputDir)
+        try renderPlacedProps(rig: rig, rigLoader: rigLoader, mainSize: mainSize, store: store, to: outputDir)
+        try renderCelebration(rig: rig, rigLoader: rigLoader, mainSize: mainSize, companionSize: companionSize, store: store, to: outputDir)
         try renderAscent(rig: rig, rigLoader: rigLoader, companionSize: companionSize, to: outputDir)
         try renderEnvelopeReveal(store: store, to: outputDir)
         try renderLetterWindow(store: store, to: outputDir)
         try renderFinalEnvelope(rig: rig, rigLoader: rigLoader, mainSize: mainSize, store: store, to: outputDir)
 
-        for name in ["46-birthday-surprise.png", "47-birthday-gathering.png",
-                     "48-birthday-cake.png", "49-birthday-celebration.png",
+        for name in ["46-birthday-noticing.png", "47-birthday-carried-gifts.png",
+                     "48-birthday-gifts-placed.png", "49-birthday-celebration.png",
                      "50-birthday-ascent.png", "51-birthday-envelope-reveal.png",
                      "52-birthday-letter.png", "53-birthday-final-envelope-light.png",
                      "54-birthday-final-envelope-dark.png"] {
@@ -64,11 +65,13 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
         ))
     }
 
-    private func curiousParams(yaw: CGFloat) -> WarawaraPerformanceParameters {
+    /// Event-attention performance: the pet turns toward the arriving
+    /// companions (down-left), exactly like the production noticing beat.
+    private func noticingParams() -> WarawaraPerformanceParameters {
         WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
             inputs: WarawaraExpressionInputs(
                 state: .curious,
-                gaze: CGVector(dx: yaw / WarawaraTurnGeometry.maxYawDegrees, dy: 0)
+                gaze: CGVector(dx: -0.5, dy: -0.18)
             ),
             breathPhase: 0.25
         ))
@@ -90,88 +93,106 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
 
     // MARK: - Sheets
 
-    private func renderSurprise(rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, mainSize: CGSize, to dir: URL) throws {
-        // The surprise: curious turn toward the side + a light hop squash.
-        var turned = curiousParams(yaw: 18)
-        turned.bodySquashY = 0.92
-        turned.bodySquashX = 1.06
+    private func renderNoticing(rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, mainSize: CGSize, to dir: URL) throws {
         let content = ZStack {
             CheckerboardBackground()
             VStack(spacing: 6) {
-                Text("1. surprise reaction (curious turn + hop squash)").font(.headline)
+                Text("1. noticing: event attention turns the pet toward the companions").font(.headline)
                 HStack(spacing: 60) {
                     rigView(rig, rigLoader, idleParams(), mainSize)
-                    rigView(rig, rigLoader, turned, mainSize)
+                    rigView(rig, rigLoader, noticingParams(), mainSize)
                 }
             }
         }
         try render(content, size: CGSize(width: 700, height: 420), scale: 1,
-                   to: dir.appendingPathComponent("46-birthday-surprise.png"))
+                   to: dir.appendingPathComponent("46-birthday-noticing.png"))
     }
 
-    private func renderGathering(rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, mainSize: CGSize, companionSize: CGSize, to dir: URL) throws {
-        // Companions positioned with the production formation offsets.
-        var rng = SystemRandomSource()
-        let offsets = GroupMotionMath.formationOffsets(
-            count: 4,
-            mainCenter: CGPoint(x: 250, y: 220),
-            visibleFrame: CGRect(x: 0, y: 0, width: 700, height: 460),
-            using: &rng,
-            tuning: .default
+    private func renderCarriedProps(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader,
+        mainSize: CGSize, companionSize: CGSize, store: BirthdayAssetStore, to dir: URL
+    ) throws {
+        // Props ride with carrier companions during entry.
+        let cakeView = CakePropView(store: store, cakeSize: 85).frame(width: 200, height: 230)
+        let content = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 6) {
+                Text("2. companions enter carrying the gifts").font(.headline)
+                ZStack {
+                    rigView(rig, rigLoader, noticingParams(), mainSize).position(x: 300, y: 250)
+                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 160, y: 300)
+                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 430, y: 305)
+                    cakeView.position(x: 160, y: 130)
+                    if let envelope = store.image(named: "envelope_closed.png") {
+                        Image(nsImage: envelope)
+                            .resizable()
+                            .frame(width: 62, height: 62)
+                            .position(x: 450, y: 210)
+                    }
+                }
+                .frame(width: 700, height: 420)
+            }
+        }
+        try render(content, size: CGSize(width: 700, height: 480), scale: 1,
+                   to: dir.appendingPathComponent("47-birthday-carried-gifts.png"))
+    }
+
+    private func renderPlacedProps(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader,
+        mainSize: CGSize, store: BirthdayAssetStore, to dir: URL
+    ) throws {
+        // The stable front-of-pet layout from BirthdayPropLayout.
+        let cakePanel = CGSize(width: 200, height: 230)
+        let envelopePanel = CGSize(width: 100, height: 100)
+        let origins = BirthdayPropLayout.deliveryOrigins(
+            petFrame: CGRect(x: 250, y: 80, width: 200, height: 226),
+            cakePanelSize: cakePanel,
+            envelopePanelSize: envelopePanel,
+            visibleFrame: CGRect(x: 0, y: 0, width: 700, height: 460)
         )
         let content = ZStack {
             CheckerboardBackground()
             VStack(spacing: 6) {
-                Text("2. companion gathering (production formation math)").font(.headline)
+                Text("3. gifts placed in front of the pet (stable desktop layout)").font(.headline)
                 ZStack {
                     rigView(rig, rigLoader, idleParams(), mainSize)
-                        .position(x: 250, y: 230)
-                    ForEach(Array(offsets.enumerated()), id: \.offset) { _, vector in
-                        self.rigView(rig, rigLoader, self.idleParams(), companionSize)
-                            .position(x: 250 + vector.dx, y: 230 + vector.dy)
+                        .position(x: 350, y: 193)
+                    CakePropView(store: store, cakeSize: 85)
+                        .frame(width: cakePanel.width, height: cakePanel.height)
+                        .position(x: origins.cake.x + cakePanel.width / 2, y: origins.cake.y + cakePanel.height / 2)
+                    if let envelope = store.image(named: "envelope_closed.png") {
+                        Image(nsImage: envelope)
+                            .resizable()
+                            .frame(width: 62, height: 62)
+                            .position(x: origins.envelope.x + envelopePanel.width / 2, y: origins.envelope.y + envelopePanel.height / 2)
                     }
                 }
                 .frame(width: 700, height: 460)
             }
         }
         try render(content, size: CGSize(width: 700, height: 520), scale: 1,
-                   to: dir.appendingPathComponent("47-birthday-gathering.png"))
+                   to: dir.appendingPathComponent("48-birthday-gifts-placed.png"))
     }
 
-    private func renderCakeAndCelebration(
+    private func renderCelebration(
         rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader,
-        mainSize: CGSize, companionSize: CGSize,
-        store: BirthdayAssetStore, to dir: URL
+        mainSize: CGSize, companionSize: CGSize, store: BirthdayAssetStore, to dir: URL
     ) throws {
-        let cakeView = CakePropView(store: store, cakeSize: 85)
-            .frame(width: 200, height: 230)
-        let cakeContent = ZStack {
+        let content = ZStack {
             CheckerboardBackground()
             VStack(spacing: 6) {
-                Text("3. cake appears (85pt, baked-in flame, sparse sparkles)").font(.headline)
-                HStack(spacing: 40) {
-                    rigView(rig, rigLoader, idleParams(), mainSize)
-                    cakeView
-                }
-            }
-        }
-        try render(cakeContent, size: CGSize(width: 620, height: 420), scale: 1,
-                   to: dir.appendingPathComponent("48-birthday-cake.png"))
-
-        let celebration = ZStack {
-            CheckerboardBackground()
-            VStack(spacing: 6) {
-                Text("4. celebration (staggered companions + cake)").font(.headline)
+                Text("4. celebration around the placed gifts").font(.headline)
                 ZStack {
-                    cakeView.position(x: 250, y: 190)
-                    rigView(rig, rigLoader, idleParams(), mainSize).position(x: 250, y: 240)
-                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 140, y: 180)
-                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 360, y: 185)
+                    rigView(rig, rigLoader, idleParams(), mainSize).position(x: 300, y: 250)
+                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 140, y: 200)
+                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 360, y: 205)
+                    CakePropView(store: store, cakeSize: 85).frame(width: 200, height: 230)
+                        .position(x: 230, y: 150)
                 }
                 .frame(width: 620, height: 420)
             }
         }
-        try render(celebration, size: CGSize(width: 620, height: 480), scale: 1,
+        try render(content, size: CGSize(width: 620, height: 480), scale: 1,
                    to: dir.appendingPathComponent("49-birthday-celebration.png"))
     }
 
@@ -179,12 +200,12 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
         let content = ZStack {
             CheckerboardBackground()
             VStack(spacing: 6) {
-                Text("5. companion ascent (staggered upward paths)").font(.headline)
+                Text("5. continuous ascent and exit").font(.headline)
                 ZStack {
-                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 180, y: 300)
-                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 300, y: 220)
-                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 420, y: 140)
-                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 520, y: 60)
+                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 160, y: 320)
+                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 300, y: 240)
+                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 420, y: 160)
+                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 520, y: 70)
                 }
                 .frame(width: 700, height: 420)
             }
@@ -197,7 +218,7 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
         let content = ZStack {
             CheckerboardBackground()
             VStack(spacing: 6) {
-                Text("6. envelope reveal (closed -> open crossfade)").font(.headline)
+                Text("6. envelope reveal (v3, closed -> open crossfade)").font(.headline)
                 HStack(spacing: 50) {
                     if let closed = store.image(named: "envelope_closed.png") {
                         Image(nsImage: closed).resizable().frame(width: 62, height: 62)
@@ -228,7 +249,7 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
             let content = ZStack {
                 background
                 VStack(spacing: 6) {
-                    Text("7. final persistent envelope (desktop size)").font(.headline).foregroundColor(caption)
+                    Text("7. final stationary envelope (desktop size)").font(.headline).foregroundColor(caption)
                     HStack(spacing: 30) {
                         rigView(rig, rigLoader, idleParams(), mainSize)
                         if let envelope = store.image(named: "envelope_closed.png") {

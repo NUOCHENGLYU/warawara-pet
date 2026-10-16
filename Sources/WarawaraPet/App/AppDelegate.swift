@@ -48,6 +48,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController.addGroupActiveObserver { [weak presenter] active in
             presenter?.groupActivityChanged(active)
         }
+        windowController.setCompanionCentersObserver { [weak presenter] centers in
+            presenter?.companionCentersChanged(centers)
+        }
+        presenter.reassertPetVisibility = { [weak windowController] in
+            windowController?.reassertPetVisibility()
+        }
 
         birthdayCoordinator = coordinator
         birthdayPresenter = presenter
@@ -94,7 +100,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        // The pet is a nonactivating panel, not a regular window: closing
+        // the letter window must NEVER terminate or hide the pet. Quit is
+        // always explicit via the status item.
+        false
     }
 
     func applicationWillTerminate(_ notification: Notification) {

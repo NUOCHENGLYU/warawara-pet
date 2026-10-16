@@ -366,6 +366,21 @@ enum GroupMotionMath {
         bodyTopY >= topY - zoneHeight
     }
 
+    /// Continuous exit-velocity blend: eases the current vertical
+    /// velocity toward the slow exit speed with an exponential time
+    /// constant, so companions never experience a velocity jump when
+    /// entering the top-edge slow zone ("ceiling hit").
+    static func exitVelocityBlend(
+        current: CGFloat,
+        target: CGFloat,
+        dt: TimeInterval,
+        timeConstant: TimeInterval
+    ) -> CGFloat {
+        guard dt > 0, timeConstant > 0 else { return current }
+        let blend = CGFloat(1 - exp(-dt / timeConstant))
+        return current + blend * (target - current)
+    }
+
     // MARK: - Fades
 
     /// Fade-out used only for user cancellation: 1 -> 0.

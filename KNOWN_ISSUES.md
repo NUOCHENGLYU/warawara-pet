@@ -47,8 +47,7 @@ are intentionally deferred:
    to a few points. All normal-range deformation stays fully inside the
    window; revisit only if real-Mac testing shows visible clipping.
 
-6. **Phase 5B layered rig is active; limb art still pending.**
-   The layered character system (continuous performance parameters,
+6. **Phase 5B layered rig is active; limb art still pending.**   The layered character system (continuous performance parameters,
    state->parameter mapper, easing animator, body/eyes/mouth renderer,
    rig loader) is implemented, tested, and now ACTIVE with the
    ChatGPT-supplied rig assets (Assets/WarawaraRig, 12 registered
@@ -78,3 +77,14 @@ are intentionally deferred:
    hides the nonactivating pet panel whenever any NSMenu closes on real
    hardware. The quit control is a direct-click menu-bar status button.
    Do not reintroduce menus without a real-Mac fix.
+
+## Phase 6A birthday event
+
+7. **Birthday props are v3 hand-painted candidates** (not yet visually
+   accepted on the Mac). The choreography delivers the cake and envelope
+   WITH the carriers to a stable front-of-pet layout (BirthdayPropLayout);
+   the envelope stays stationary afterwards (never follows pet motion).
+   The letter window close re-asserts the pet panel and never affects
+   event state. The ascent slow-zone uses a continuous velocity blend
+   (no ceiling hit). Remaining real-Mac risks: prop outlines at actual
+   size, letter window activation behavior, and multi-display clamping.

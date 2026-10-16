@@ -45,6 +45,10 @@ final class GroupSequenceController {
     /// scheduling.
     var onActiveChanged: ((Bool) -> Void)?
 
+    /// Live companion centers (id -> screen position) each tick; the
+    /// birthday presenter uses this to carry props with companions.
+    var onCompanionCenters: (([Int: CGPoint]) -> Void)?
+
     init(windowController: PetWindowController) {
         self.windowController = windowController
     }
@@ -174,6 +178,8 @@ final class GroupSequenceController {
         let now = ProcessInfo.processInfo.systemUptime
         let dt = now - lastTickTime
         lastTickTime = now
+
+        publishCompanionCenters()
 
         switch model.state {
         case .inactive:
@@ -354,8 +360,17 @@ final class GroupSequenceController {
                 topY: exitTopY,
                 zoneHeight: tuning.exitSlowZoneHeight
             ) || elapsed >= tuning.ascentMaxDuration {
-                runtimes[index].kinematics.position.y = beforeY + config.exitSlowSpeed * CGFloat(dt)
-                runtimes[index].kinematics.velocity.dy = config.exitSlowSpeed
+                // Continuous handoff into the slow exit speed: the
+                // vertical velocity eases toward exitSlowSpeed instead
+                // of snapping, so position and velocity both stay
+                // continuous through the boundary crossing.
+                runtimes[index].kinematics.velocity.dy = GroupMotionMath.exitVelocityBlend(
+                    current: runtimes[index].kinematics.velocity.dy,
+                    target: config.exitSlowSpeed,
+                    dt: dt,
+                    timeConstant: tuning.exitSlowBlendTimeConstant
+                )
+                runtimes[index].kinematics.position.y = beforeY + runtimes[index].kinematics.velocity.dy * CGFloat(dt)
             }
 
             updatePose(index: index, now: now)
@@ -425,6 +440,15 @@ final class GroupSequenceController {
     private func updatePanel(id: Int, apply: (CompanionPetPanel) -> Void) {
         guard let panel = panels[id] else { return }
         apply(panel)
+    }
+
+    private func publishCompanionCenters() {
+        guard let onCompanionCenters else { return }
+        var centers: [Int: CGPoint] = [:]
+        for runtime in runtimes {
+            centers[runtime.config.id] = runtime.kinematics.position
+        }
+        onCompanionCenters(centers)
     }
 
     // MARK: - Geometry helpers

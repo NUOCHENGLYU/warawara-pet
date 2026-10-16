@@ -14,6 +14,11 @@ final class PetController: ObservableObject {
     /// Smoothed cursor direction while curious; feeds the layered
     /// expression system's continuous gaze. Zero otherwise.
     @Published private(set) var curiosityDirection: CGVector = .zero
+    /// Event-driven attention (birthday): when non-nil it OVERRIDES the
+    /// mouse-driven gaze and drives the curious state so the pet visibly
+    /// looks at something specific (arriving companions / gifts).
+    @Published private(set) var eventAttentionDirection: CGVector?
+    private var eventAttentionActive = false
 
     let personalityTuning = PersonalityTuning.default
 
@@ -236,6 +241,35 @@ final class PetController: ObservableObject {
         }
     }
 
+    /// Event-driven attention performance: the pet turns to look toward
+    /// `direction` (reusing the accepted curious state and 2.5D turn).
+    /// Pass nil to release the attention and return to idle.
+    func setEventAttention(_ direction: CGVector?) {
+        guard let direction else {
+            guard eventAttentionActive else { return }
+            eventAttentionActive = false
+            eventAttentionDirection = nil
+            curiosityDirection = .zero
+            curiosityPose = .neutral
+            if stateMachine.state == .curious {
+                _ = stateMachine.transition(to: .idle)
+                state = stateMachine.state
+            }
+            return
+        }
+        guard stateMachine.state == .idle || stateMachine.state == .curious else { return }
+        if stateMachine.state == .idle {
+            guard stateMachine.transition(to: .curious) else { return }
+            state = stateMachine.state
+        }
+        eventAttentionActive = true
+        eventAttentionDirection = direction
+        curiosityDirection = direction
+    }
+
+    /// True while the mouse tracker must yield to event attention.
+    var isEventAttentionActive: Bool { eventAttentionActive }
+
     // MARK: - Curiosity visual tracking (active only while curious)
     // State detection stays on the low-frequency awareness timer; this
     // separate loop samples the cursor at ~30 Hz only while engaged so the
@@ -284,6 +318,9 @@ final class PetController: ObservableObject {
             dwellProgress: 1,
             at: timestamp
         )
+        // Event attention (birthday) owns the gaze and pose while active:
+        // the mouse tracker keeps sampling but never publishes.
+        guard !eventAttentionActive else { return }
         // Small deadband on the gaze publish only (the pose pipeline keeps
         // the raw smoothed direction): a still cursor produces exactly
         // zero gaze drift instead of micro-jitter.

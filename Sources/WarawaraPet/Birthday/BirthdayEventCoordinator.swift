@@ -4,17 +4,17 @@ import Foundation
 /// transitions; the production presenter only realizes UI cues.
 enum BirthdayPhase: Equatable {
     case idle
-    /// Main pet's gentle surprise reaction (hops + normal curiosity).
-    case surprise
-    /// Cake fades in near the pet.
-    case cakeArriving
-    /// Companions gather; celebration hops fire with stagger.
+    /// Main pet visibly notices the arriving companions (event attention
+    /// drives the accepted curious/turn pipeline).
+    case noticing
+    /// Companions enter carrying the gifts (cake + envelope attached to
+    /// carriers through the Phase 3 group sequence).
     case gathering
-    /// Companions ascend (driven by the Phase 3 group sequence itself).
-    case ascending
-    /// Envelope appears and fades in.
-    case envelopeReveal
-    /// Envelope is clickable; the pet lives its normal life.
+    /// Gifts are delivered to the stable front-of-pet layout; staggered
+    /// celebration hops.
+    case celebrating
+    /// Companions ascend and leave; the envelope is activated as the
+    /// readable gift.
     case awaitingLetter
     /// Persistence written; coordinator returns to idle.
     case completed
@@ -24,16 +24,17 @@ enum BirthdayPhase: Equatable {
 
 /// Centralized birthday timing. Adjust here — never scattered.
 struct BirthdayTiming {
-    /// First hop at t=0, second at this offset.
-    var secondHopDelay: TimeInterval = 2.4
-    /// Cake starts fading in at this offset.
-    var cakeDelay: TimeInterval = 3.4
-    var cakeFadeDuration: TimeInterval = 1.4
+    /// Attention beat before the companions enter.
+    var noticingDuration: TimeInterval = 2.4
+    /// A small hop while noticing (offset from event start).
+    var attentionHopDelay: TimeInterval = 1.4
+    /// Companions start entering at this offset from event start.
+    var gatherStartDelay: TimeInterval = 2.8
+    /// Gifts detach from the carriers and ease to the front layout at
+    /// this offset after the gather starts.
+    var deliveryDelayAfterGatherStart: TimeInterval = 5.0
     /// Celebration hops relative to the gather start.
-    var celebrationHopOffsets: [TimeInterval] = [5.0, 8.0]
-    /// Warm pause between ascent and envelope appearance.
-    var postAscentPause: TimeInterval = 1.2
-    var envelopeFadeDuration: TimeInterval = 1.6
+    var celebrationHopOffsets: [TimeInterval] = [6.2, 8.8]
 
     static let `default` = BirthdayTiming()
 }
@@ -41,15 +42,21 @@ struct BirthdayTiming {
 /// UI realization contract. The production app provides a real
 /// presenter; tests provide a recording spy.
 protocol BirthdayEventPresenting: AnyObject {
-    func presentCake()
+    /// The main pet turns to look toward the arriving companions.
+    func noticeCompanionsArriving()
+    /// Cake and envelope fade in attached to carrier companions.
+    func presentCarriedProps()
+    /// Props ease to the stable front-of-pet layout (desktop plane).
+    func deliverPropsToPet()
+    /// The envelope becomes clickable and the letter is available.
+    func activateEnvelope()
+    /// Cake fades out gently after the celebration.
     func hideCake()
-    func presentSparkles()
-    func hideSparkles()
-    func presentEnvelope()
-    func hideEnvelope()
     func startCompanionGroup()
     func cancelCompanionGroup()
     func performMainPetHop()
+    /// Releases the event attention (pet returns to normal life).
+    func clearAttention()
     /// Called once the envelope is fully available (persistence safe point).
     func envelopeDidBecomeAvailable()
 }
@@ -79,16 +86,13 @@ final class BirthdayEventCoordinator {
 
     private var startedAt: Date?
     private var gatherStartedAt: Date?
-    private var envelopeStartedAt: Date?
     private var firedHops: Set<Int> = []
     private var pendingTrigger: Trigger?
     private var ranThisLaunch = false
     private(set) var groupActive = false
+    private(set) var propsDelivered = false
 
     var isRunning: Bool { phase != .idle }
-    var isEnvelopePhase: Bool {
-        phase == .envelopeReveal || phase == .awaitingLetter || phase == .completed
-    }
 
     init(
         clock: BirthdayClock = SystemBirthdayClock(),
@@ -114,14 +118,10 @@ final class BirthdayEventCoordinator {
         persistence.isCompleted(year: currentYear)
     }
 
-    /// Automatic eligibility: local October 17 AND not yet completed
-    /// this local year AND not already run in this launch.
     var shouldTriggerAutomatically: Bool {
         isBirthdayToday && !isCompletedThisYear && !ranThisLaunch
     }
 
-    /// True while the persistent envelope should be visible (unlocked
-    /// once, or it is the birthday today).
     var shouldShowEnvelope: Bool {
         persistence.envelopeUnlocked || isBirthdayToday
     }
@@ -138,8 +138,6 @@ final class BirthdayEventCoordinator {
         cancelEvent()
     }
 
-    /// Called periodically (and from tests): consumes a pending trigger
-    /// once the pet is not busy. Deferred while dragging.
     func servicePendingTrigger() {
         guard let pending = pendingTrigger else { return }
         if isPetBusy?() == true { return }
@@ -147,9 +145,6 @@ final class BirthdayEventCoordinator {
         begin(pending)
     }
 
-    /// Midnight transition support: the app calls this periodically;
-    /// triggers automatically the first time the local calendar crosses
-    /// into October 17 while the app keeps running.
     func checkAutomaticTrigger() {
         guard phase == .idle, pendingTrigger == nil else { return }
         if shouldTriggerAutomatically {
@@ -163,17 +158,16 @@ final class BirthdayEventCoordinator {
         self.trigger = trigger
         startedAt = clock.now()
         gatherStartedAt = nil
-        envelopeStartedAt = nil
         firedHops.removeAll()
         groupActive = false
-        phase = .surprise
+        propsDelivered = false
+        phase = .noticing
+        presenter?.noticeCompanionsArriving()
         presenter?.performMainPetHop()
     }
 
     // MARK: - Advancing
 
-    /// Advances the event using the injected clock. The production app
-    /// calls this from a light timer; tests call it directly.
     func advance() {
         advance(at: clock.now())
     }
@@ -182,44 +176,42 @@ final class BirthdayEventCoordinator {
         switch phase {
         case .idle:
             return
-        case .surprise:
-            advanceSurprise(now)
-        case .cakeArriving:
-            if now.timeIntervalSince(startedAt ?? now) >= timing.cakeDelay + timing.cakeFadeDuration {
-                phase = .gathering
-                gatherStartedAt = now
-                presenter?.presentSparkles()
-                presenter?.startCompanionGroup()
-            }
+        case .noticing:
+            advanceNoticing(now)
         case .gathering:
             advanceGathering(now)
-        case .ascending:
-            // Ascension is driven by the Phase 3 group sequence; the
-            // presenter notifies groupDidEnd when it finishes.
-            return
-        case .envelopeReveal:
-            if now.timeIntervalSince(envelopeStartedAt ?? now) >= timing.envelopeFadeDuration {
-                completeEvent()
-            }
+        case .celebrating:
+            advanceCelebrating(now)
         case .awaitingLetter, .completed, .cancelled:
             return
         }
     }
 
-    private func advanceSurprise(_ now: Date) {
+    private func advanceNoticing(_ now: Date) {
         guard let startedAt else { return }
         let elapsed = now.timeIntervalSince(startedAt)
-        if !firedHops.contains(1), elapsed >= timing.secondHopDelay {
+        if !firedHops.contains(1), elapsed >= timing.attentionHopDelay {
             firedHops.insert(1)
             presenter?.performMainPetHop()
         }
-        if elapsed >= timing.cakeDelay {
-            phase = .cakeArriving
-            presenter?.presentCake()
+        if elapsed >= timing.gatherStartDelay {
+            phase = .gathering
+            presenter?.presentCarriedProps()
+            presenter?.startCompanionGroup()
         }
     }
 
     private func advanceGathering(_ now: Date) {
+        guard let gatherStartedAt else { return }
+        let elapsed = now.timeIntervalSince(gatherStartedAt)
+        if !propsDelivered, elapsed >= timing.deliveryDelayAfterGatherStart {
+            propsDelivered = true
+            phase = .celebrating
+            presenter?.deliverPropsToPet()
+        }
+    }
+
+    private func advanceCelebrating(_ now: Date) {
         guard let gatherStartedAt else { return }
         let elapsed = now.timeIntervalSince(gatherStartedAt)
         for (index, offset) in timing.celebrationHopOffsets.enumerated()
@@ -227,34 +219,23 @@ final class BirthdayEventCoordinator {
             firedHops.insert(100 + index)
             presenter?.performMainPetHop()
         }
-        // The group sequence signals its own end via companionGroupDidEnd.
     }
 
-    // MARK: - Group lifecycle notifications (from the production presenter)
+    // MARK: - Group lifecycle notifications
 
     func companionGroupDidStart() {
         groupActive = true
-        if phase == .gathering {
-            phase = .ascending
-        }
+        gatherStartedAt = gatherStartedAt ?? clock.now()
     }
 
     func companionGroupDidEnd() {
         guard groupActive else { return }
         groupActive = false
-        guard phase == .ascending || phase == .gathering else { return }
-        presenter?.hideSparkles()
-        presenter?.hideCake()
-        phase = .envelopeReveal
-        envelopeStartedAt = clock.now()
-        presenter?.presentEnvelope()
-    }
-
-    // MARK: - Completion / cancellation
-
-    private func completeEvent() {
-        guard phase == .envelopeReveal else { return }
+        guard phase == .gathering || phase == .celebrating else { return }
         phase = .awaitingLetter
+        presenter?.hideCake()
+        presenter?.activateEnvelope()
+        presenter?.clearAttention()
         persistence.markEnvelopeUnlocked()
         if trigger == .automatic {
             persistence.markCompleted(year: currentYear)
@@ -264,15 +245,21 @@ final class BirthdayEventCoordinator {
         resetToIdle()
     }
 
+    // MARK: - Completion / cancellation
+
     private func cancelEvent() {
         if groupActive {
             presenter?.cancelCompanionGroup()
             groupActive = false
         }
-        presenter?.hideCake()
-        presenter?.hideSparkles()
-        if isEnvelopePhase {
-            presenter?.hideEnvelope()
+        presenter?.clearAttention()
+        if propsDelivered {
+            // The gift has already been delivered: keep it as the
+            // readable gift even though the event was interrupted.
+            presenter?.activateEnvelope()
+            presenter?.hideCake()
+        } else {
+            presenter?.hideCake()
         }
         phase = .cancelled
         resetToIdle()
@@ -281,8 +268,8 @@ final class BirthdayEventCoordinator {
     private func resetToIdle() {
         startedAt = nil
         gatherStartedAt = nil
-        envelopeStartedAt = nil
         firedHops.removeAll()
+        propsDelivered = false
         trigger = nil
         phase = .idle
     }

@@ -86,12 +86,12 @@ struct PetView: View {
     }
 
     /// Continuous expression inputs for the layered character system:
-    /// state, smoothed cursor direction, live drag deformation and motion
-    /// progress. The expression driver adds time-derived breath/blink.
+    /// event attention (birthday) overrides the mouse-driven gaze when
+    /// active, so the pet can visibly "look at" something specific.
     private var expressionInputs: WarawaraExpressionInputs {
         WarawaraExpressionInputs(
             state: controller.state,
-            gaze: controller.curiosityDirection,
+            gaze: controller.eventAttentionDirection ?? controller.curiosityDirection,
             dragDeformation: controller.dragDeformation,
             hopProgress: controller.hopProgress,
             floatProgress: controller.floatProgress

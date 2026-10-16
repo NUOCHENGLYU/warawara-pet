@@ -47,6 +47,24 @@ final class PetWindowController: NSObject {
         controller?.performBirthdayHop()
     }
 
+    /// Event-driven attention: the pet turns to look at a specific
+    /// direction (birthday choreography).
+    func setEventAttention(_ direction: CGVector?) {
+        controller?.setEventAttention(direction)
+    }
+
+    /// Companion center positions observer (birthday props ride along
+    /// with carrier companions during delivery).
+    func setCompanionCentersObserver(_ observer: @escaping ([Int: CGPoint]) -> Void) {
+        groupSequenceController?.onCompanionCenters = observer
+    }
+
+    /// Re-asserts the pet panel's visibility (defensive recovery after
+    /// the letter window closes or app deactivation).
+    func reassertPetVisibility() {
+        panel?.orderFrontRegardless()
+    }
+
     func setWindowFrame(_ frame: CGRect, animated: Bool) {
         guard let panel else { return }
         let clamped = ScreenGeometry.clampFrame(

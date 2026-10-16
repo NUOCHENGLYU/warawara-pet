@@ -59,6 +59,10 @@ struct GroupTuning {
     /// crosses the boundary in stages.
     var exitSlowZoneHeight: CGFloat = 120
     var exitSlowSpeedRange: ClosedRange<CGFloat> = 35...55
+    /// Velocity blending time constant when entering the exit slow zone:
+    /// the companion eases continuously into the slow upward speed
+    /// (position AND velocity stay continuous — no "ceiling hit").
+    var exitSlowBlendTimeConstant: TimeInterval = 0.35
     /// Screen-contained top-exit viewport: when the body top is within
     /// this distance of the visible top, the panel freezes with its top
     /// edge exactly at the visible boundary and the character continues

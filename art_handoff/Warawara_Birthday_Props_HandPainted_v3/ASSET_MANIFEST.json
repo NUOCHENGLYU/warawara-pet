@@ -1,0 +1,186 @@
+{
+  "version": "Warawara_Birthday_Props_HandPainted_v3",
+  "status": "HANDPAINTED_CANDIDATE_NEEDS_MAC_VISUAL_ACCEPTANCE",
+  "assets": [
+    {
+      "file": "assets/cake_lit.png",
+      "canvas": [
+        1024,
+        1024
+      ],
+      "alphaBounds": [
+        28,
+        162,
+        994,
+        862
+      ],
+      "sha256": "112ae082217eb85e7807dc0bf5e3510aa1144c42e49a9bb609c30cf91da71a90",
+      "alphaCorner": 0
+    },
+    {
+      "file": "assets/candle_flame_standalone.png",
+      "canvas": [
+        512,
+        512
+      ],
+      "alphaBounds": [
+        53,
+        7,
+        496,
+        470
+      ],
+      "sha256": "2506177be3de01758c75aa48d3faccaa74b9cc9028e4a10a8c148661bb8ed927",
+      "alphaCorner": 0
+    },
+    {
+      "file": "assets/envelope_closed.png",
+      "canvas": [
+        1024,
+        1024
+      ],
+      "alphaBounds": [
+        31,
+        201,
+        993,
+        823
+      ],
+      "sha256": "8caa2d3f5be40e58398e85b2a550c48c8afa3875a8318f123c1fdc6ea0ddafc1",
+      "alphaCorner": 0
+    },
+    {
+      "file": "assets/envelope_open.png",
+      "canvas": [
+        1024,
+        1024
+      ],
+      "alphaBounds": [
+        31,
+        77,
+        993,
+        945
+      ],
+      "sha256": "8e00c3a0e68ea536762682be43bdcedbb1a2536dd5bbb500af76924469a33d39",
+      "alphaCorner": 0
+    },
+    {
+      "file": "assets/letter_paper_blank.png",
+      "canvas": [
+        1024,
+        1024
+      ],
+      "alphaBounds": [
+        65,
+        31,
+        959,
+        993
+      ],
+      "sha256": "1340bfc2b8bcb902fbbc8fd9b1ae715afe6637e7a01de51a7ef9eb46b94ce4a0",
+      "alphaCorner": 0
+    },
+    {
+      "file": "assets/sparkle_gold_large.png",
+      "canvas": [
+        512,
+        512
+      ],
+      "alphaBounds": [
+        39,
+        44,
+        473,
+        467
+      ],
+      "sha256": "2dd7ba88c8f5eb37941ec864e4021bb2a3ff55ccbb49dcb1d584aa6607a933c1",
+      "alphaCorner": 0
+    },
+    {
+      "file": "assets/sparkle_gold_lower.png",
+      "canvas": [
+        512,
+        512
+      ],
+      "alphaBounds": [
+        45,
+        38,
+        470,
+        476
+      ],
+      "sha256": "b21afc54f285e75f95d1e2d9b83980315894f3e5bbb55aab991c228c0e3c0486",
+      "alphaCorner": 0
+    },
+    {
+      "file": "assets/sparkle_gold_star.png",
+      "canvas": [
+        512,
+        512
+      ],
+      "alphaBounds": [
+        66,
+        38,
+        448,
+        474
+      ],
+      "sha256": "2709e4170f3f47065161b5dfc53483050c1bf50f21fa4d6ff4641cfb567262e6",
+      "alphaCorner": 0
+    },
+    {
+      "file": "assets/sparkle_pink_large.png",
+      "canvas": [
+        512,
+        512
+      ],
+      "alphaBounds": [
+        80,
+        39,
+        431,
+        473
+      ],
+      "sha256": "d93619dbe8739a78d5e55501b27c06755eab286f186f1b58954dc9de931e2111",
+      "alphaCorner": 0
+    },
+    {
+      "file": "assets/sparkle_pink_lower.png",
+      "canvas": [
+        512,
+        512
+      ],
+      "alphaBounds": [
+        55,
+        38,
+        457,
+        474
+      ],
+      "sha256": "3480585cf7bac8ec58005f623a6f0c1ebb3bf28b08e7416c72474dddd1f10a5d",
+      "alphaCorner": 0
+    },
+    {
+      "file": "assets/sparkle_shooting.png",
+      "canvas": [
+        512,
+        512
+      ],
+      "alphaBounds": [
+        38,
+        151,
+        473,
+        360
+      ],
+      "sha256": "d21a8b700f307e06c16ed57d2547dfef64ba86954318cc6ef85742684bd8b69f",
+      "alphaCorner": 0
+    },
+    {
+      "file": "assets/sparkles_sheet.png",
+      "canvas": [
+        1024,
+        1024
+      ],
+      "alphaBounds": [
+        0,
+        14,
+        1016,
+        1024
+      ],
+      "sha256": "a0509bf7a219b97706dedec32e439054fc7160fc9f567f60b3ab057714392505",
+      "alphaCorner": 0
+    }
+  ]
+}
