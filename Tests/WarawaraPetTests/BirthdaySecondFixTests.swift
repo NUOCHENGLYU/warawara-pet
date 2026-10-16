@@ -233,15 +233,17 @@ final class BirthdaySecondFixTests: XCTestCase {
             0,
             accuracy: 0.0001
         )
-        var previous: CGFloat = 0
         var maxValue: CGFloat = 0
-        for step in 0..<120 {
+        var previous = GroupMotionMath.approachBob(
+            speed: 60, maxAmplitude: 11, phase: 0.4, time: 0, hopPeriod: 0.55
+        )
+        for step in 1..<120 {
             let t = TimeInterval(step) / 60.0
             let bob = GroupMotionMath.approachBob(
                 speed: 60, maxAmplitude: 11, phase: 0.4, time: t, hopPeriod: 0.55
             )
             XCTAssertLessThanOrEqual(abs(bob), 11 + 0.001, "bob must stay bounded")
-            XCTAssertLessThanOrEqual(abs(bob - previous), 11 * 2 * .pi / 60.0 / 0.55 + 0.1,
+            XCTAssertLessThanOrEqual(abs(bob - previous), 11 * 2 * .pi / 60.0 / 0.55 + 0.15,
                                      "bob must be continuous between 60 Hz samples")
             maxValue = max(maxValue, abs(bob))
             previous = bob

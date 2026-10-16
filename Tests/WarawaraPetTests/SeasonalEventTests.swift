@@ -1,4 +1,4 @@
-import XCTest
+﻿import XCTest
 @testable import WarawaraPet
 
 /// Deterministic tests for seasonal eligibility, daily policy, and the
@@ -220,6 +220,8 @@ final class SeasonalEventTests: XCTestCase {
         XCTAssertEqual(coordinator.phase, .celebrate)
 
         coordinator.advance(at: start.addingTimeInterval(total + 0.1))
+        XCTAssertEqual(coordinator.phase, .depart)
+        coordinator.advance(at: start.addingTimeInterval(total + 0.2))
         XCTAssertEqual(coordinator.phase, .idle)
         XCTAssertTrue(persistence.isCompleted(.cny, occurrenceYear: 2027))
         XCTAssertTrue(spy.calls.contains("clear"))
@@ -251,6 +253,8 @@ final class SeasonalEventTests: XCTestCase {
         let total = timing.noticeDuration + timing.approachDuration
             + timing.presentDuration + timing.celebrateDuration + timing.departDuration
         coordinator.advance(at: start.addingTimeInterval(total + 0.1))
+        XCTAssertEqual(coordinator.phase, .depart)
+        coordinator.advance(at: start.addingTimeInterval(total + 0.2))
         XCTAssertEqual(coordinator.phase, .idle)
         XCTAssertFalse(persistence.isCompleted(.christmas, occurrenceYear: 2027),
                        "replay must not consume annual completion")
@@ -340,3 +344,4 @@ final class SeasonalEventTests: XCTestCase {
         }
     }
 }
+

@@ -102,7 +102,9 @@ final class EventScheduler {
             guard SeasonalEligibility.isEligible(kind, date: now, calendar: clock.calendar) else { continue }
             let year = SeasonalEligibility.occurrenceYear(for: kind, date: now, calendar: clock.calendar)
             guard !persistence.isCompleted(kind, occurrenceYear: year) else { continue }
-            coordinators[kind]?.requestTrigger(kind, trigger: .automatic)
+            let coordinator = coordinators[kind]
+            coordinator?.requestTrigger(kind, trigger: .automatic)
+            coordinator?.servicePendingTrigger()
             break
         }
         guard !isAnyEventRunning else { return }
@@ -134,7 +136,9 @@ final class EventScheduler {
             nextDailyEligibleAt = now.addingTimeInterval(30 * 60)
             return
         }
-        coordinators[kind]?.requestTrigger(kind, trigger: .automatic)
+        let coordinator = coordinators[kind]
+        coordinator?.requestTrigger(kind, trigger: .automatic)
+        coordinator?.servicePendingTrigger()
         nextDailyEligibleAt = now.addingTimeInterval(policy.nextEvaluationDelay(using: &rng))
     }
 
