@@ -103,9 +103,13 @@ final class BirthdaySecondFixTests: XCTestCase {
         XCTAssertEqual(coordinator.attentionTarget, .cakeDelivery)
 
         coordinator.companionGroupDidEnd()
-        XCTAssertEqual(coordinator.attentionTarget, .envelopeDelivery)
         XCTAssertEqual(coordinator.phase, .idle, "completion resets the event")
         XCTAssertEqual(coordinator.attentionTarget, .none, "reset clears the target")
+        XCTAssertEqual(
+            BirthdayAttentionTarget.expected(for: .awaitingLetter),
+            .envelopeDelivery,
+            "the envelope phase attends the envelope"
+        )
     }
 
     // MARK: - Envelope retirement

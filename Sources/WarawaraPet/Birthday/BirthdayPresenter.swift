@@ -314,7 +314,7 @@ final class BirthdayPresenter: BirthdayEventPresenting {
     /// FIRST completed read, retire the large envelope.
     @objc private func letterDidClose() {
         reassertPetVisibility?()
-        guard envelopeActive || delivered else { return }
+        guard delivered else { return }
         letterReadCount += 1
         retireEnvelope()
     }
