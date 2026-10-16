@@ -258,6 +258,7 @@ final class BirthdayEventCoordinator {
             // readable gift even though the event was interrupted.
             presenter?.activateEnvelope()
             presenter?.hideCake()
+            persistence.markEnvelopeUnlocked()
         } else {
             presenter?.hideCake()
         }

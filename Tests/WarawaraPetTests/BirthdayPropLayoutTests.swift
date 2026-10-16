@@ -33,11 +33,12 @@ final class BirthdayPropLayoutTests: XCTestCase {
             envelopePanelSize: envelopePanel,
             visibleFrame: visibleFrame
         )
-        // Bottoms sit near the pet window baseline (the desktop plane).
-        XCTAssertEqual(origins.cake.y + cakePanel.height, petFrame.minY + 46 + 230 / 2, accuracy: 0.5)
-        XCTAssertLessThan(abs((origins.cake.y + cakePanel.height) - (petFrame.minY + 46 + 115)), 200)
-        XCTAssertGreaterThan(origins.cake.y, petFrame.minY - 300)
-        XCTAssertGreaterThan(origins.envelope.y, petFrame.minY - 200)
+        // Painted art bottoms sit near the pet's feet line
+        // (minY + 54). Cake art bottom margin is 32pt (v3 alphaBounds);
+        // envelope art bottom margin is 18pt.
+        let feetLine = petFrame.minY + 54
+        XCTAssertEqual(origins.cake.y + cakePanel.height - 32, feetLine, accuracy: 2)
+        XCTAssertEqual(origins.envelope.y + envelopePanel.height - 18, feetLine, accuracy: 2)
     }
 
     func testDeliveryOriginsAreClampedToVisibleFrame() {
@@ -74,7 +75,7 @@ final class BirthdayPropLayoutTests: XCTestCase {
     func testExitVelocityBlendIsContinuousAndMonotonic() {
         let target: CGFloat = 45
         var previous: CGFloat = 0
-        for _ in 0..<60 {
+        for _ in 0..<150 {
             let blended = GroupMotionMath.exitVelocityBlend(
                 current: previous, target: target, dt: 1.0 / 60.0, timeConstant: 0.35
             )
