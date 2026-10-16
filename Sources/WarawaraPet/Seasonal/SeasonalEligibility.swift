@@ -5,18 +5,21 @@ import Foundation
 /// never UTC, never hardcoded Gregorian dates.
 enum SeasonalEligibility {
     /// Chinese New Year: lunar first month, days 1–3. Uses
-    /// Calendar(identifier: .chinese) with the local timezone. Leap
-    /// months never count (isLeapMonth is false for the true 1st
-    /// month). For testing: 2027 CNY starts Feb 6, 2027 (Gregorian).
+    /// Calendar(identifier: .chinese) with the local timezone.
+    /// For testing: 2027 CNY starts Feb 6, 2027 (Gregorian).
+    /// Note: a LEAP lunar first month cannot be distinguished without
+    /// the macOS 14 `isLeapMonth` API (deployment target is macOS 13);
+    /// the next leap first month occurs in 2262, so month == 1 is
+    /// unambiguous for any realistic date range.
     static func isChineseNewYear(
         date: Date,
         calendar: Calendar
     ) -> Bool {
         var chinese = Calendar(identifier: .chinese)
         chinese.timeZone = calendar.timeZone
-        let components = chinese.dateComponents([.month, .day, .isLeapMonth], from: date)
-        guard components.isLeapMonth == false else { return false }
-        return components.month == 1 && (1...3).contains(components.day ?? 0)
+        let components = chinese.dateComponents([.month, .day], from: date)
+        guard let day = components.day else { return false }
+        return components.month == 1 && (1...3).contains(day)
     }
 
     /// Christmas: December 24 from 18:00 local through December 26.
