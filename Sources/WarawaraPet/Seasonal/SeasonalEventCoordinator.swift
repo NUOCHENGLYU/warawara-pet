@@ -147,8 +147,21 @@ final class SeasonalEventCoordinator {
 
     // MARK: - Advancing
 
+    /// Advances the scene. Large elapsed jumps catch up through ALL
+    /// pending phase transitions (bounded loop), so timers and tests
+    /// agree on phase semantics.
     func advance(at now: Date) {
         guard let startedAt else { return }
+        var safety = 0
+        while safety < 10 {
+            safety += 1
+            let before = phase
+            stepOnce(at: now, startedAt: startedAt)
+            if phase == before { break }
+        }
+    }
+
+    private func stepOnce(at now: Date, startedAt: Date) {
         let elapsed = now.timeIntervalSince(startedAt)
         switch phase {
         case .idle:
