@@ -18,12 +18,12 @@ struct BirthdayPropLayout {
     }
 
     /// Cake resting in front of the pet on the desktop plane:
-    /// front-left of the body, no overlap, painted art bottom on the
-    /// pet's feet line (window baseline + blobBottomPadding).
+    /// front-left of the body, no overlap, painted art bottom slightly
+    /// ABOVE the pet's feet line (visible, not too low).
     static func cakeOrigin(petFrame: CGRect, panelSize: CGSize) -> CGPoint {
         CGPoint(
             x: petFrame.midX - 58 - 12 - panelSize.width,
-            y: petFrame.minY + 54 - panelSize.height + 32
+            y: petFrame.minY + 54 + 12 - panelSize.height + 32
         )
     }
 

@@ -36,6 +36,7 @@ enum BirthdayDateMath {
 struct BirthdayPersistence {
     static let completedYearsKey = "warawarapet.birthday.completedYears"
     static let envelopeUnlockedKey = "warawarapet.birthday.envelopeUnlocked"
+    static let envelopeRetiredKey = "warawarapet.birthday.envelopeRetired"
 
     private let defaults: UserDefaults
 
@@ -63,5 +64,21 @@ struct BirthdayPersistence {
 
     var envelopeUnlocked: Bool {
         defaults.bool(forKey: Self.envelopeUnlockedKey)
+    }
+
+    /// The large desktop envelope was retired after the first read;
+    /// letter access continues via pet double-click.
+    func markEnvelopeRetired() {
+        defaults.set(true, forKey: Self.envelopeRetiredKey)
+    }
+
+    var envelopeRetired: Bool {
+        defaults.bool(forKey: Self.envelopeRetiredKey)
+    }
+
+    /// The letter remains available whenever the envelope was ever
+    /// unlocked — retirement only changes HOW it is presented.
+    var isLetterAvailable: Bool {
+        envelopeUnlocked
     }
 }

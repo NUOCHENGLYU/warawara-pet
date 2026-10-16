@@ -13,6 +13,10 @@ final class PetInteractionController {
     private let dragThreshold: CGFloat = 3
     private let dragMargin: CGFloat = 8
 
+    /// Fired on a genuine double-click (clickCount == 2) on the pet.
+    /// Used by the birthday letter reopen path.
+    var onDoubleClick: (() -> Void)?
+
     init(windowController: PetWindowController, controller: PetController) {
         self.windowController = windowController
         self.controller = controller
@@ -22,6 +26,13 @@ final class PetInteractionController {
         mouseDownPoint = event.locationInWindow
         isDragging = false
         previousGlobalPoint = NSEvent.mouseLocation
+        if event.clickCount == 2 {
+            // The first click already produced the normal squash; the
+            // double-click opens the birthday letter instead of a
+            // second squash.
+            onDoubleClick?()
+            return
+        }
         controller?.handleClick()
     }
 

@@ -83,6 +83,13 @@ final class BirthdayAssetStore {
         return image
     }
 
+    /// Optional supplemental artwork (carry trays, bands, hat helpers in
+    /// a future v4 package): returns nil gracefully when absent, so the
+    /// event logic never depends on their existence.
+    func optionalImage(named fileName: String) -> NSImage? {
+        image(named: fileName)
+    }
+
     func data(for fileName: String) -> Data? {
         guard let base = resolveBaseURL() else { return nil }
         return try? Data(contentsOf: base.appendingPathComponent(fileName))

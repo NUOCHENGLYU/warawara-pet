@@ -1,13 +1,21 @@
 import SwiftUI
 
-/// Cake with a few muted gold sparkles (sparse, small, gentle).
+/// Cake with a few muted gold sparkles (sparse, small, gentle) and an
+/// OPTIONAL carry-helper overlay (tray/band from a future art pack).
 struct CakePropView: View {
     let store: BirthdayAssetStore
     let cakeSize: CGFloat
+    var carryHelper: NSImage? = nil
     @State private var twinkle = false
 
     var body: some View {
         ZStack {
+            if let helper = carryHelper {
+                Image(nsImage: helper)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: cakeSize * 1.35, height: cakeSize * 1.35)
+            }
             if let cake = store.image(named: "cake_lit.png") {
                 Image(nsImage: cake)
                     .resizable()
@@ -42,16 +50,24 @@ struct CakePropView: View {
 }
 
 /// The clickable envelope: closed by default, gentle crossfade to the
-/// open illustration on click, then the letter window opens.
+/// open illustration on click, then the letter window opens. An OPTIONAL
+/// carry-helper overlay (paper band) may wrap it while carried.
 struct EnvelopePropView: View {
     let store: BirthdayAssetStore
     let envelopeSize: CGFloat
+    var carryHelper: NSImage? = nil
     let onOpenLetter: () -> Void
 
     @State private var opened = false
 
     var body: some View {
         ZStack {
+            if let helper = carryHelper {
+                Image(nsImage: helper)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: envelopeSize * 1.4, height: envelopeSize * 1.4)
+            }
             if let closed = store.image(named: "envelope_closed.png") {
                 Image(nsImage: closed)
                     .resizable()

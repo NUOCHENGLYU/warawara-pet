@@ -51,6 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController.setCompanionCentersObserver { [weak presenter] centers in
             presenter?.companionCentersChanged(centers)
         }
+        windowController.onPetDoubleClick = { [weak presenter] in
+            presenter?.openLetterForDoubleClick()
+        }
         presenter.reassertPetVisibility = { [weak windowController] in
             windowController?.reassertPetVisibility()
         }

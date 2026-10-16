@@ -41,12 +41,15 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
         try renderEnvelopeReveal(store: store, to: outputDir)
         try renderLetterWindow(store: store, to: outputDir)
         try renderFinalEnvelope(rig: rig, rigLoader: rigLoader, mainSize: mainSize, store: store, to: outputDir)
+        try renderSecondFixSheets(rig: rig, rigLoader: rigLoader, mainSize: mainSize, companionSize: companionSize, store: store, to: outputDir)
 
         for name in ["46-birthday-noticing.png", "47-birthday-carried-gifts.png",
                      "48-birthday-gifts-placed.png", "49-birthday-celebration.png",
                      "50-birthday-ascent.png", "51-birthday-envelope-reveal.png",
                      "52-birthday-letter.png", "53-birthday-final-envelope-light.png",
-                     "54-birthday-final-envelope-dark.png"] {
+                     "54-birthday-final-envelope-dark.png",
+                     "55-birthday-cake-carried.png", "56-birthday-envelope-carried.png",
+                     "57-birthday-envelope-retired.png", "58-birthday-double-click-reopen.png"] {
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
                 "missing birthday preview \(name)"
@@ -92,6 +95,73 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
     }
 
     // MARK: - Sheets
+
+    private func renderSecondFixSheets(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader,
+        mainSize: CGSize, companionSize: CGSize, store: BirthdayAssetStore, to dir: URL
+    ) throws {
+        // 55: cake carried at the carrier anchor (held, not pasted).
+        let cakeCarried = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 6) {
+                Text("cake carried by the lead companion (carry anchor)").font(.headline)
+                ZStack {
+                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 250, y: 270)
+                    CakePropView(store: store, cakeSize: 85)
+                        .frame(width: 200, height: 230)
+                        .position(x: 250, y: 260)
+                }
+                .frame(width: 560, height: 400)
+            }
+        }
+        try render(cakeCarried, size: CGSize(width: 560, height: 460), scale: 1,
+                   to: dir.appendingPathComponent("55-birthday-cake-carried.png"))
+
+        // 56: envelope carried beside its companion.
+        let envelopeCarried = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 6) {
+                Text("envelope carried by its companion (carry anchor)").font(.headline)
+                ZStack {
+                    rigView(rig, rigLoader, idleParams(), companionSize).position(x: 200, y: 270)
+                    if let envelope = store.image(named: "envelope_closed.png") {
+                        Image(nsImage: envelope)
+                            .resizable()
+                            .frame(width: 62, height: 62)
+                            .position(x: 270, y: 290)
+                    }
+                }
+                .frame(width: 560, height: 400)
+            }
+        }
+        try render(envelopeCarried, size: CGSize(width: 560, height: 460), scale: 1,
+                   to: dir.appendingPathComponent("56-birthday-envelope-carried.png"))
+
+        // 57: retired state — just the pet, no intrusive envelope.
+        let retired = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 6) {
+                Text("after first read: envelope retired, desktop clean").font(.headline)
+                rigView(rig, rigLoader, idleParams(), mainSize)
+            }
+        }
+        try render(retired, size: CGSize(width: 460, height: 380), scale: 1,
+                   to: dir.appendingPathComponent("57-birthday-envelope-retired.png"))
+
+        // 58: double-click reopen composition (pet + letter window).
+        let letterText = store.letterText() ?? ""
+        let reopen = ZStack {
+            CheckerboardBackground()
+            HStack(spacing: 30) {
+                rigView(rig, rigLoader, idleParams(), mainSize)
+                LetterView(text: letterText, store: store)
+                    .frame(width: 320, height: 360)
+                    .cornerRadius(8)
+            }
+        }
+        try render(reopen, size: CGSize(width: 760, height: 400), scale: 1,
+                   to: dir.appendingPathComponent("58-birthday-double-click-reopen.png"))
+    }
 
     private func renderNoticing(rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, mainSize: CGSize, to dir: URL) throws {
         let content = ZStack {

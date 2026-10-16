@@ -10,6 +10,9 @@ final class PetWindowController: NSObject {
     private var controller: PetController?
     private var motionController: PetMotionController?
     private var interactionController: PetInteractionController?
+    /// Invoked when the user double-clicks the main pet (birthday
+    /// letter reopen path).
+    var onPetDoubleClick: (() -> Void)?
     private var positionStore: PetPositionStore?
     private var screenObserver: NSObjectProtocol?
     private var groupSequenceController: GroupSequenceController?
@@ -97,6 +100,9 @@ final class PetWindowController: NSObject {
         let hostingView = PetHostingView(rootView: PetView(controller: petController))
         hostingView.frame = NSRect(origin: .zero, size: Self.petSize)
         hostingView.interactionController = interaction
+        interaction.onDoubleClick = { [weak self] in
+            self?.onPetDoubleClick?()
+        }
 
         panel.contentView = hostingView
         panel.setFrame(restoredPositionFrame(using: store), display: false)

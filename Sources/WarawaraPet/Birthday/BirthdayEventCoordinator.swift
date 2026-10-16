@@ -91,6 +91,9 @@ final class BirthdayEventCoordinator {
     private var ranThisLaunch = false
     private(set) var groupActive = false
     private(set) var propsDelivered = false
+    /// The event's current attention target (phase-driven; consumed by
+    /// the presenter to aim the pet's event gaze).
+    private(set) var attentionTarget: BirthdayAttentionTarget = .none
 
     var isRunning: Bool { phase != .idle }
 
@@ -162,6 +165,7 @@ final class BirthdayEventCoordinator {
         groupActive = false
         propsDelivered = false
         phase = .noticing
+        attentionTarget = .leadCompanion
         presenter?.noticeCompanionsArriving()
         presenter?.performMainPetHop()
     }
@@ -196,6 +200,7 @@ final class BirthdayEventCoordinator {
         }
         if elapsed >= timing.gatherStartDelay {
             phase = .gathering
+            attentionTarget = .leadCompanion
             presenter?.presentCarriedProps()
             presenter?.startCompanionGroup()
         }
@@ -207,6 +212,7 @@ final class BirthdayEventCoordinator {
         if !propsDelivered, elapsed >= timing.deliveryDelayAfterGatherStart {
             propsDelivered = true
             phase = .celebrating
+            attentionTarget = .cakeDelivery
             presenter?.deliverPropsToPet()
         }
     }
@@ -233,6 +239,7 @@ final class BirthdayEventCoordinator {
         groupActive = false
         guard phase == .gathering || phase == .celebrating else { return }
         phase = .awaitingLetter
+        attentionTarget = .envelopeDelivery
         presenter?.hideCake()
         presenter?.activateEnvelope()
         presenter?.clearAttention()
@@ -272,6 +279,7 @@ final class BirthdayEventCoordinator {
         firedHops.removeAll()
         propsDelivered = false
         trigger = nil
+        attentionTarget = .none
         phase = .idle
     }
 }

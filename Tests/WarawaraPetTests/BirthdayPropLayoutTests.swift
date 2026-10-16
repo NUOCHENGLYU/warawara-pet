@@ -33,11 +33,11 @@ final class BirthdayPropLayoutTests: XCTestCase {
             envelopePanelSize: envelopePanel,
             visibleFrame: visibleFrame
         )
-        // Painted art bottoms sit near the pet's feet line
-        // (minY + 54). Cake art bottom margin is 32pt (v3 alphaBounds);
-        // envelope art bottom margin is 18pt.
+        // Cake art bottom sits slightly above the pet's feet line
+        // (minY + 54 + 12) so it reads as held-visible, not too low.
+        // Envelope art bottom margin is 18pt.
         let feetLine = petFrame.minY + 54
-        XCTAssertEqual(origins.cake.y + cakePanel.height - 32, feetLine, accuracy: 2)
+        XCTAssertEqual(origins.cake.y + cakePanel.height - 32, feetLine + 12, accuracy: 2)
         XCTAssertEqual(origins.envelope.y + envelopePanel.height - 18, feetLine, accuracy: 2)
     }
 
