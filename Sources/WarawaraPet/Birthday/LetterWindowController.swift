@@ -7,6 +7,10 @@ import SwiftUI
 final class LetterWindowController: NSWindowController {
     private let store: BirthdayAssetStore
 
+    /// True while the letter reading window is open (seasonal events
+    /// never start while the user is reading).
+    static private(set) var isOpen = false
+
     init(store: BirthdayAssetStore = .shared) {
         self.store = store
         let window = NSWindow(
@@ -34,6 +38,7 @@ final class LetterWindowController: NSWindowController {
         guard let window else { return }
         window.center()
         window.makeKeyAndOrderFront(nil)
+        Self.isOpen = true
         NSApp.activate(ignoringOtherApps: true)
     }
 }
@@ -42,6 +47,7 @@ extension LetterWindowController: NSWindowDelegate {
     /// Closing the reading window only resets the envelope illustration:
     /// the main pet stays visible and the envelope stays accessible.
     func windowWillClose(_ notification: Notification) {
+        Self.isOpen = false
         NotificationCenter.default.post(name: .birthdayLetterDidClose, object: nil)
     }
 }

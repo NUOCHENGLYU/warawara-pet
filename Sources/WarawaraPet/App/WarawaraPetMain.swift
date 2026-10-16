@@ -13,7 +13,21 @@ enum WarawaraPetMain {
             // keeping the accepted gaze/face behavior.
             WarawaraTurnGeometry.turnDisabled = true
         }
-        if arguments.contains("--verify-birthday") {
+        if arguments.contains("--verify-event-assets") {
+            // Headless check against the packaged .app: every seasonal +
+            // daily prop must resolve and match the manifest hashes.
+            let store = SeasonalAssetStore.shared
+            store.reset()
+            let required = store.verifyAllRequiredAssets()
+            let hashes = store.verifySHA256()
+            if required.ok && hashes.ok {
+                print("EVENT_ASSETS_OK assets=\(SeasonalAssetStore.requiredFileNames.count)")
+                exit(0)
+            }
+            print("EVENT_ASSETS_FAIL required=[\(required.details)] hashes=[\(hashes.details)]")
+            exit(1)
+        }
+        if let flagIndex = arguments.firstIndex(of: "--verify-birthday") {
             // Headless check used by CI against the packaged .app:
             // verifies every v2 birthday asset and the letter text are
             // loadable from the real bundled resources.
@@ -68,6 +82,19 @@ enum WarawaraPetMain {
             // Manual replay: runs the genuine sequence on any date and
             // never consumes annual eligibility.
             appDelegate.requestBirthdayReplay()
+        }
+        if let replayEventIndex = arguments.firstIndex(of: "--replay-event") {
+            let kindArgument: String
+            if arguments.count > replayEventIndex + 1 {
+                kindArgument = arguments[replayEventIndex + 1]
+            } else {
+                kindArgument = ""
+            }
+            if let kind = SeasonalEventKind.fromReplayArgument(kindArgument) {
+                appDelegate.requestSeasonalReplay(kind: kind)
+            } else {
+                NSLog("[WarawaraPet] unknown --replay-event kind '%@'", kindArgument)
+            }
         }
         if arguments.contains("--show-letter") {
             appDelegate.requestShowLetter()

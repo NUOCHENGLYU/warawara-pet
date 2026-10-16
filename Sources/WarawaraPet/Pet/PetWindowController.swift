@@ -28,6 +28,12 @@ final class PetWindowController: NSObject {
         controller?.state == .dragged
     }
 
+    /// True while the pet is dozing or asleep (seasonal/daily events
+    /// never interrupt sleep).
+    var isPetSleeping: Bool {
+        controller?.state == .sleepy || controller?.state == .sleeping
+    }
+
     /// Registers an observer for companion-group activity (birthday
     /// coordinator uses this to know when gathering/ascension ends).
     func addGroupActiveObserver(_ observer: @escaping (Bool) -> Void) {

@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var birthdayMonitorTimer: Timer?
     private var pendingReplayRequested = false
     private var pendingShowLetterRequested = false
+    private var eventScheduler: EventScheduler?
+    private var pendingSeasonalReplays: [SeasonalEventKind] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Load sprite assets BEFORE the first pet render so the
@@ -62,6 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         birthdayPresenter = presenter
         presenter.setup()
 
+        wireSeasonalScheduler(windowController: windowController, birthdayCoordinator: coordinator)
+
         if pendingReplayRequested {
             coordinator.requestTrigger(.replay)
         }
@@ -77,11 +81,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Creates the shared seasonal/daily scheduler. Priority: birthday
+    /// (already wired) > CNY > Christmas > New Year > daily events.
+    private func wireSeasonalScheduler(
+        windowController: PetWindowController,
+        birthdayCoordinator: BirthdayEventCoordinator
+    ) {
+        let scheduler = EventScheduler(
+            clock: SystemBirthdayClock(),
+            persistence: SeasonalPersistence()
+        )
+        scheduler.configure(windowController: windowController)
+        scheduler.birthdayCoordinator = birthdayCoordinator
+        scheduler.isPetBusy = { [weak windowController] in
+            guard let windowController else { return false }
+            return windowController.isPetDragging || windowController.isPetSleeping
+        }
+        scheduler.isBirthdayBlocking = { [weak birthdayCoordinator] in
+            guard let birthdayCoordinator else { return false }
+            return birthdayCoordinator.isRunning || birthdayCoordinator.shouldTriggerAutomatically
+        }
+        eventScheduler = scheduler
+        for kind in pendingSeasonalReplays {
+            scheduler.requestReplay(kind: kind)
+        }
+        pendingSeasonalReplays.removeAll()
+    }
+
     private func birthdayTick() {
         guard let coordinator = birthdayCoordinator else { return }
         coordinator.checkAutomaticTrigger()
         coordinator.servicePendingTrigger()
         coordinator.advance()
+        eventScheduler?.tick()
+    }
+
+    /// Called from the main entry point for --replay-event <kind>.
+    func requestSeasonalReplay(kind: SeasonalEventKind) {
+        if let scheduler = eventScheduler {
+            scheduler.requestReplay(kind: kind)
+        } else {
+            pendingSeasonalReplays.append(kind)
+        }
     }
 
     /// Called from the main entry point after argument parsing.

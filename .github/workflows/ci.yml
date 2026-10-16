@@ -29,6 +29,11 @@ jobs:
         env:
           BIRTHDAY_PREVIEW_OUT: dist/birthday-preview
 
+      - name: Generate seasonal previews
+        run: swift test --filter SeasonalPreviewGeneratorTests
+        env:
+          SEASONAL_PREVIEW_OUT: dist/seasonal-preview
+
       - name: Package .app and zip
         run: bash Scripts/package-app.sh
 
@@ -41,6 +46,9 @@ jobs:
           BIRTHDAY="$("dist/WarawaraPet.app/Contents/MacOS/WarawaraPet" --verify-birthday)"
           echo "$BIRTHDAY"
           echo "$BIRTHDAY" | grep -q "BIRTHDAY_OK" || { echo "birthday assets not loaded"; exit 1; }
+          EVENTS="$("dist/WarawaraPet.app/Contents/MacOS/WarawaraPet" --verify-event-assets)"
+          echo "$EVENTS"
+          echo "$EVENTS" | grep -q "EVENT_ASSETS_OK" || { echo "seasonal assets not loaded"; exit 1; }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -61,4 +69,11 @@ jobs:
         with:
           name: WarawaraPet-Birthday-Preview
           path: dist/birthday-preview
+          retention-days: 30
+
+      - name: Upload seasonal preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WarawaraPet-Seasonal-Daily-Preview
+          path: dist/seasonal-preview
           retention-days: 30
