@@ -67,6 +67,11 @@ final class PetWindowController: NSObject {
         controller?.setEventAttention(direction)
     }
 
+    /// Per-frame event-attention tracking update (moving props).
+    func updateEventAttention(_ direction: CGVector) {
+        controller?.updateEventAttention(direction)
+    }
+
     /// Companion center positions observer (birthday props ride along
     /// with carrier companions during delivery).
     func setCompanionCentersObserver(_ observer: @escaping ([Int: CGPoint]) -> Void) {
