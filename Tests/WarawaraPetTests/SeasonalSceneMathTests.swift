@@ -48,8 +48,8 @@ final class SeasonalSceneMathTests: XCTestCase {
             let size = SeasonalSceneMath.panelSize(for: kind)
             let extents = SeasonalSceneMath.contentExtentRect(for: kind)
             // The CONTACT point lands exactly on the world anchor.
-            let contactX = origin.x + size.width / 2 + extents.midX
-            let contactY = origin.y + size.height / 2 + extents.midY
+            let contactX = origin.x + size.width / 2 - extents.midX
+            let contactY = origin.y + size.height / 2 - extents.midY
             XCTAssertEqual(contactX, target.x, accuracy: 0.01, "\(kind): contact must land on the anchor")
             XCTAssertEqual(contactY, target.y, accuracy: 0.01, "\(kind): contact must land on the anchor")
             // Far from the screen's bottom-left corner.
@@ -64,11 +64,12 @@ final class SeasonalSceneMathTests: XCTestCase {
         for kind in SeasonalEventKind.allCases {
             let size = SeasonalSceneMath.panelSize(for: kind)
             let extents = SeasonalSceneMath.contentExtentRect(for: kind)
-            // Panel rect in the same coordinates (contact at 0,0).
-            let panelMinX = -size.width / 2 - extents.midX
-            let panelMaxX = size.width / 2 - extents.midX
-            let panelMinY = -size.height / 2 - extents.midY
-            let panelMaxY = size.height / 2 - extents.midY
+            // Panel rect in contact coordinates: the panel is centered
+            // on the extents' midpoint.
+            let panelMinX = extents.midX - size.width / 2
+            let panelMaxX = extents.midX + size.width / 2
+            let panelMinY = extents.midY - size.height / 2
+            let panelMaxY = extents.midY + size.height / 2
             XCTAssertGreaterThan(extents.minX, panelMinX + 1, "\(kind): content clipped left")
             XCTAssertLessThan(extents.maxX, panelMaxX - 1, "\(kind): content clipped right")
             XCTAssertGreaterThan(extents.minY, panelMinY + 1, "\(kind): content clipped bottom")
@@ -81,10 +82,10 @@ final class SeasonalSceneMathTests: XCTestCase {
         for kind in [SeasonalEventKind.cny, .christmas] {
             let size = SeasonalSceneMath.panelSize(for: kind)
             let extents = SeasonalSceneMath.contentExtentRect(for: kind)
-            let panelMinX = -size.width / 2 - extents.midX
-            let panelMaxX = size.width / 2 - extents.midX
-            let panelMinY = -size.height / 2 - extents.midY
-            let panelMaxY = size.height / 2 - extents.midY
+            let panelMinX = extents.midX - size.width / 2
+            let panelMaxX = extents.midX + size.width / 2
+            let panelMinY = extents.midY - size.height / 2
+            let panelMaxY = extents.midY + size.height / 2
             XCTAssertGreaterThan(extents.minX, panelMinX + 1,
                                  "\(kind): envelope/gift must not be clipped left")
             XCTAssertLessThan(extents.maxX, panelMaxX - 1,

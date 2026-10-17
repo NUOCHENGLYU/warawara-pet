@@ -220,9 +220,11 @@ enum SeasonalSceneMath {
     ) -> CGPoint {
         let size = panelSize(for: kind)
         let extents = contentExtentRect(for: kind)
+        // Panel center = anchor + extents.mid  =>  contact (at panel
+        // center - extents.mid) lands on the anchor.
         return CGPoint(
-            x: anchor.x - size.width / 2 - extents.midX,
-            y: anchor.y - size.height / 2 - extents.midY
+            x: anchor.x - size.width / 2 + extents.midX,
+            y: anchor.y - size.height / 2 + extents.midY
         )
     }
 
