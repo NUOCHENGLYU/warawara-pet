@@ -153,52 +153,49 @@ extension Notification.Name {
     static let birthdayLetterDidClose = Notification.Name("warawarapet.birthday.letterDidClose")
 }
 
-/// The personal letter reading surface: warm cream native background
-/// (readability first), optional parchment decoration behind the text,
-/// comfortable line spacing, scrolling, UTF-8 Chinese + English.
+/// The personal letter reading surface: a cohesive warm ivory paper
+/// page, selectable Unicode text, comfortable spacing and scrolling.
+/// No corner illustration, no distorted foreground paper image.
 struct LetterView: View {
     let text: String
     let store: BirthdayAssetStore
 
+    private var paperColor: NSColor {
+        NSColor(calibratedRed: 0.986, green: 0.972, blue: 0.936, alpha: 1)
+    }
+
+    private var inkColor: NSColor {
+        NSColor(calibratedRed: 0.23, green: 0.21, blue: 0.24, alpha: 1)
+    }
+
+    private var accentColor: NSColor {
+        NSColor(calibratedRed: 0.56, green: 0.40, blue: 0.44, alpha: 1)
+    }
+
     var body: some View {
         ZStack {
-            Color(nsColor: NSColor(
-                calibratedRed: 0.982, green: 0.968, blue: 0.935, alpha: 1
-            ))
+            Color(nsColor: paperColor)
             VStack(spacing: 0) {
                 Text("生日快乐 · Happy Birthday")
-                    .font(.system(size: 22, weight: .semibold, design: .serif))
-                    .foregroundColor(Color(nsColor: NSColor(
-                        calibratedRed: 0.45, green: 0.41, blue: 0.52, alpha: 1
-                    )))
-                    .padding(.top, 22)
-                    .padding(.bottom, 6)
+                    .font(.system(size: 21, weight: .semibold, design: .serif))
+                    .foregroundColor(Color(nsColor: accentColor))
+                    .padding(.top, 24)
+                    .padding(.bottom, 8)
                 Rectangle()
-                    .fill(Color(nsColor: NSColor(
-                        calibratedRed: 0.72, green: 0.66, blue: 0.80, alpha: 0.5
-                    )))
-                    .frame(width: 220, height: 1)
+                    .fill(Color(nsColor: accentColor).opacity(0.45))
+                    .frame(width: 240, height: 1)
+                    .padding(.bottom, 6)
                 ScrollView {
                     Text(text)
-                        .font(.system(size: 15, design: .serif))
-                        .foregroundColor(Color(nsColor: NSColor(
-                            calibratedRed: 0.24, green: 0.22, blue: 0.24, alpha: 1
-                        )))
-                        .lineSpacing(7)
+                        .textSelection(.enabled)
+                        .font(.system(size: 15.5, design: .serif))
+                        .foregroundColor(Color(nsColor: inkColor))
+                        .lineSpacing(7.5)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 36)
-                        .padding(.vertical, 24)
+                        .padding(.horizontal, 38)
+                        .padding(.top, 20)
+                        .padding(.bottom, 30)
                 }
-            }
-            if let paper = store.image(named: "letter_paper_blank.png") {
-                Image(nsImage: paper)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: 96, height: 96)
-                    .opacity(0.85)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .padding(10)
-                    .allowsHitTesting(false)
             }
         }
     }

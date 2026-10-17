@@ -159,6 +159,9 @@ struct WarawaraCharacterView: View {
     /// App-level expression inputs (state, gaze, drag, progress). Only
     /// consumed by the layered rig branch.
     var expressionInputs: WarawaraExpressionInputs = .neutral
+    /// Final-gift wearables rendered inside the layered rig.
+    var wearables: WarawaraWearableState = .none
+    var wearableMotion: WearableRenderParameters = .default
 
     /// The manifest canvas scaled so the artwork's body height matches
     /// the character's target body height (main 118 pt, companion 74 pt,
@@ -200,7 +203,9 @@ struct WarawaraCharacterView: View {
                 rig: rig,
                 rigLoader: rigLoader,
                 inputs: expressionInputs,
-                renderSize: renderSize
+                renderSize: renderSize,
+                wearables: wearables,
+                wearableMotion: wearableMotion
             )
             .padding(.bottom, spriteBottomLift(renderSize: renderSize))
         case .sprite(let firstFrame, let animation, let renderSize, let anchor):

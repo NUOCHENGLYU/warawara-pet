@@ -9,9 +9,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var birthdayMonitorTimer: Timer?
     private var pendingReplayRequested = false
     private var pendingShowLetterRequested = false
-    private var eventScheduler: EventScheduler?
-    private var pendingSeasonalReplays: [SeasonalEventKind] = []
-    private var pendingPropDebug: SeasonalEventKind?
+    private var meteorController: MeteorEventController?
+    private var meteorPresenter: MeteorEventPresenter?
+    private var pendingMeteorReplay = false
+    private var wearableController: WearableController?
+    private var firstLaunchHandler: FirstLaunchCelebration?
+    private var pendingWearableDebug: WearableKind?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Load sprite assets BEFORE the first pet render so the
@@ -21,6 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The layered rig is the primary rendering direction; when
         // absent this logs clearly and the single-sprite pipeline runs.
         WarawaraRigLoader.shared.loadDefaultRig()
+        // Final-gift artwork (wearables + meteor), verified lazily.
+        GiftAssetStore.shared.verifyAllRequiredAssets()
 
         // The status item is created once and held strongly for the
         // lifetime of the app.
@@ -31,6 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petWindowController = controller
 
         wireBirthdayEvent(windowController: controller)
+        wireWearables(windowController: controller)
+        wireMeteor(windowController: controller)
+        wireFirstLaunchCelebration(windowController: controller)
     }
 
     /// Creates the birthday coordinator + presenter and starts the light
@@ -74,8 +82,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         birthdayPresenter = presenter
         presenter.setup()
 
-        wireSeasonalScheduler(windowController: windowController, birthdayCoordinator: coordinator)
-
         if pendingReplayRequested {
             coordinator.requestTrigger(.replay)
         }
@@ -91,51 +97,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Creates the shared seasonal/daily scheduler. Priority: birthday
-    /// (already wired) > CNY > Christmas > New Year > daily events.
-    private func wireSeasonalScheduler(
-        windowController: PetWindowController,
-        birthdayCoordinator: BirthdayEventCoordinator
-    ) {
-        let scheduler = EventScheduler(
+    /// Wearables: calendar eligibility (birthday/Christmas hats, Lunar
+    /// New Year scarf) + audio-reactive headphones, published into the
+    /// pet's render inputs via the shared runtime.
+    private func wireWearables(windowController: PetWindowController) {
+        let controller = WearableController(runtime: windowController.wearableRuntime)
+        wearableController = controller
+        controller.start()
+        if let debugKind = pendingWearableDebug {
+            pendingWearableDebug = nil
+            controller.debugForce(kind: debugKind)
+        }
+    }
+
+    /// The rare meteor event: independent world-space flight.
+    private func wireMeteor(windowController: PetWindowController) {
+        let controller = MeteorEventController(
             clock: SystemBirthdayClock(),
-            persistence: SeasonalPersistence()
+            persistence: MeteorPersistence()
         )
-        scheduler.configure(windowController: windowController)
-        scheduler.birthdayCoordinator = birthdayCoordinator
-        scheduler.isPetBusy = { [weak windowController] in
+        let presenter = MeteorEventPresenter(
+            windowController: windowController,
+            controller: controller,
+            store: .shared
+        )
+        controller.presenter = presenter
+        controller.isPetBusy = { [weak windowController] in
             guard let windowController else { return false }
             return windowController.isPetDragging
                 || windowController.isPetSleeping
                 || LetterWindowController.isOpen
         }
-        scheduler.isBirthdayBlocking = { [weak birthdayCoordinator] in
-            guard let birthdayCoordinator else { return false }
-            return birthdayCoordinator.isRunning || birthdayCoordinator.shouldTriggerAutomatically
+        controller.isBirthdayBlocking = { [weak self] in
+            guard let coordinator = self?.birthdayCoordinator else { return false }
+            return coordinator.isRunning || coordinator.shouldTriggerAutomatically
         }
-        if EventReplayLog.smokeMode {
-            // CI smoke mode: exit as soon as the replayed scene completes.
-            for coordinator in scheduler.coordinators.values {
-                coordinator.completionObservers.append { kind, trigger in
-                    guard trigger == .replay else { return }
-                    EventReplayLog.completed(id: kind.replayArgument)
-                    exit(0)
-                }
-            }
+        controller.completionObservers.append { [weak self] trigger in
+            guard EventDiagnostics.smokeMode, trigger == .replay else { return }
+            exit(0)
         }
-        eventScheduler = scheduler
-        for kind in pendingSeasonalReplays {
-            scheduler.requestReplay(kind: kind)
+        meteorController = controller
+        meteorPresenter = presenter
+        if pendingMeteorReplay {
+            controller.requestTrigger(.replay)
         }
-        pendingSeasonalReplays.removeAll()
-        if let debugKind = pendingPropDebug {
-            pendingPropDebug = nil
-            // Developer static-layout diagnostic: pin the prop fully
-            // opaque at its anchor and exit after the geometry dump.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak scheduler] in
-                scheduler?.presenter(for: debugKind)?.presentStaticProp(kind: debugKind)
-            }
+    }
+
+    /// Once-only first-launch birthday surprise (works even when the
+    /// first launch is after October 17).
+    private func wireFirstLaunchCelebration(windowController: PetWindowController) {
+        guard let birthdayCoordinator else { return }
+        let handler = FirstLaunchCelebration(
+            coordinator: birthdayCoordinator,
+            persistence: BirthdayPersistence(),
+            windowController: windowController,
+            clock: SystemBirthdayClock()
+        )
+        handler.setCelebrationHat = { [weak self] active in
+            self?.wearableController?.celebrationRequestsBirthdayHat = active
         }
+        firstLaunchHandler = handler
+        handler.start()
     }
 
     private func birthdayTick() {
@@ -143,22 +165,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         coordinator.checkAutomaticTrigger()
         coordinator.servicePendingTrigger()
         coordinator.advance()
-        eventScheduler?.tick()
+        meteorController?.tick()
+        wearableController?.tick()
     }
 
-    /// Called from the main entry point for --replay-event <kind>.
-    func requestSeasonalReplay(kind: SeasonalEventKind) {
-        if let scheduler = eventScheduler {
-            scheduler.requestReplay(kind: kind)
+    /// Called from the main entry point for --replay-meteor.
+    func requestMeteorReplay() {
+        if let controller = meteorController {
+            controller.requestTrigger(.replay)
         } else {
-            EventReplayLog.ready(id: kind.replayArgument)
-            pendingSeasonalReplays.append(kind)
+            pendingMeteorReplay = true
         }
     }
 
-    /// Developer-only static layout diagnostic (--prop-debug <kind>).
-    func requestPropDebug(kind: SeasonalEventKind) {
-        pendingPropDebug = kind
+    /// Developer wearable override (--debug-wear <kind>).
+    func requestWearableDebug(_ kind: WearableKind) {
+        if let controller = wearableController {
+            controller.debugForce(kind: kind)
+        } else {
+            pendingWearableDebug = kind
+        }
     }
 
     /// Called from the main entry point after argument parsing.
@@ -189,6 +215,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         birthdayMonitorTimer?.invalidate()
         birthdayMonitorTimer = nil
+        wearableController?.stop()
+        meteorPresenter?.cleanup()
         petWindowController?.saveCurrentPosition()
     }
 }

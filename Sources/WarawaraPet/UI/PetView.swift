@@ -2,6 +2,9 @@ import SwiftUI
 
 struct PetView: View {
     @ObservedObject var controller: PetController
+    /// Final-gift wearables (calendar/audio driven), rendered inside the
+    /// layered character and updated live.
+    @ObservedObject var wearableRuntime: WearableRuntime = WearableRuntime()
 
     @State private var bobbing = false
     @State private var breathingPhase = false
@@ -55,7 +58,9 @@ struct PetView: View {
             visualState: WarawaraVisualState.state(for: controller.state),
             loader: .shared,
             placeholderSizeClass: .main,
-            expressionInputs: expressionInputs
+            expressionInputs: expressionInputs,
+            wearables: wearableRuntime.state,
+            wearableMotion: wearableRuntime.motion
         )
         .modifier(PoseEffect(
             deformation: controller.dragDeformation,

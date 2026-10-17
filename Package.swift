@@ -18,8 +18,8 @@ let package = Package(
                 // Birthday props + letter text (UTF-8, never baked into
                 // artwork).
                 .copy("Resources/Birthday"),
-                // Seasonal + daily event props (Phase 6B).
-                .copy("Resources/Seasonal")
+                // Phase 7 final-gift artwork (wearables + meteor).
+                .copy("Resources/Gift")
             ]
         ),
         .testTarget(

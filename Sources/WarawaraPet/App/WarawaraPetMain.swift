@@ -13,20 +13,24 @@ enum WarawaraPetMain {
             // keeping the accepted gaze/face behavior.
             WarawaraTurnGeometry.turnDisabled = true
         }
-        if arguments.contains("--verify-event-assets") {
-            // Headless check against the packaged .app: every seasonal +
-            // daily prop must resolve and match the manifest hashes.
-            let store = SeasonalAssetStore.shared
+        if arguments.contains("--verify-gift-assets") {
+            // Headless check against the packaged .app: all Phase 7 gift
+            // artwork (wearables + meteor + birthday) must resolve and
+            // match their manifest hashes.
+            let store = GiftAssetStore.shared
             store.reset()
             let required = store.verifyAllRequiredAssets()
             let hashes = store.verifySHA256()
-            let optionalHashes = store.verifyOptionalAssets()
-            let optionalCount = store.optionalAssetsPresent()
-            if required.ok && hashes.ok && optionalHashes.ok {
-                print("EVENT_ASSETS_OK assets=\(SeasonalAssetStore.requiredFileNames.count) optional=\(optionalCount.present)/\(optionalCount.total)")
+            let splits = store.verifySplitIntegrity()
+            let birthday = BirthdayAssetStore.shared
+            birthday.reset()
+            let birthdayRequired = birthday.verifyAllRequiredAssets()
+            let birthdayHashes = birthday.verifySHA256()
+            if required.ok && hashes.ok && splits.ok && birthdayRequired.ok && birthdayHashes.ok {
+                print("GIFT_ASSETS_OK assets=\(GiftAssetStore.requiredFileNames.count) splits=ok birthday=ok")
                 exit(0)
             }
-            print("EVENT_ASSETS_FAIL required=[\(required.details)] hashes=[\(hashes.details)] optional=[\(optionalHashes.details)]")
+            print("GIFT_ASSETS_FAIL required=[\(required.details)] hashes=[\(hashes.details)] splits=[\(splits.details)] birthday=[\(birthdayRequired.details)/\(birthdayHashes.details)]")
             exit(1)
         }
         if let flagIndex = arguments.firstIndex(of: "--verify-birthday") {
@@ -85,52 +89,35 @@ enum WarawaraPetMain {
             // never consumes annual eligibility.
             appDelegate.requestBirthdayReplay()
         }
+        if arguments.contains("--replay-meteor") {
+            EventDiagnostics.smokeMode = false
+            appDelegate.requestMeteorReplay()
+        }
+        if arguments.contains("--replay-smoke") {
+            // Packaged-app CI smoke: replay the meteor and exit after the
+            // scene completes.
+            EventDiagnostics.smokeMode = true
+            appDelegate.requestMeteorReplay()
+        }
+        if arguments.contains("--debug-wear") {
+            let kind = arguments.firstIndex(of: "--debug-wear")
+                .flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil } ?? ""
+            if let wearable = WearableKind(debugArgument: kind) {
+                appDelegate.requestWearableDebug(wearable)
+            } else {
+                print("WEARABLE_DEBUG_UNKNOWN id=\(kind)")
+                print("valid: birthday-hat | christmas-hat | headphones | red-scarf")
+                exit(2)
+            }
+        }
         if arguments.contains("--help-events") {
             print(EventCommandLine.usage)
             exit(0)
-        }
-        if arguments.contains("--replay-event") {
-            if let kind = EventCommandLine.parseReplayEvent(arguments: arguments) {
-                appDelegate.requestSeasonalReplay(kind: kind)
-            } else {
-                printReplayUnknown(raw: EventCommandLine.rawReplayIdentifier(arguments: arguments) ?? "")
-                exit(2)
-            }
-        }
-        if arguments.contains("--replay-smoke") {
-            if let kind = EventCommandLine.parseReplaySmoke(arguments: arguments) {
-                EventReplayLog.smokeMode = true
-                appDelegate.requestSeasonalReplay(kind: kind)
-            } else {
-                printReplayUnknown(raw: EventCommandLine.rawSmokeIdentifier(arguments: arguments) ?? "")
-                exit(2)
-            }
-        }
-        if arguments.contains("--prop-debug") {
-            // Developer-only static layout diagnostic: pins one prop at
-            // its anchor, fully opaque, dumps real runtime geometry for
-            // six seconds, then exits. Not part of the gift experience.
-            if let kind = EventCommandLine.parsePropDebug(arguments: arguments) {
-                appDelegate.requestPropDebug(kind: kind)
-            } else {
-                let raw = arguments.firstIndex(of: "--prop-debug")
-                    .flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil } ?? ""
-                print("EVENT_PROP_DEBUG_UNKNOWN id=\(raw)")
-                print(EventCommandLine.usage)
-                exit(2)
-            }
         }
         if arguments.contains("--show-letter") {
             appDelegate.requestShowLetter()
         }
         app.run()
-    }
-
-    private static func printReplayUnknown(raw: String) {
-        let valid = SeasonalEventKind.allCases.map { $0.replayArgument }.joined(separator: " | ")
-        print("EVENT_REPLAY_UNKNOWN id=\(raw)")
-        print("valid identifiers: \(valid)")
-        print(EventCommandLine.usage)
     }
 
     /// Drives the production expression pipeline headlessly. Inputs: idle

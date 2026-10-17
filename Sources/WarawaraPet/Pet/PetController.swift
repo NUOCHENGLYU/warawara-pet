@@ -265,7 +265,7 @@ final class PetController: ObservableObject {
         eventAttentionActive = true
         eventAttentionDirection = direction
         curiosityDirection = direction
-        EventReplayLog.attentionAcquired(direction: direction)
+        EventDiagnostics.attentionAcquired(direction: direction)
     }
 
     /// Per-frame tracking update while event attention holds (moving
@@ -285,7 +285,7 @@ final class PetController: ObservableObject {
         eventAttentionDirection = nil
         curiosityDirection = .zero
         curiosityPose = .neutral
-        EventReplayLog.attentionReleased()
+        EventDiagnostics.attentionReleased()
         if stateMachine.state == .curious {
             _ = stateMachine.transition(to: .idle)
             state = stateMachine.state
