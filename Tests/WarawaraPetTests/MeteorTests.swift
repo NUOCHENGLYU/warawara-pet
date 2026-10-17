@@ -119,8 +119,9 @@ final class MeteorTests: XCTestCase {
         XCTAssertEqual(controller.phase, .flight)
         XCTAssertNotNil(controller.trajectory)
 
-        // Mid-flight frames are rendered with increasing progress.
-        for step in 1...5 {
+        // Mid-flight frames are rendered with increasing progress (never
+        // past the flight boundary).
+        for step in 1..<5 {
             let t = start.addingTimeInterval(
                 controller.timing.noticeDuration + controller.timing.flightDuration * Double(step) / 5
             )
