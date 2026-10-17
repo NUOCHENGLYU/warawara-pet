@@ -68,7 +68,7 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
         propPanel.setFrameOrigin(start)
         propPanel.alphaValue = 0
         propPanel.orderFrontRegardless()
-        verifyPresentedWindow(kind: kind, panel: propPanel)
+        verifyPresentedWindow(kind: kind, panel: propPanel, targetAlpha: 1)
         if kind == .paperAirplane {
             glideActive = true
             motionKind = kind
@@ -97,13 +97,22 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
 
     /// After ordering the prop panel front, VERIFY the presentation
     /// state and log it. Emits EVENT_WINDOW_PRESENTED only once the
-    /// production presenter actually holds a retained, nonzero window.
-    private func verifyPresentedWindow(kind: SeasonalEventKind, panel: BirthdayPropPanel) {
+    /// production presenter actually holds a retained, nonzero window
+    /// with populated content heading to a visible alpha.
+    private func verifyPresentedWindow(
+        kind: SeasonalEventKind,
+        panel: BirthdayPropPanel,
+        targetAlpha: CGFloat
+    ) {
         let frame = panel.frame
         guard !frame.isEmpty,
               frame.origin.x.isFinite, frame.origin.y.isFinite,
               frame.width.isFinite, frame.height.isFinite else {
             reject(id: kind.replayArgument, reason: "invalid-window-frame")
+            return
+        }
+        guard panel.contentView is NSHostingView<SeasonalPropView> else {
+            reject(id: kind.replayArgument, reason: "empty-content-view")
             return
         }
         EventReplayLog.visible(id: kind.replayArgument)
@@ -112,7 +121,7 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
             visible: panel.isVisible,
             frame: frame,
             level: panel.level,
-            alpha: panel.alphaValue
+            alpha: targetAlpha
         )
     }
 
@@ -157,14 +166,17 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
     // MARK: - Panel + motion
 
     private func ensurePanel(kind: SeasonalEventKind) {
-        guard propPanel == nil else {
-            updateContent(kind: kind)
-            return
+        if propPanel == nil {
+            let panel = BirthdayPropPanel(size: panelSize, interactive: false)
+            panel.alphaValue = 0
+            propPanel = panel
         }
-        let panel = BirthdayPropPanel(size: panelSize, interactive: false)
-        panel.alphaValue = 0
+        // updateContent MUST run after the panel is assigned: it builds
+        // the production view onto the live panel. (The original order
+        // called it while propPanel was still nil, leaving the window
+        // permanently empty — the exact "phases advance, nothing
+        // visible" failure.)
         updateContent(kind: kind)
-        propPanel = panel
     }
 
     private func updateContent(kind: SeasonalEventKind) {

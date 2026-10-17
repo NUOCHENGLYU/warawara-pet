@@ -391,7 +391,10 @@ final class SeasonalEventTests: XCTestCase {
             XCTAssertFalse(panel.frame.isEmpty, "\(kind): panel needs a real frame")
             XCTAssertTrue(panel.frame.origin.x.isFinite && panel.frame.origin.y.isFinite,
                           "\(kind): panel frame must be finite")
-            XCTAssertNotNil(panel.contentView, "\(kind): panel must host the production view")
+            XCTAssertTrue(
+                panel.contentView is NSHostingView<SeasonalPropView>,
+                "\(kind): panel must host the PRODUCTION prop view (empty panels are invisible)"
+            )
             XCTAssertEqual(panel.level, .floating, "\(kind): prop level must match the pet plane")
 
             // Every production PNG for the scene loads from the real
