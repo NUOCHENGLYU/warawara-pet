@@ -45,7 +45,7 @@ final class SeasonalPreviewGeneratorTests: XCTestCase {
             let prop = SeasonalPropView(
                 kind: kind, store: store,
                 primarySize: kind.primaryDisplayPoints,
-                showSecondary: kind == .cny
+                showSecondary: kind.showsSecondaryDecor
             )
             .frame(width: 220, height: 220)
             let content = ZStack {

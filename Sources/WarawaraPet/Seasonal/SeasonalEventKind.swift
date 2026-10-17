@@ -91,6 +91,20 @@ enum SeasonalEventKind: String, CaseIterable, Equatable {
         }
     }
 
+    /// Every production PNG the runtime scene must load and draw
+    /// (primary + secondaries + decorative). The presenter verifies all
+    /// of these at scene start.
+    var displayedAssets: [String] {
+        [primaryAsset] + secondaryAssets + decorativeAssets
+    }
+
+    /// Whether the scene carries secondary/decorative props in addition
+    /// to the primary one (CNY lanterns/plum, Christmas wreath, New Year
+    /// popper, CNY firecrackers).
+    var showsSecondaryDecor: Bool {
+        !secondaryAssets.isEmpty || !decorativeAssets.isEmpty
+    }
+
     /// Display size (points) for the primary prop, from the manifest
     /// hints tuned to the accepted pet scale.
     var primaryDisplayPoints: CGFloat {

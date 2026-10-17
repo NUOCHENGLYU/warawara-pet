@@ -17,6 +17,15 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
     private var motionTo = CGPoint.zero
     private var motionKind: SeasonalEventKind?
     private var glideActive = false
+    private var lastUpdateLog = Date(timeIntervalSince1970: 0)
+
+    /// Production-path observability (tests assert against the REAL
+    /// presenter, not a fake): presentation attempt count, rejected
+    /// attempts with reasons, presented window state, depart count.
+    private(set) var presentCallCount = 0
+    private(set) var rejectionReasons: [String] = []
+    private(set) var departCallCount = 0
+    var presentedPanel: BirthdayPropPanel? { propPanel }
 
     private let panelSize = CGSize(width: 220, height: 220)
 
@@ -38,10 +47,20 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
     }
 
     func presentProp() {
-        guard let kind = coordinator?.kind, let petFrame = windowController?.currentFrame,
-              petFrame != .zero else { return }
+        presentCallCount += 1
+        guard let kind = coordinator?.kind else {
+            reject(id: coordinator?.kind?.replayArgument ?? "?", reason: "no-event-kind")
+            return
+        }
+        guard let petFrame = windowController?.currentFrame, petFrame != .zero else {
+            reject(id: kind.replayArgument, reason: "invalid-geometry")
+            return
+        }
         ensurePanel(kind: kind)
-        guard let propPanel else { return }
+        guard let propPanel else {
+            reject(id: kind.replayArgument, reason: "panel-creation-failed")
+            return
+        }
         let visible = ScreenGeometry.visibleFrame(for: petFrame)
         let rest = restOrigin(petFrame: petFrame, visible: visible)
         let start = CGPoint(x: rest.x - 220, y: rest.y + 60)
@@ -54,7 +73,7 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
             motionStart = Date()
             propPanel.alphaValue = 0
             propPanel.orderFrontRegardless()
-            EventReplayLog.visible(id: kind.replayArgument)
+            verifyPresentedWindow(kind: kind, panel: propPanel)
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.4
                 propPanel.animator().alphaValue = 1
@@ -64,7 +83,7 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
             propPanel.setFrameOrigin(start)
             propPanel.alphaValue = 0
             propPanel.orderFrontRegardless()
-            EventReplayLog.visible(id: kind.replayArgument)
+            verifyPresentedWindow(kind: kind, panel: propPanel)
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.5
                 propPanel.animator().alphaValue = 1
@@ -77,6 +96,32 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
         }
         // The pet looks at the arriving prop.
         windowController?.setEventAttention(CGVector(dx: -0.45, dy: -0.1))
+    }
+
+    /// After ordering the prop panel front, VERIFY the presentation
+    /// state and log it. Emits EVENT_WINDOW_PRESENTED only once the
+    /// production presenter actually holds a retained, nonzero window.
+    private func verifyPresentedWindow(kind: SeasonalEventKind, panel: BirthdayPropPanel) {
+        let frame = panel.frame
+        guard !frame.isEmpty,
+              frame.origin.x.isFinite, frame.origin.y.isFinite,
+              frame.width.isFinite, frame.height.isFinite else {
+            reject(id: kind.replayArgument, reason: "invalid-window-frame")
+            return
+        }
+        EventReplayLog.visible(id: kind.replayArgument)
+        EventReplayLog.windowPresented(
+            id: kind.replayArgument,
+            visible: panel.isVisible,
+            frame: frame,
+            level: panel.level,
+            alpha: panel.alphaValue
+        )
+    }
+
+    private func reject(id: String, reason: String) {
+        rejectionReasons.append(reason)
+        EventReplayLog.sceneFailed(id: id, reason: reason)
     }
 
     func settleProp() {
@@ -98,6 +143,7 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
     }
 
     func departScene() {
+        departCallCount += 1
         stopMotionTimer()
         glideActive = false
         guard let propPanel else { return }
@@ -126,11 +172,23 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
 
     private func updateContent(kind: SeasonalEventKind) {
         guard let propPanel else { return }
+        // Load and VERIFY every production asset for this scene before
+        // building the view: a missing PNG must be loud, not a silently
+        // empty transparent window.
+        let assetNames = kind.displayedAssets
+        for name in assetNames {
+            if store.image(named: name) != nil {
+                EventReplayLog.assetLoaded(id: kind.replayArgument, name: name)
+            } else {
+                EventReplayLog.assetMissing(id: kind.replayArgument, name: name)
+                reject(id: kind.replayArgument, reason: "missing-asset:\(name)")
+            }
+        }
         let view = SeasonalPropView(
             kind: kind,
             store: store,
             primarySize: kind.primaryDisplayPoints,
-            showSecondary: false
+            showSecondary: kind.showsSecondaryDecor
         )
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: panelSize)
@@ -175,6 +233,13 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
         propPanel.setFrameOrigin(position)
         if t >= 1 {
             stopMotionTimer()
+        }
+        // Throttled heartbeat proving frame-by-frame delivery to the
+        // REAL presenter (1 Hz, no spam).
+        let now = Date()
+        if now.timeIntervalSince(lastUpdateLog) >= 1 {
+            lastUpdateLog = now
+            EventReplayLog.sceneUpdated(id: kind.replayArgument, phase: "approach")
         }
     }
 }

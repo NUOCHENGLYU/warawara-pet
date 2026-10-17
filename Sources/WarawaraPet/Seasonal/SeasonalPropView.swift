@@ -14,15 +14,8 @@ struct SeasonalPropView: View {
 
     var body: some View {
         ZStack {
-            if let secondary = kind.secondaryAssets.first,
-               showSecondary,
-               let image = store.image(named: secondary) {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: primarySize * 0.9, height: primarySize * 0.9)
-                    .offset(x: primarySize * 0.55, y: -primarySize * 0.45)
-                    .opacity(alive ? 0.9 : 0.25)
+            if showSecondary {
+                secondaryDecorations
             }
             if let image = store.image(named: kind.primaryAsset) {
                 Image(nsImage: image)
@@ -32,7 +25,6 @@ struct SeasonalPropView: View {
                     .scaleEffect(alive ? 1 : 0.92)
             }
         }
-        .rotationEffect(.radians(alive ? 0 : Double(kindSwayAmplitude) * 0.0))
         .offset(y: alive ? 0 : -4)
         .onAppear {
             withAnimation(.easeInOut(duration: 0.9)) {
@@ -41,12 +33,44 @@ struct SeasonalPropView: View {
         }
     }
 
-    /// Subtle per-kind in-panel sway for the living prop.
-    private var kindSwayAmplitude: Double {
-        switch kind {
-        case .cny, .christmas, .umbrella, .sprout: return 0.02
-        case .newYear, .hotCocoa, .paperAirplane: return 0.01
+    /// Secondary + decorative props with fixed per-slot offsets so every
+    /// scene's decoration is visible (CNY lantern/plum/firecrackers,
+    /// Christmas wreath, New Year popper).
+    @ViewBuilder
+    private var secondaryDecorations: some View {
+        ForEach(Array(kind.secondaryAssets.enumerated()), id: \.offset) { index, name in
+            if let image = store.image(named: name) {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: primarySize * 0.9, height: primarySize * 0.9)
+                    .offset(secondaryOffset(index: index))
+                    .opacity(alive ? 0.9 : 0.25)
+            }
         }
+        ForEach(Array(kind.decorativeAssets.enumerated()), id: \.offset) { index, name in
+            if let image = store.image(named: name) {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: primarySize * 0.95, height: primarySize * 0.95)
+                    .offset(decorativeOffset(index: index))
+                    .opacity(alive ? 0.95 : 0.25)
+            }
+        }
+    }
+
+    private func secondaryOffset(index: Int) -> CGSize {
+        switch index {
+        case 0: return CGSize(width: primarySize * 0.55, height: -primarySize * 0.45)
+        case 1: return CGSize(width: -primarySize * 0.55, height: -primarySize * 0.35)
+        default: return CGSize(width: 0, height: -primarySize * 0.55)
+        }
+    }
+
+    private func decorativeOffset(index: Int) -> CGSize {
+        CGSize(width: CGFloat(index) * primarySize * 0.9 - primarySize * 0.45,
+               height: primarySize * 0.5)
     }
 }
 

@@ -350,6 +350,156 @@ final class SeasonalEventTests: XCTestCase {
         }
     }
 
+    // MARK: - Production presentation path (every event ID)
+
+    /// For EVERY event ID the REAL production presenter must be reached:
+    /// a real prop panel created, real packaged PNGs loaded, a real
+    /// nonzero window frame presented, and cleanup run. This is the
+    /// regression that the silent no-op acceptance failure demanded.
+    func testEveryKindReachesRealProductionPresentation() {
+        for kind in SeasonalEventKind.allCases {
+            let zone = TimeZone(identifier: "America/New_York")!
+            let start = date(2027, 8, 1, 9, timeZone: zone)
+            let clock = FixedClock(now: start, calendar: calendar(zone))
+            let windowController = PetWindowController()
+            windowController.configureForTesting(
+                frame: CGRect(x: 300, y: 300, width: 180, height: 200)
+            )
+            let coordinator = SeasonalEventCoordinator(
+                clock: clock, persistence: SeasonalPersistence(defaults: defaults),
+                timing: .forKind(kind)
+            )
+            let presenter = SeasonalEventPresenter(
+                windowController: windowController, coordinator: coordinator, store: .shared
+            )
+            coordinator.presenter = presenter
+
+            coordinator.requestTrigger(kind, trigger: .replay)
+            coordinator.servicePendingTrigger()
+            XCTAssertEqual(coordinator.phase, .noticing, "\(kind): replay must begin")
+
+            let timing = SeasonalTiming.forKind(kind)
+            coordinator.advance(at: start.addingTimeInterval(timing.noticeDuration + 0.2))
+            XCTAssertEqual(coordinator.phase, .approach, "\(kind): scene must reach presentation")
+            XCTAssertEqual(presenter.presentCallCount, 1, "\(kind): production presenter must be invoked")
+            XCTAssertTrue(presenter.rejectionReasons.isEmpty,
+                          "\(kind): presentation must not be rejected: \(presenter.rejectionReasons)")
+            guard let panel = presenter.presentedPanel else {
+                XCTFail("\(kind): real prop panel missing")
+                continue
+            }
+            XCTAssertFalse(panel.frame.isEmpty, "\(kind): panel needs a real frame")
+            XCTAssertTrue(panel.frame.origin.x.isFinite && panel.frame.origin.y.isFinite,
+                          "\(kind): panel frame must be finite")
+            XCTAssertNotNil(panel.contentView, "\(kind): panel must host the production view")
+            XCTAssertEqual(panel.level, .floating, "\(kind): prop level must match the pet plane")
+
+            // Every production PNG for the scene loads from the real
+            // packaged bundle.
+            for asset in kind.displayedAssets {
+                XCTAssertNotNil(SeasonalAssetStore.shared.image(named: asset),
+                                "\(kind): production PNG \(asset) must load")
+            }
+
+            // Scene remains active for a meaningful interval, then
+            // cleanup (depart) runs.
+            let celebrateAt = start.addingTimeInterval(
+                timing.noticeDuration + timing.approachDuration + timing.presentDuration + 0.2
+            )
+            coordinator.advance(at: celebrateAt)
+            XCTAssertEqual(coordinator.phase, .celebrate, "\(kind): present duration must hold the prop")
+            coordinator.advance(at: celebrateAt.addingTimeInterval(
+                timing.celebrateDuration + timing.departDuration + 0.3
+            ))
+            XCTAssertEqual(coordinator.phase, .idle, "\(kind): scene must complete and reset")
+            XCTAssertGreaterThanOrEqual(presenter.departCallCount, 1, "\(kind): cleanup must depart the prop")
+            XCTAssertNil(coordinator.presentationFault, "\(kind): no presentation fault")
+        }
+    }
+
+    /// Coordinator progress without ANY presentation callback is a
+    /// failure, not a completed event.
+    func testCoordinatorProgressWithoutPresenterIsAFault() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        let start = date(2027, 8, 1, 9, timeZone: zone)
+        let clock = FixedClock(now: start, calendar: calendar(zone))
+        let coordinator = SeasonalEventCoordinator(
+            clock: clock, persistence: SeasonalPersistence(defaults: defaults),
+            timing: .forKind(.umbrella)
+        )
+        // NO presenter attached on purpose.
+        coordinator.requestTrigger(.umbrella, trigger: .replay)
+        coordinator.servicePendingTrigger()
+        coordinator.advance(at: start.addingTimeInterval(
+            SeasonalTiming.forKind(.umbrella).noticeDuration + 0.2
+        ))
+        XCTAssertEqual(coordinator.phase, .approach, "phases still advance")
+        XCTAssertEqual(coordinator.presentationFault, "no-presenter",
+                       "phase progress without a presentation path must be flagged")
+    }
+
+    /// A presenter that cannot present (zero pet frame) must REJECT
+    /// loudly instead of silently succeeding.
+    func testInvalidGeometryRejectsPresentation() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        let start = date(2027, 8, 1, 9, timeZone: zone)
+        let clock = FixedClock(now: start, calendar: calendar(zone))
+        let windowController = PetWindowController() // no panel -> zero frame
+        let coordinator = SeasonalEventCoordinator(
+            clock: clock, persistence: SeasonalPersistence(defaults: defaults),
+            timing: .forKind(.sprout)
+        )
+        let presenter = SeasonalEventPresenter(
+            windowController: windowController, coordinator: coordinator, store: .shared
+        )
+        coordinator.presenter = presenter
+
+        coordinator.requestTrigger(.sprout, trigger: .replay)
+        coordinator.servicePendingTrigger()
+        coordinator.advance(at: start.addingTimeInterval(
+            SeasonalTiming.forKind(.sprout).noticeDuration + 0.2
+        ))
+        XCTAssertEqual(presenter.presentCallCount, 1, "the presenter was reached")
+        XCTAssertTrue(presenter.rejectionReasons.contains("invalid-geometry"),
+                      "zero-frame presentation must be rejected, not faked")
+    }
+
+    /// Scene minimums: every scene must draw at least one production PNG
+    /// and holiday scenes must include their decorations.
+    func testDisplayedAssetsCoverEverySceneMinimum() {
+        XCTAssertEqual(Set(SeasonalEventKind.cny.displayedAssets), Set([
+            "cny_hongbao.png", "cny_lantern.png", "cny_plum_branch.png",
+            "cny_firecracker_hanging.png"
+        ]), "CNY must show hongbao + lantern/plum decorations")
+        XCTAssertEqual(Set(SeasonalEventKind.christmas.displayedAssets), Set([
+            "xmas_gift.png", "xmas_wreath.png"
+        ]), "Christmas must show gift + wreath")
+        XCTAssertEqual(Set(SeasonalEventKind.newYear.displayedAssets), Set([
+            "newyear_calendar_jan1.png", "newyear_party_popper.png"
+        ]), "New Year must show calendar + popper")
+        for daily in [SeasonalEventKind.umbrella, .hotCocoa, .sprout, .paperAirplane] {
+            XCTAssertEqual(daily.displayedAssets.count, 1)
+            XCTAssertTrue(daily.showsSecondaryDecor == false)
+        }
+        XCTAssertTrue(SeasonalEventKind.cny.showsSecondaryDecor)
+        XCTAssertTrue(SeasonalEventKind.christmas.showsSecondaryDecor)
+        XCTAssertTrue(SeasonalEventKind.newYear.showsSecondaryDecor)
+    }
+
+    /// Scene durations must sit inside the per-kind spec ranges so every
+    /// event is visible for a meaningful interval.
+    func testSceneTimingsFitSpecDurationRanges() {
+        for kind in SeasonalEventKind.allCases {
+            let timing = SeasonalTiming.forKind(kind)
+            let total = timing.noticeDuration + timing.approachDuration
+                + timing.presentDuration + timing.celebrateDuration + timing.departDuration
+            XCTAssertTrue(
+                kind.durationRange.contains(total),
+                "\(kind): total \(total)s must fit \(kind.durationRange)"
+            )
+        }
+    }
+
     // MARK: - Runtime replay regression coverage (the silent no-op fix)
 
     func testCommandLineParsesEveryKindAndRejectsUnknown() {

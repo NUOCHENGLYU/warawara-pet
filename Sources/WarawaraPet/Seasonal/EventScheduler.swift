@@ -68,6 +68,7 @@ final class EventScheduler {
             }
             coordinators[kind] = coordinator
             presenters[kind] = presenter
+            EventReplayLog.presenterAttached(id: kind.replayArgument)
         }
     }
 

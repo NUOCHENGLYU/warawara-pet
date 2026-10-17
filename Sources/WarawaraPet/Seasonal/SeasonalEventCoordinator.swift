@@ -30,15 +30,15 @@ struct SeasonalTiming {
         switch kind {
         case .cny, .christmas:
             timing = SeasonalTiming(
-                noticeDuration: 2.4, approachDuration: 3.4, presentDuration: 5.0,
-                celebrateDuration: 5.0, departDuration: 3.0,
-                celebrationHopOffsets: [0.5, 2.6]
+                noticeDuration: 2.4, approachDuration: 3.4, presentDuration: 8.0,
+                celebrateDuration: 8.0, departDuration: 3.4,
+                celebrationHopOffsets: [0.5, 2.6, 5.0]
             )
         case .newYear:
             timing = SeasonalTiming(
-                noticeDuration: 2.0, approachDuration: 2.8, presentDuration: 3.5,
-                celebrateDuration: 3.5, departDuration: 2.2,
-                celebrationHopOffsets: [0.4, 1.8]
+                noticeDuration: 2.0, approachDuration: 2.8, presentDuration: 7.0,
+                celebrateDuration: 6.0, departDuration: 2.2,
+                celebrationHopOffsets: [0.4, 2.4, 4.2]
             )
         case .umbrella:
             timing = SeasonalTiming(
@@ -105,6 +105,11 @@ final class SeasonalEventCoordinator {
     /// automatically once the current scene finishes (never silently
     /// dropped).
     private var deferredReplay: (SeasonalEventKind, Trigger)?
+
+    /// Non-nil when a scene progressed past .noticing without any real
+    /// presentation callback (no presenter attached). Phase progress
+    /// without a presentation path is a failure, not a completed event.
+    private(set) var presentationFault: String?
 
     var isRunning: Bool { phase != .idle }
 
@@ -188,6 +193,10 @@ final class SeasonalEventCoordinator {
         case .noticing:
             if elapsed >= timing.noticeDuration {
                 phase = .approach
+                if presenter == nil, presentationFault == nil, let kind {
+                    presentationFault = "no-presenter"
+                    EventReplayLog.sceneFailed(id: kind.replayArgument, reason: "no-presenter")
+                }
                 presenter?.presentProp()
             }
         case .approach:
@@ -240,6 +249,7 @@ final class SeasonalEventCoordinator {
             for observer in completionObservers {
                 observer(kind, trigger)
             }
+            EventReplayLog.finished(id: kind.replayArgument)
             EventReplayLog.completed(id: kind.replayArgument)
         }
         presenter?.clearAttention()
