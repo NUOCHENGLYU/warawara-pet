@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var petWindowController: PetWindowController?
@@ -95,11 +96,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduler.birthdayCoordinator = birthdayCoordinator
         scheduler.isPetBusy = { [weak windowController] in
             guard let windowController else { return false }
-            return windowController.isPetDragging || windowController.isPetSleeping
+            return windowController.isPetDragging
+                || windowController.isPetSleeping
+                || LetterWindowController.isOpen
         }
         scheduler.isBirthdayBlocking = { [weak birthdayCoordinator] in
             guard let birthdayCoordinator else { return false }
             return birthdayCoordinator.isRunning || birthdayCoordinator.shouldTriggerAutomatically
+        }
+        if EventReplayLog.smokeMode {
+            // CI smoke mode: exit as soon as the replayed scene completes.
+            for coordinator in scheduler.coordinators.values {
+                coordinator.completionObservers.append { kind, trigger in
+                    guard trigger == .replay else { return }
+                    EventReplayLog.completed(id: kind.replayArgument)
+                    exit(0)
+                }
+            }
         }
         eventScheduler = scheduler
         for kind in pendingSeasonalReplays {
@@ -121,6 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let scheduler = eventScheduler {
             scheduler.requestReplay(kind: kind)
         } else {
+            EventReplayLog.ready(id: kind.replayArgument)
             pendingSeasonalReplays.append(kind)
         }
     }

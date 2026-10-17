@@ -63,7 +63,7 @@ final class EventScheduler {
             )
             coordinator.presenter = presenter
             coordinator.isPetBusy = { [weak self] in self?.isPetBusy?() ?? false }
-            coordinator.onSceneCompleted = { [weak self] kind, trigger in
+            coordinator.completionObservers.append { [weak self] kind, trigger in
                 self?.sceneCompleted(kind: kind, trigger: trigger)
             }
             coordinators[kind] = coordinator
@@ -88,11 +88,15 @@ final class EventScheduler {
 
         // Replays requested before wiring are consumed first.
         for kind in pendingReplayKinds {
+            EventReplayLog.ready(id: kind.replayArgument)
             coordinators[kind]?.requestTrigger(kind, trigger: .replay)
         }
         pendingReplayKinds.removeAll()
         for coordinator in coordinators.values {
             coordinator.servicePendingTrigger()
+            // THE playback clock: seasonal/daily scenes advance here.
+            // (The birthday coordinator has its own advance loop.)
+            coordinator.advance(at: now)
         }
 
         guard !(isBirthdayBlocking?() ?? false), !isAnyEventRunning else { return }
@@ -156,6 +160,7 @@ final class EventScheduler {
     // MARK: - Replay
 
     func requestReplay(kind: SeasonalEventKind) {
+        EventReplayLog.requested(id: kind.replayArgument)
         if let coordinator = coordinators[kind] {
             coordinator.requestTrigger(kind, trigger: .replay)
         } else {

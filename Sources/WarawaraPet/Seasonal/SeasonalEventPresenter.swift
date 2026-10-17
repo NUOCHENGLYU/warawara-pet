@@ -54,6 +54,7 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
             motionStart = Date()
             propPanel.alphaValue = 0
             propPanel.orderFrontRegardless()
+            EventReplayLog.visible(id: kind.replayArgument)
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.4
                 propPanel.animator().alphaValue = 1
@@ -63,6 +64,7 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
             propPanel.setFrameOrigin(start)
             propPanel.alphaValue = 0
             propPanel.orderFrontRegardless()
+            EventReplayLog.visible(id: kind.replayArgument)
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.5
                 propPanel.animator().alphaValue = 1

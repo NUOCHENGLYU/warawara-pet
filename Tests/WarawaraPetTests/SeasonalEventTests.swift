@@ -349,5 +349,134 @@ final class SeasonalEventTests: XCTestCase {
                            "\(name) corner must be transparent")
         }
     }
+
+    // MARK: - Runtime replay regression coverage (the silent no-op fix)
+
+    func testCommandLineParsesEveryKindAndRejectsUnknown() {
+        for kind in SeasonalEventKind.allCases {
+            let parsed = EventCommandLine.parseReplayEvent(arguments: ["--replay-event", kind.replayArgument])
+            XCTAssertEqual(parsed, kind, "\(kind.replayArgument) must parse")
+        }
+        XCTAssertNil(EventCommandLine.parseReplayEvent(arguments: ["--replay-event", "nope"]))
+        XCTAssertNil(EventCommandLine.parseReplayEvent(arguments: []))
+        XCTAssertNil(EventCommandLine.parseReplayEvent(arguments: ["--replay-event"]))
+        XCTAssertTrue(EventCommandLine.usage.contains("--replay-event"))
+        XCTAssertTrue(EventCommandLine.usage.contains("paper-airplane"))
+        // Smoke flag parses identically.
+        XCTAssertEqual(EventCommandLine.parseReplaySmoke(arguments: ["--replay-smoke", "cny"]), .cny)
+    }
+
+    func testSchedulerTickAdvancesReplayScenes() {
+        // The production playback clock: WITHOUT scheduler.advance the
+        // scene sits in .noticing forever and nothing ever becomes
+        // visible — the exact silent no-op the user reported.
+        let zone = TimeZone(identifier: "America/New_York")!
+        let launch = date(2027, 8, 1, 9, timeZone: zone)
+        let clock = FixedClock(now: launch, calendar: calendar(zone))
+        let persistence = SeasonalPersistence(defaults: defaults)
+        let scheduler = EventScheduler(clock: clock, persistence: persistence)
+        scheduler.configure(windowController: PetWindowController())
+        scheduler.isPetBusy = { false }
+        scheduler.isBirthdayBlocking = { false }
+
+        scheduler.requestReplay(kind: .umbrella)
+        scheduler.tick()
+        let coordinator = scheduler.coordinators[.umbrella]
+        XCTAssertEqual(coordinator?.phase, .noticing, "replay must start after the first tick")
+
+        // Advance the clock past the notice duration; the next tick must
+        // push the scene into .approach (visible prop presentation).
+        clock.currentNow = launch.addingTimeInterval(SeasonalTiming.forKind(.umbrella).noticeDuration + 0.5)
+        scheduler.tick()
+        XCTAssertEqual(coordinator?.phase, .approach,
+                       "the scheduler must advance scenes so props become visible")
+    }
+
+    func testReplayBypassesQuietHoursAndUptimePolicy() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        // 01:00 local: inside quiet hours AND zero app uptime.
+        let launch = date(2027, 8, 1, 1, timeZone: zone)
+        let clock = FixedClock(now: launch, calendar: calendar(zone))
+        let persistence = SeasonalPersistence(defaults: defaults)
+        let scheduler = EventScheduler(clock: clock, persistence: persistence)
+        scheduler.configure(windowController: PetWindowController())
+        scheduler.isPetBusy = { false }
+        scheduler.isBirthdayBlocking = { false }
+
+        scheduler.requestReplay(kind: .hotCocoa)
+        scheduler.tick()
+        XCTAssertEqual(scheduler.coordinators[.hotCocoa]?.phase, .noticing,
+                       "manual replay must ignore quiet hours and first-launch delays")
+        // Replay must not touch daily history.
+        XCTAssertTrue(persistence.dailyHistory().isEmpty)
+        XCTAssertNil(persistence.lastDailyCompletion)
+    }
+
+    func testReplayDuringRunningSceneDefersThenRuns() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        let start = date(2027, 8, 1, 9, timeZone: zone)
+        let clock = FixedClock(now: start, calendar: calendar(zone))
+        let persistence = SeasonalPersistence(defaults: defaults)
+        let coordinator = SeasonalEventCoordinator(
+            clock: clock, persistence: persistence, timing: .forKind(.cny)
+        )
+        final class Spy: SeasonalEventPresenting {
+            func noticeScene() {}
+            func presentProp() {}
+            func settleProp() {}
+            func celebrateScene() {}
+            func departScene() {}
+            func clearAttention() {}
+        }
+        coordinator.presenter = Spy()
+
+        coordinator.requestTrigger(.cny, trigger: .replay)
+        coordinator.servicePendingTrigger()
+        XCTAssertEqual(coordinator.phase, .noticing)
+
+        // A second replay during the running scene is deferred, not dropped.
+        coordinator.requestTrigger(.umbrella, trigger: .replay)
+
+        // Complete the cny scene.
+        let timing = SeasonalTiming.forKind(.cny)
+        coordinator.advance(at: start.addingTimeInterval(timing.noticeDuration + timing.approachDuration + timing.presentDuration + 0.1))
+        XCTAssertEqual(coordinator.phase, .celebrate)
+        coordinator.advance(at: start.addingTimeInterval(
+            timing.noticeDuration + timing.approachDuration + timing.presentDuration
+                + timing.celebrateDuration + timing.departDuration + 0.2
+        ))
+        XCTAssertEqual(coordinator.phase, .idle)
+
+        // The deferred replay now runs automatically on the next service.
+        coordinator.servicePendingTrigger()
+        XCTAssertEqual(coordinator.kind, .umbrella)
+        XCTAssertEqual(coordinator.phase, .noticing)
+    }
+
+    func testVisibleMarkerFiresOnRealPresentationPath() {
+        let windowController = PetWindowController()
+        let zone = TimeZone(identifier: "America/New_York")!
+        let now = date(2027, 8, 1, 9, timeZone: zone)
+        let clock = FixedClock(now: now, calendar: calendar(zone))
+        let coordinator = SeasonalEventCoordinator(
+            clock: clock, persistence: SeasonalPersistence(defaults: defaults),
+            timing: .forKind(.umbrella)
+        )
+        // A window controller without a panel has a zero frame, so the
+        // presenter cannot present — the coordinator must still advance
+        // phases; the VISIBLE marker is tied to presentProp + orderFront
+        // in the real app (smoke-tested against the packaged binary).
+        let presenter = SeasonalEventPresenter(
+            windowController: windowController, coordinator: coordinator, store: .shared
+        )
+        coordinator.presenter = presenter
+        coordinator.requestTrigger(.umbrella, trigger: .replay)
+        coordinator.servicePendingTrigger()
+        XCTAssertEqual(coordinator.phase, .noticing)
+        coordinator.advance(at: now.addingTimeInterval(
+            SeasonalTiming.forKind(.umbrella).noticeDuration + 0.2
+        ))
+        XCTAssertEqual(coordinator.phase, .approach, "presentProp must be reached")
+    }
 }
 

@@ -83,17 +83,30 @@ enum WarawaraPetMain {
             // never consumes annual eligibility.
             appDelegate.requestBirthdayReplay()
         }
-        if let replayEventIndex = arguments.firstIndex(of: "--replay-event") {
-            let kindArgument: String
-            if arguments.count > replayEventIndex + 1 {
-                kindArgument = arguments[replayEventIndex + 1]
-            } else {
-                kindArgument = ""
-            }
-            if let kind = SeasonalEventKind.fromReplayArgument(kindArgument) {
+        if arguments.contains("--help-events") {
+            print(EventCommandLine.usage)
+            exit(0)
+        }
+        if arguments.contains("--replay-event") {
+            if let kind = EventCommandLine.parseReplayEvent(arguments: arguments) {
                 appDelegate.requestSeasonalReplay(kind: kind)
             } else {
-                NSLog("[WarawaraPet] unknown --replay-event kind '%@'", kindArgument)
+                let raw = EventCommandLine.rawReplayIdentifier(arguments: arguments) ?? ""
+                print("EVENT_REPLAY_UNKNOWN id=\(raw)")
+                print("valid identifiers: \(SeasonalEventKind.allCases.map(\\.replayArgument).joined(separator: " | "))")
+                print(EventCommandLine.usage)
+                exit(2)
+            }
+        }
+        if arguments.contains("--replay-smoke") {
+            if let kind = EventCommandLine.parseReplaySmoke(arguments: arguments) {
+                EventReplayLog.smokeMode = true
+                appDelegate.requestSeasonalReplay(kind: kind)
+            } else {
+                let raw = EventCommandLine.rawSmokeIdentifier(arguments: arguments) ?? ""
+                print("EVENT_REPLAY_UNKNOWN id=\(raw)")
+                print(EventCommandLine.usage)
+                exit(2)
             }
         }
         if arguments.contains("--show-letter") {

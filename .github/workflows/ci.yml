@@ -50,6 +50,29 @@ jobs:
           echo "$EVENTS"
           echo "$EVENTS" | grep -q "EVENT_ASSETS_OK" || { echo "seasonal assets not loaded"; exit 1; }
 
+      - name: Smoke-test event replays (packaged app)
+        run: |
+          BIN="dist/WarawaraPet.app/Contents/MacOS/WarawaraPet"
+          for KIND in cny christmas newyear umbrella hot-cocoa sprout paper-airplane; do
+            echo "== replay-smoke $KIND =="
+            "$BIN" --replay-smoke "$KIND" > "/tmp/replay-$KIND.log" 2>&1 &
+            PID=$!
+            for i in $(seq 1 120); do
+              if ! kill -0 $PID 2>/dev/null; then break; fi
+              sleep 1
+            done
+            if kill -0 $PID 2>/dev/null; then
+              kill $PID 2>/dev/null
+              echo "TIMEOUT waiting for $KIND"
+              cat "/tmp/replay-$KIND.log"
+              exit 1
+            fi
+            grep -q "EVENT_REPLAY_STARTED" "/tmp/replay-$KIND.log" || { echo "no STARTED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
+            grep -q "EVENT_REPLAY_VISIBLE" "/tmp/replay-$KIND.log" || { echo "no VISIBLE for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
+            grep -q "EVENT_REPLAY_COMPLETED" "/tmp/replay-$KIND.log" || { echo "no COMPLETED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
+            echo "SMOKE_OK $KIND"
+          done
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

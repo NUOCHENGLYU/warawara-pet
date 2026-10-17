@@ -93,14 +93,18 @@ final class SeasonalEventCoordinator {
     let persistence: SeasonalPersistence
     weak var presenter: SeasonalEventPresenting?
     var isPetBusy: (() -> Bool)?
-    /// Called when a scene reaches its recoverable completion (kind +
-    /// trigger). The scheduler uses this for daily history.
-    var onSceneCompleted: ((SeasonalEventKind, Trigger) -> Void)?
+    /// Completion observers (scheduler appends the daily-history hook;
+    /// smoke tests append the exit hook).
+    var completionObservers: [(SeasonalEventKind, Trigger) -> Void] = []
 
     private var startedAt: Date?
     private var celebrateStartedAt: Date?
     private var firedHops: Set<Int> = []
     private var pendingTrigger: Trigger?
+    /// A replay that arrived while another scene was running: it starts
+    /// automatically once the current scene finishes (never silently
+    /// dropped).
+    private var deferredReplay: (SeasonalEventKind, Trigger)?
 
     var isRunning: Bool { phase != .idle }
 
@@ -117,9 +121,20 @@ final class SeasonalEventCoordinator {
     // MARK: - Triggering
 
     func requestTrigger(_ kind: SeasonalEventKind, trigger: Trigger) {
-        guard phase == .idle else { return }
+        guard phase == .idle else {
+            if trigger == .replay {
+                // Explicit deterministic handling: defer the replay until
+                // the running scene finishes. Never silently ignore.
+                EventReplayLog.rejected(id: kind.replayArgument, reason: "event-running-deferred")
+                deferredReplay = (kind, trigger)
+            } else {
+                EventReplayLog.rejected(id: kind.replayArgument, reason: "event-running")
+            }
+            return
+        }
         self.kind = kind
         pendingTrigger = trigger
+        EventReplayLog.accepted(id: kind.replayArgument)
     }
 
     func requestCancellation() {
@@ -142,6 +157,7 @@ final class SeasonalEventCoordinator {
         celebrateStartedAt = nil
         firedHops.removeAll()
         phase = .noticing
+        EventReplayLog.started(id: kind.replayArgument)
         presenter?.noticeScene()
     }
 
@@ -158,6 +174,9 @@ final class SeasonalEventCoordinator {
             let before = phase
             stepOnce(at: now, startedAt: startedAt)
             if phase == before { break }
+            if let kind {
+                EventReplayLog.phase(id: kind.replayArgument, phase: String(describing: phase))
+            }
         }
     }
 
@@ -218,7 +237,10 @@ final class SeasonalEventCoordinator {
             ))
         }
         if let kind, let trigger {
-            onSceneCompleted?(kind, trigger)
+            for observer in completionObservers {
+                observer(kind, trigger)
+            }
+            EventReplayLog.completed(id: kind.replayArgument)
         }
         presenter?.clearAttention()
         reset()
@@ -228,6 +250,9 @@ final class SeasonalEventCoordinator {
         presenter?.clearAttention()
         presenter?.departScene()
         phase = .cancelled
+        if let kind {
+            EventReplayLog.cancelled(id: kind.replayArgument)
+        }
         reset()
     }
 
@@ -238,5 +263,13 @@ final class SeasonalEventCoordinator {
         trigger = nil
         kind = nil
         phase = .idle
+        // A deferred replay now starts immediately: the current scene
+        // finished cleanly and the infrastructure is ready.
+        if let deferred = deferredReplay {
+            deferredReplay = nil
+            self.kind = deferred.0
+            pendingTrigger = deferred.1
+        }
     }
 }
+
