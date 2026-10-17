@@ -56,6 +56,30 @@ enum FirstLaunchState: String {
     }
 }
 
+/// Non-destructive inspection of the REAL profile's first-launch
+/// decision (--diagnose-first-launch). Never writes anything.
+enum FirstLaunchDiagnosis {
+    static func run(defaults: UserDefaults = .standard) {
+        let state = FirstLaunchState.load(defaults: defaults)
+        EventDiagnostics.emit("FIRST_LAUNCH_PROFILE bundle=\(Bundle.main.bundleIdentifier ?? "-") suite=\(defaults == .standard ? "standard" : "custom")")
+        EventDiagnostics.emit("FIRST_LAUNCH_LEGACY_STATE present=\(defaults.object(forKey: FirstLaunchState.legacyCompletedKey) != nil)")
+        EventDiagnostics.emit("FIRST_LAUNCH_ELIGIBLE \(state == .fresh)")
+        EventDiagnostics.emit("FIRST_LAUNCH_\(state.rawValue.uppercased())")
+        EventDiagnostics.emit("FIRST_LAUNCH_PET_POSITION present=\(defaults.object(forKey: "pet.position.x") != nil)")
+        let clock = SystemBirthdayClock()
+        EventDiagnostics.emit("FIRST_LAUNCH_TODAY_IS_BIRTHDAY \(BirthdayDateMath.isBirthday(date: clock.now(), calendar: clock.calendar))")
+        if state == .fresh {
+            EventDiagnostics.emit("FIRST_LAUNCH_DECISION play-on-next-normal-launch")
+        } else if state == .pending {
+            EventDiagnostics.emit("FIRST_LAUNCH_DECISION resume-pending")
+        } else if state == .running {
+            EventDiagnostics.emit("FIRST_LAUNCH_DECISION replay-interrupted")
+        } else {
+            EventDiagnostics.emit("FIRST_LAUNCH_DECISION already-completed")
+        }
+    }
+}
+
 final class FirstLaunchCelebration {
     private let coordinator: BirthdayEventCoordinator
     private weak var windowController: PetWindowController?
@@ -109,6 +133,7 @@ final class FirstLaunchCelebration {
             } else if busy {
                 // Never request while the pet is busy; stay fresh and the
                 // periodic evaluation retries.
+                EventDiagnostics.firstLaunch("SUPPRESSED reason=pet-busy")
             } else if isBirthday {
                 // October 17: the annual event owns today. Watch it and
                 // never double-trigger.
@@ -125,6 +150,8 @@ final class FirstLaunchCelebration {
             } else if !isBirthday && !busy {
                 // Interrupted/deferred pending: recover with a safe replay.
                 requestTriggerIfNeeded()
+            } else if busy {
+                EventDiagnostics.firstLaunch("SUPPRESSED reason=pet-busy")
             }
         case .running:
             if coordinator.isRunning {
@@ -156,13 +183,14 @@ final class FirstLaunchCelebration {
     private func requestTriggerIfNeeded() {
         guard !coordinator.isRunning else { return }
         guard attempts < maxAttempts else {
-            EventDiagnostics.firstLaunch("DEFERRED_TIMEOUT")
+            EventDiagnostics.firstLaunch("SUPPRESSED reason=attempts-exhausted")
             return
         }
         attempts += 1
         // The trigger is pending until the birthday tick services it;
         // evaluate() observes isRunning and advances the state machine.
         coordinator.requestTrigger(.replay)
+        EventDiagnostics.firstLaunch("PENDING")
     }
 
     private func transition(to newState: FirstLaunchState) {
@@ -174,7 +202,7 @@ final class FirstLaunchCelebration {
         }
         if newState == .running {
             sawCelebrationRunningThisSession = true
-            EventDiagnostics.firstLaunch("RUNNING")
+            EventDiagnostics.firstLaunch("STARTED")
         }
     }
 }

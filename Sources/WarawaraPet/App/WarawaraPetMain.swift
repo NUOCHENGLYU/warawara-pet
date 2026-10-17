@@ -105,6 +105,12 @@ enum WarawaraPetMain {
             print("FIRST_LAUNCH_DEBUG_RESET")
             exit(0)
         }
+        if arguments.contains("--diagnose-first-launch") {
+            // Non-destructive inspection of the REAL profile's
+            // first-launch decision. Never writes anything.
+            FirstLaunchDiagnosis.run()
+            exit(0)
+        }
         if arguments.contains("--help-events") {
             print(EventCommandLine.usage)
             exit(0)

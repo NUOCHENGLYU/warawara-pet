@@ -25,9 +25,14 @@ final class MeteorEventPresenter: MeteorEventPresenting {
     private var lastFrameLog = Date(timeIntervalSince1970: 0)
     private let viewState = MeteorViewState()
 
-    /// Meteor painted content width in points (~1.35 x pet height — a
-    /// real sky object, not a desktop prop).
-    private let contentWidth: CGFloat = 150
+    /// Meteor painted content length (star + tail) in points. The star
+    /// head lands in the 24-45 pt apparent-diameter range with a
+    /// proportionate tail.
+    private let paintedTargetLengthPt: CGFloat = 160
+    /// Painted bbox of the approved meteor sprite (manifest: right=881,
+    /// top=199, bottom=900) — the ONLY content measurement used.
+    private let paintedWidthPx: CGFloat = 881
+    private let canvasPx: CGFloat = 1024
 
     /// Test access to the production panel.
     var debugPanel: BirthdayPropPanel? { panel }
@@ -213,8 +218,20 @@ final class MeteorEventPresenter: MeteorEventPresenting {
 
     private func ensurePanel() {
         guard panel == nil else { return }
-        let canvasScale = contentWidth / (881.0 / 1024)
-        let canvasPt = 1024 * canvasScale
+        // ONE consistent source-pixel-to-point scale. The previous code
+        // divided by (881/1024) AND multiplied by 1024, producing a
+        // ~178,000-point canvas: a giant translucent panel stretched
+        // across the screen (the yellow/white block artifact).
+        let scale = paintedTargetLengthPt / paintedWidthPx
+        let canvasPt = canvasPx * scale
+        // Sanity: the meteor canvas must stay a small sky object.
+        guard canvasPt > 60, canvasPt < 400 else {
+            EventDiagnostics.emit(String(
+                format: "METEOR_SCALE_INVALID canvasPt=%.1f scale=%.4f",
+                canvasPt, scale
+            ))
+            return
+        }
         let panelSize = CGSize(width: canvasPt + 28, height: canvasPt + 28)
         let newPanel = BirthdayPropPanel(size: panelSize, interactive: false)
         if let image = store.image(named: "meteor_celfilm.png") {
@@ -227,6 +244,15 @@ final class MeteorEventPresenter: MeteorEventPresenting {
         }
         newPanel.alphaValue = 0
         panel = newPanel
+        if let screen = newPanel.screen {
+            EventDiagnostics.emit(String(
+                format: "METEOR_RENDER_DEBUG bbox=0,199,881,900 logicalSize=%.1fx%.1f scale=%.4f backingScale=%.2f panelFrame=%.0f,%.0f,%.0f,%.0f alpha=%.2f",
+                canvasPt, canvasPt, scale, screen.backingScaleFactor,
+                newPanel.frame.minX, newPanel.frame.minY,
+                newPanel.frame.width, newPanel.frame.height,
+                newPanel.alphaValue
+            ))
+        }
         EventDiagnostics.emit(String(
             format: "METEOR_PANEL_CREATED size=%.0fx%.0f contentView=%d",
             panelSize.width, panelSize.height, newPanel.contentView != nil ? 1 : 0

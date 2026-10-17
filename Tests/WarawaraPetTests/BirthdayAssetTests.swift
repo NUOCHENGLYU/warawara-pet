@@ -65,6 +65,18 @@ final class BirthdayAssetTests: XCTestCase {
         XCTAssertTrue(text.contains("Sylvia"), "the final letter must address the recipient")
     }
 
+    func testLetterEndsWithTheFelixSignatureExactlyOnce() {
+        guard let text = BirthdayAssetStore.shared.letterText() else {
+            XCTFail("birthday_letter.txt missing")
+            return
+        }
+        let occurrences = text.components(separatedBy: "Felix").count - 1
+        XCTAssertEqual(occurrences, 1, "the signature Felix must appear exactly once")
+        let trimmedLines = text.split(separator: "\n", omittingEmptySubsequences: true)
+        XCTAssertEqual(trimmedLines.last, "Felix",
+                       "the final nonempty line must be exactly Felix")
+    }
+
     func testLetterSurvivesLongUnicodeRoundTrip() {
         let sample = String(repeating: "亲爱的朋友，生日快乐！🎂\n", count: 40)
         let data = sample.data(using: .utf8)!

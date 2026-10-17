@@ -153,6 +153,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.wearableController?.celebrationRequestsBirthdayHat = active
         }
         firstLaunchHandler = handler
+        // The pet and the birthday presenter are fully wired at this
+        // point: the surprise is dispatched against a ready pipeline.
+        EventDiagnostics.firstLaunch("PRESENTER_READY")
         handler.start()
     }
 

@@ -11,6 +11,7 @@ enum EventCommandLine {
           --replay-meteor                replay the meteor event
           --show-letter                  open the birthday letter
           --verify-gift-assets           headless packaged-art verification
+          --diagnose-first-launch        inspect the first-launch decision
           --debug-reset-first-launch     development: clear first-launch state
           --help-events                  show this usage
         """

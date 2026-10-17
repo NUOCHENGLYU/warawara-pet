@@ -79,7 +79,17 @@ jobs:
           grep -q "METEOR_COMPLETED" "/tmp/meteor-smoke.log" || { echo "no METEOR_COMPLETED"; cat "/tmp/meteor-smoke.log"; exit 1; }
           grep -q "EVENT_ATTENTION_ACQUIRED" "/tmp/meteor-smoke.log" || { echo "no attention acquisition"; cat "/tmp/meteor-smoke.log"; exit 1; }
           grep -q "EVENT_ATTENTION_RELEASED" "/tmp/meteor-smoke.log" || { echo "no attention release"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "METEOR_SCALE_INVALID" "/tmp/meteor-smoke.log" && { echo "invalid meteor scale"; cat "/tmp/meteor-smoke.log"; exit 1; }
           echo "METEOR_SMOKE_OK"
+
+      - name: Diagnose first-launch decision (packaged app)
+        run: |
+          BIN="dist/WarawaraPet.app/Contents/MacOS/WarawaraPet"
+          OUT="$("$BIN" --diagnose-first-launch 2>&1)"
+          echo "$OUT"
+          echo "$OUT" | grep -q "FIRST_LAUNCH_PROFILE" || { echo "no FIRST_LAUNCH_PROFILE"; exit 1; }
+          echo "$OUT" | grep -q "FIRST_LAUNCH_ELIGIBLE" || { echo "no FIRST_LAUNCH_ELIGIBLE"; exit 1; }
+          echo "FIRST_LAUNCH_DIAGNOSE_OK"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

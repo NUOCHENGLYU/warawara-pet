@@ -285,7 +285,11 @@ final class MeteorTests: XCTestCase {
         guard let panel else { return }
         XCTAssertNotNil(panel.contentView, "the meteor view must be attached")
         XCTAssertFalse(panel.frame.isEmpty, "the panel needs a real size")
+        // THE scale regression: the panel must be a SMALL sky object.
+        // The previous double-scale bug produced a ~178,000-point panel.
         XCTAssertGreaterThan(panel.frame.width, 100, "the panel must not be tiny")
+        XCTAssertLessThan(panel.frame.width, 400,
+                          "the meteor panel must stay a small sky object (no giant translucent blocks)")
 
         // Mid-flight: the panel frame intersects the visible display and
         // alpha is fully opaque.

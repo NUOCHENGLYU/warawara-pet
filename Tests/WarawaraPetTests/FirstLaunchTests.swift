@@ -196,4 +196,69 @@ final class FirstLaunchTests: XCTestCase {
         XCTAssertFalse(defaults.bool(forKey: FirstLaunchState.legacyCompletedKey))
         XCTAssertEqual(FirstLaunchState.load(defaults: defaults), .fresh)
     }
+
+    /// Isolated-profile smoke: a fresh persistence suite dispatches the
+    /// REAL production birthday presentation (coordinator + presenter),
+    /// never touching the user's standard defaults.
+    func testIsolatedProfileStartupDispatchesTheRealBirthdayPresentation() {
+        final class SpyPresenter: BirthdayEventPresenting {
+            var noticeCount = 0
+            func noticeCompanionsArriving() { noticeCount += 1 }
+            func presentCarriedProps() {}
+            func deliverPropsToPet() {}
+            func activateEnvelope() {}
+            func hideCake() {}
+            func startCompanionGroup() {}
+            func cancelCompanionGroup() {}
+            func performMainPetHop() {}
+            func clearAttention() {}
+            func envelopeDidBecomeAvailable() {}
+        }
+
+        let zone = TimeZone(identifier: "America/New_York")!
+        let now = date(2026, 10, 18, 10, zone: zone)
+        let coordinator = BirthdayEventCoordinator(
+            clock: FixedClock(now: now, calendar: calendar(zone)),
+            persistence: BirthdayPersistence(defaults: defaults)
+        )
+        let spy = SpyPresenter()
+        coordinator.presenter = spy
+        coordinator.isPetBusy = { false }
+        let windowController = PetWindowController()
+        let handler = FirstLaunchCelebration(
+            coordinator: coordinator,
+            windowController: windowController,
+            clock: FixedClock(now: now, calendar: calendar(zone)),
+            defaults: defaults
+        )
+        handler.start()
+        // The production dispatch path: the birthday tick services the
+        // pending trigger and the REAL presenter is reached.
+        coordinator.servicePendingTrigger()
+        XCTAssertTrue(coordinator.isRunning, "the surprise must begin on a fresh profile")
+        XCTAssertEqual(spy.noticeCount, 1,
+                       "the production birthday presenter must be dispatched")
+        handler.evaluate()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.running.rawValue)
+        // Completion is only recorded after the celebration finishes.
+        coordinator.requestCancellation()
+        handler.evaluate()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.completed.rawValue)
+    }
+
+    /// No early completion marking: pending must persist until the
+    /// celebration is OBSERVED running.
+    func testPendingIsNotCompletedBeforePlayback() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        let now = date(2026, 10, 18, 10, zone: zone)
+        let (handler, _) = makeHandler(now: now, zone: zone)
+        handler.start()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.pending.rawValue)
+        // The trigger has NOT been serviced yet: the state must remain
+        // pending (never completed prematurely).
+        handler.evaluate()
+        handler.evaluate()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.pending.rawValue)
+        XCTAssertNotEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.completed.rawValue)
+    }
 }
