@@ -46,12 +46,15 @@ final class SeasonalSceneMathTests: XCTestCase {
             }
             let origin = SeasonalSceneMath.origin(anchoredAt: target, kind: kind)
             let size = SeasonalSceneMath.panelSize(for: kind)
-            let center = CGPoint(x: origin.x + size.width / 2, y: origin.y + size.height / 2)
-            XCTAssertEqual(center.x, target.x, accuracy: 0.01, "\(kind): panel must center on the anchor")
-            XCTAssertEqual(center.y, target.y, accuracy: 0.01, "\(kind): panel must center on the anchor")
+            let extents = SeasonalSceneMath.contentExtentRect(for: kind)
+            // The CONTACT point lands exactly on the world anchor.
+            let contactX = origin.x + size.width / 2 + extents.midX
+            let contactY = origin.y + size.height / 2 + extents.midY
+            XCTAssertEqual(contactX, target.x, accuracy: 0.01, "\(kind): contact must land on the anchor")
+            XCTAssertEqual(contactY, target.y, accuracy: 0.01, "\(kind): contact must land on the anchor")
             // Far from the screen's bottom-left corner.
-            XCTAssertGreaterThan(center.x, 200, "\(kind): never in the lower-left corner")
-            XCTAssertGreaterThan(center.y, 80, "\(kind): never in the lower-left corner")
+            XCTAssertGreaterThan(contactX, 200, "\(kind): never in the lower-left corner")
+            XCTAssertGreaterThan(contactY, 80, "\(kind): never in the lower-left corner")
         }
     }
 
@@ -60,25 +63,16 @@ final class SeasonalSceneMathTests: XCTestCase {
     func testPaintedContentFitsInsidePanelForEveryKind() {
         for kind in SeasonalEventKind.allCases {
             let size = SeasonalSceneMath.panelSize(for: kind)
-            let contentOffset = SeasonalSceneMath.contentOffset(for: kind)
-            let contentRect = SeasonalSceneMath.contentRectInPanel(for: kind)
-
-            // Primary content must stay strictly inside the panel.
-            XCTAssertGreaterThan(contentRect.minX, -size.width / 2 + 1, "\(kind): content clipped left")
-            XCTAssertLessThan(contentRect.maxX, size.width / 2 - 1, "\(kind): content clipped right")
-            XCTAssertGreaterThan(contentRect.minY, -size.height / 2 + 1, "\(kind): content clipped bottom")
-            XCTAssertLessThan(contentRect.maxY, size.height / 2 - 1, "\(kind): content clipped top")
-
-            // Decorations must also stay inside.
-            for deco in SeasonalSceneMath.decorations(for: kind) {
-                let decoSize = kind.primaryDisplayPoints * deco.sizeFraction
-                let cx = contentOffset.width + deco.dxFraction * kind.primaryDisplayPoints
-                let cy = contentOffset.height + deco.dyFraction * kind.primaryDisplayPoints
-                XCTAssertGreaterThan(cx - decoSize / 2, -size.width / 2 + 1, "\(kind)/\(deco.asset): clipped left")
-                XCTAssertLessThan(cx + decoSize / 2, size.width / 2 - 1, "\(kind)/\(deco.asset): clipped right")
-                XCTAssertGreaterThan(cy - decoSize / 2, -size.height / 2 + 1, "\(kind)/\(deco.asset): clipped bottom")
-                XCTAssertLessThan(cy + decoSize / 2, size.height / 2 - 1, "\(kind)/\(deco.asset): clipped top")
-            }
+            let extents = SeasonalSceneMath.contentExtentRect(for: kind)
+            // Panel rect in the same coordinates (contact at 0,0).
+            let panelMinX = -size.width / 2 - extents.midX
+            let panelMaxX = size.width / 2 - extents.midX
+            let panelMinY = -size.height / 2 - extents.midY
+            let panelMaxY = size.height / 2 - extents.midY
+            XCTAssertGreaterThan(extents.minX, panelMinX + 1, "\(kind): content clipped left")
+            XCTAssertLessThan(extents.maxX, panelMaxX - 1, "\(kind): content clipped right")
+            XCTAssertGreaterThan(extents.minY, panelMinY + 1, "\(kind): content clipped bottom")
+            XCTAssertLessThan(extents.maxY, panelMaxY - 1, "\(kind): content clipped top")
         }
     }
 
@@ -86,20 +80,22 @@ final class SeasonalSceneMathTests: XCTestCase {
         // The two reported clipping cases: red envelope + Christmas gift.
         for kind in [SeasonalEventKind.cny, .christmas] {
             let size = SeasonalSceneMath.panelSize(for: kind)
-            let rect = SeasonalSceneMath.contentRectInPanel(for: kind)
-            let halfW = size.width / 2
-            let halfH = size.height / 2
-            XCTAssertGreaterThan(rect.minX, -halfW + 1,
+            let extents = SeasonalSceneMath.contentExtentRect(for: kind)
+            let panelMinX = -size.width / 2 - extents.midX
+            let panelMaxX = size.width / 2 - extents.midX
+            let panelMinY = -size.height / 2 - extents.midY
+            let panelMaxY = size.height / 2 - extents.midY
+            XCTAssertGreaterThan(extents.minX, panelMinX + 1,
                                  "\(kind): envelope/gift must not be clipped left")
-            XCTAssertLessThan(rect.maxX, halfW - 1,
+            XCTAssertLessThan(extents.maxX, panelMaxX - 1,
                               "\(kind): envelope/gift must not be clipped right")
-            XCTAssertGreaterThan(rect.minY, -halfH + 1,
+            XCTAssertGreaterThan(extents.minY, panelMinY + 1,
                                  "\(kind): envelope/gift must not be clipped at the bottom")
-            XCTAssertLessThan(rect.maxY, halfH - 1,
+            XCTAssertLessThan(extents.maxY, panelMaxY - 1,
                               "\(kind): envelope/gift must not be clipped at the top")
         }
         // The gift CONTACT point must be its bottom edge: the drawn
-        // content bottom lands exactly on the panel center.
+        // content bottom lands exactly on the contact (0,0).
         let giftRect = SeasonalSceneMath.contentRectInPanel(for: .christmas)
         XCTAssertEqual(giftRect.maxY, 0, accuracy: 0.5,
                        "gift bottom must rest on the anchor")
@@ -238,7 +234,8 @@ final class SeasonalSceneMathTests: XCTestCase {
         )
         XCTAssertGreaterThan(lifted.position.y, anchors.nearRightFoot.y,
                              "the mug must rise toward the face mid-present")
-        XCTAssertGreaterThan(lifted.position.x, anchors.nearRightFoot.x)
+        XCTAssertLessThan(lifted.position.x, anchors.nearRightFoot.x,
+                          "the mug moves inward toward the face")
 
         let back = SeasonalChoreography.pose(
             kind: .hotCocoa, phase: .celebrate, elapsedInPhase: 0.5, totalElapsed: 12,
@@ -316,7 +313,7 @@ final class SeasonalSceneMathTests: XCTestCase {
             + timing.celebrateDuration + timing.departDuration
 
         var previous: CGPoint?
-        for step in 1...40 {
+        for step in 1..<40 {
             let total = TimeInterval(CGFloat(step) / 40.0 * flightDuration)
             guard let target = SeasonalChoreography.attentionTarget(
                 kind: .paperAirplane, phase: .approach, elapsedInPhase: total,

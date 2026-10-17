@@ -172,26 +172,30 @@ enum SeasonalSceneMath {
         )
     }
 
-    /// Panel size: union of the primary content (including its contact
-    /// offset inside the panel) and every decoration extent plus a
-    /// safety margin — the window can never clip drawn content (at rest
-    /// scale 1 and arrival scale ~0.92).
-    static func panelSize(for kind: SeasonalEventKind) -> CGSize {
-        let content = contentSize(for: kind)
+    /// The union of ALL drawn content (primary + decorations) in PANEL
+    /// coordinates with the CONTACT point at (0,0). Panel frames center
+    /// on this rect's midpoint so asymmetric artwork can never be
+    /// clipped.
+    static func contentExtentRect(for kind: SeasonalEventKind) -> CGRect {
+        var rect = contentRectInPanel(for: kind)
         let contactOffset = contentOffset(for: kind)
-        var minX: CGFloat = contactOffset.width - content.width / 2
-        var maxX: CGFloat = contactOffset.width + content.width / 2
-        var minY: CGFloat = contactOffset.height - content.height / 2
-        var maxY: CGFloat = contactOffset.height + content.height / 2
         for deco in decorations(for: kind) {
             let size = kind.primaryDisplayPoints * deco.sizeFraction
             let cx = contactOffset.width + deco.dxFraction * kind.primaryDisplayPoints
             let cy = contactOffset.height + deco.dyFraction * kind.primaryDisplayPoints
-            minX = min(minX, cx - size / 2)
-            maxX = max(maxX, cx + size / 2)
-            minY = min(minY, cy - size / 2)
-            maxY = max(maxY, cy + size / 2)
+            rect = rect.union(CGRect(
+                x: cx - size / 2, y: cy - size / 2,
+                width: size, height: size
+            ))
         }
+        return rect
+    }
+
+    /// Panel size: the full content extent plus interaction headroom and
+    /// safety margin — the window can never clip drawn content (at rest
+    /// scale 1 and arrival scale ~0.92).
+    static func panelSize(for kind: SeasonalEventKind) -> CGSize {
+        let extents = contentExtentRect(for: kind)
         // Extra headroom for interactions: lid lift, note rise, descent
         // overshoot, arc lift — per-kind.
         let interactionHeadroom: CGFloat = switch kind {
@@ -201,22 +205,24 @@ enum SeasonalSceneMath {
         default: 10
         }
         let margin: CGFloat = 14
-        let width = maxX - minX + 2 * (margin + interactionHeadroom)
-        let height = maxY - minY + 2 * (margin + interactionHeadroom)
-        return CGSize(width: max(width, 90), height: max(height, 90))
+        return CGSize(
+            width: max(extents.width + 2 * (margin + interactionHeadroom), 90),
+            height: max(extents.height + 2 * (margin + interactionHeadroom), 90)
+        )
     }
 
-    /// Panel ORIGIN that places the primary content's CONTACT point
-    /// exactly on the world anchor (the panel is centered on the contact
-    /// point, corrected by the content-center offset).
+    /// Panel ORIGIN that places the prop's CONTACT point exactly on the
+    /// world anchor (the panel is centered on the content extents, not
+    /// the contact, so asymmetric artwork stays fully inside).
     static func origin(
         anchoredAt anchor: CGPoint,
         kind: SeasonalEventKind
     ) -> CGPoint {
         let size = panelSize(for: kind)
+        let extents = contentExtentRect(for: kind)
         return CGPoint(
-            x: anchor.x - size.width / 2,
-            y: anchor.y - size.height / 2
+            x: anchor.x - size.width / 2 - extents.midX,
+            y: anchor.y - size.height / 2 - extents.midY
         )
     }
 
