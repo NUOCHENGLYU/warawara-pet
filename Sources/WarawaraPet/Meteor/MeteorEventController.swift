@@ -211,10 +211,12 @@ final class MeteorEventController {
         if trigger == .automatic {
             persistence.recordAutomatic(at: now, calendar: clock.calendar)
         }
+        // The marker must be emitted BEFORE observers: smoke observers
+        // may terminate the process.
+        EventDiagnostics.meteor("COMPLETED")
         for observer in completionObservers {
             observer(trigger ?? .replay)
         }
-        EventDiagnostics.meteor("COMPLETED")
         reset()
     }
 
