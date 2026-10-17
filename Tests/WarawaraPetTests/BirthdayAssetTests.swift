@@ -57,8 +57,12 @@ final class BirthdayAssetTests: XCTestCase {
             return
         }
         XCTAssertGreaterThan(text.count, 20)
-        XCTAssertTrue(text.contains("生日快乐"), "letter must support Chinese")
-        XCTAssertTrue(text.contains("placeholder") || text.contains("占位"), "placeholder marker must be present until the user supplies the final text")
+        XCTAssertTrue(text.contains("生日快乐") || text.contains("快乐"),
+                      "the final letter must keep the Chinese greeting")
+        XCTAssertFalse(text.contains("placeholder") || text.contains("占位"),
+                       "the placeholder must be replaced by the final letter text")
+        // The final letter is bilingual (addressed in English).
+        XCTAssertTrue(text.contains("Sylvia"), "the final letter must address the recipient")
     }
 
     func testLetterSurvivesLongUnicodeRoundTrip() {

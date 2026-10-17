@@ -27,12 +27,14 @@ struct BirthdayPropLayout {
         )
     }
 
-    /// Envelope resting position: held in FRONT of the pet's lower
+    /// Envelope resting position: HELD in front of the pet's lower
     /// abdomen (like the pet is carrying it), bound to the pet frame.
+    /// The panel center lands on the lower belly so the envelope art
+    /// reads as held, not dropped beside the pet.
     static func envelopeOrigin(petFrame: CGRect, panelSize: CGSize) -> CGPoint {
         CGPoint(
             x: petFrame.midX + 20 - panelSize.width / 2,
-            y: petFrame.minY + 34 - panelSize.height / 2
+            y: petFrame.minY + 82 - panelSize.height / 2
         )
     }
 

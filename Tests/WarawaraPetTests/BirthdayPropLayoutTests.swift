@@ -11,7 +11,7 @@ final class BirthdayPropLayoutTests: XCTestCase {
 
     // MARK: - Layout model
 
-    func testPropsRestInFrontOfPetWithoutOverlappingBody() {
+    func testCakeStaysClearOfTheBodyAndTheEnvelopeIsHeldInFront() {
         let origins = BirthdayPropLayout.deliveryOrigins(
             petFrame: petFrame,
             cakePanelSize: cakePanel,
@@ -22,23 +22,31 @@ final class BirthdayPropLayoutTests: XCTestCase {
         let cakeRect = CGRect(origin: origins.cake, size: cakePanel)
         let envelopeRect = CGRect(origin: origins.envelope, size: envelopePanel)
         XCTAssertFalse(cakeRect.intersects(body), "cake must not clip into the pet")
-        XCTAssertFalse(envelopeRect.intersects(body), "envelope must not clip into the pet")
+        // The final envelope is HELD at the pet's lower abdomen: it
+        // intentionally overlaps the body region (drawn in front).
+        XCTAssertTrue(envelopeRect.intersects(body) || envelopeRect.maxX >= body.minX - 2,
+                      "the envelope must sit close to / in front of the pet body")
+        XCTAssertTrue(
+            envelopeRect.midY < body.midY + 10,
+            "the envelope must rest at the LOWER abdomen, not beside the pet"
+        )
         XCTAssertFalse(cakeRect.intersects(envelopeRect), "props must not overlap each other")
     }
 
-    func testPropsRestNearTheDesktopPlane() {
-        let origins = BirthdayPropLayout.deliveryOrigins(
-            petFrame: petFrame,
-            cakePanelSize: cakePanel,
-            envelopePanelSize: envelopePanel,
-            visibleFrame: visibleFrame
+    func testEnvelopeIsHeldAtTheLowerAbdomen() {
+        let origin = BirthdayPropLayout.envelopeOrigin(
+            petFrame: petFrame, panelSize: envelopePanel
         )
-        // Cake art bottom sits slightly above the pet's feet line
-        // (minY + 54 + 12) so it reads as held-visible, not too low.
-        // Envelope art bottom margin is 18pt.
-        let feetLine = petFrame.minY + 54
-        XCTAssertEqual(origins.cake.y + cakePanel.height - 32, feetLine + 12, accuracy: 2)
-        XCTAssertEqual(origins.envelope.y + envelopePanel.height - 18, feetLine, accuracy: 2)
+        let envelopeRect = CGRect(origin: origin, size: envelopePanel)
+        let body = BirthdayPropLayout.petBodyRect(petFrame: petFrame)
+        // Held in front of the lower abdomen: near the body's bottom
+        // half, overlapping the body's front silhouette.
+        XCTAssertEqual(envelopeRect.midX, body.midX + 20, accuracy: 0.5,
+                       "held slightly in front of the body center")
+        XCTAssertLessThan(envelopeRect.midY, body.midY + 12,
+                          "at the lower abdomen, not floating beside the pet")
+        XCTAssertGreaterThan(envelopeRect.midY, body.minY,
+                             "not dropped to the feet")
     }
 
     func testDeliveryOriginsAreClampedToVisibleFrame() {

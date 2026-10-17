@@ -65,6 +65,8 @@ final class FirstLaunchCelebration {
     private var attempts = 0
     private let maxAttempts = 14
     private var state: FirstLaunchState = .fresh
+    private var sawCelebrationRunningThisSession = false
+    private var lastHatRequested: Bool?
 
     /// Called when the celebration requests/retracts the birthday hat.
     var setCelebrationHat: ((Bool) -> Void)?
@@ -126,17 +128,24 @@ final class FirstLaunchCelebration {
             }
         case .running:
             if coordinator.isRunning {
-                // Still celebrating: the hat stays on.
-            } else {
-                // The celebration finished (this session or the previous
-                // one was interrupted and finished the replay).
+                sawCelebrationRunningThisSession = true
+            } else if sawCelebrationRunningThisSession {
+                // The celebration finished in THIS session.
                 transition(to: .completed)
+            } else {
+                // The previous session was interrupted mid-celebration:
+                // safely replay it.
+                requestTriggerIfNeeded()
             }
         case .completed:
             break
         }
 
-        setCelebrationHat?(state == .running || (coordinator.isRunning && state != .completed))
+        let hatOn = state == .running || (coordinator.isRunning && state != .completed)
+        if hatOn != lastHatRequested {
+            lastHatRequested = hatOn
+            setCelebrationHat?(hatOn)
+        }
         EventDiagnostics.firstLaunch("STATE_\(state.rawValue.uppercased())")
     }
 
@@ -157,10 +166,10 @@ final class FirstLaunchCelebration {
         state = newState
         state.save(to: defaults)
         if newState == .completed {
-            setCelebrationHat?(false)
             EventDiagnostics.firstLaunch("COMPLETED")
         }
         if newState == .running {
+            sawCelebrationRunningThisSession = true
             EventDiagnostics.firstLaunch("RUNNING")
         }
     }
