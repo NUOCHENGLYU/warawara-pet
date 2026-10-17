@@ -228,6 +228,12 @@ final class PetController: ObservableObject {
                 scheduleNextAutonomousAction()
             }
         case .curious:
+            // Event-driven attention OWNS the curious state: the
+            // autonomous curiosity logic must never pull the pet back to
+            // idle while an event is being attended (this was the
+            // one-frame attention flicker: the 150 ms awareness tick
+            // exited curious before the event could hold it).
+            if eventAttentionActive { return }
             // The 30 Hz tracker owns the visual pose; the awareness tick
             // only decides when to stop being curious.
             if !curiosityDetector.isEngaged {
@@ -244,17 +250,11 @@ final class PetController: ObservableObject {
     /// Event-driven attention performance: the pet turns to look toward
     /// `direction` (reusing the accepted curious state and 2.5D turn).
     /// Pass nil to release the attention and return to idle.
+    /// Acquisition is explicit; while active the event OWNS the gaze and
+    /// state until released (autonomous curiosity can never exit it).
     func setEventAttention(_ direction: CGVector?) {
         guard let direction else {
-            guard eventAttentionActive else { return }
-            eventAttentionActive = false
-            eventAttentionDirection = nil
-            curiosityDirection = .zero
-            curiosityPose = .neutral
-            if stateMachine.state == .curious {
-                _ = stateMachine.transition(to: .idle)
-                state = stateMachine.state
-            }
+            releaseEventAttention()
             return
         }
         guard stateMachine.state == .idle || stateMachine.state == .curious else { return }
@@ -265,6 +265,31 @@ final class PetController: ObservableObject {
         eventAttentionActive = true
         eventAttentionDirection = direction
         curiosityDirection = direction
+        EventReplayLog.attentionAcquired(direction: direction)
+    }
+
+    /// Per-frame tracking update while event attention holds (moving
+    /// props: falling envelope, flying airplane...). Never transitions
+    /// state; the direction change is smoothed by the expression system.
+    func updateEventAttention(_ direction: CGVector) {
+        guard eventAttentionActive else { return }
+        eventAttentionDirection = direction
+        if curiosityDirection != direction {
+            curiosityDirection = direction
+        }
+    }
+
+    private func releaseEventAttention() {
+        guard eventAttentionActive else { return }
+        eventAttentionActive = false
+        eventAttentionDirection = nil
+        curiosityDirection = .zero
+        curiosityPose = .neutral
+        EventReplayLog.attentionReleased()
+        if stateMachine.state == .curious {
+            _ = stateMachine.transition(to: .idle)
+            state = stateMachine.state
+        }
     }
 
     /// True while the mouse tracker must yield to event attention.
@@ -372,18 +397,26 @@ final class PetController: ObservableObject {
         beginHop()
     }
 
-    private func beginHop() {
-        guard stateMachine.transition(to: .hop) else { return }
-        state = stateMachine.state
-        startHopMotion()
+    /// Seasonal/daily celebration: a SMALL deterministic hop (the
+    /// birthday keeps its full random hop). Inert outside idle — event
+    /// choreography releases attention before calling this.
+    func performCelebrationHop() {
+        guard stateMachine.state == .idle else { return }
+        beginHop(parameters: HopParameters(height: 46, drift: 0, duration: 0.75))
     }
 
-    private func startHopMotion() {
-        let parameters = HopParameters.random(using: &rng)
+    private func beginHop(parameters: HopParameters? = nil) {
+        guard stateMachine.transition(to: .hop) else { return }
+        state = stateMachine.state
+        startHopMotion(parameters: parameters)
+    }
+
+    private func startHopMotion(parameters: HopParameters? = nil) {
+        let hopParameters = parameters ?? HopParameters.random(using: &rng)
         guard let windowController else { return }
         motionController.startHop(
             from: windowController.currentFrame,
-            parameters: parameters,
+            parameters: hopParameters,
             progress: { [weak self] progress in self?.hopProgress = progress },
             completion: { [weak self] finalFrame in self?.finishHop(landingAt: finalFrame) }
         )

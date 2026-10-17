@@ -56,6 +56,11 @@ final class PetWindowController: NSObject {
         controller?.performBirthdayHop()
     }
 
+    /// Small deterministic celebration hop (seasonal/daily celebrate).
+    func performCelebrationHop() {
+        controller?.performCelebrationHop()
+    }
+
     /// Event-driven attention: the pet turns to look at a specific
     /// direction (birthday choreography).
     func setEventAttention(_ direction: CGVector?) {

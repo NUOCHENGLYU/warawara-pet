@@ -77,6 +77,22 @@ enum EventReplayLog {
         emit("EVENT_BIRTHDAY_LAYERING cakeWindow=\(cakeWindow.map(String.init) ?? "-") envelopeWindow=\(envelopeWindow.map(String.init) ?? "-")")
     }
 
+    static func attentionAcquired(direction: CGVector) {
+        emit("EVENT_ATTENTION_ACQUIRED dx=\(String(format: "%.2f", direction.dx)) dy=\(String(format: "%.2f", direction.dy))")
+    }
+
+    static func attentionUpdated(direction: CGVector) {
+        emit("EVENT_ATTENTION_UPDATED dx=\(String(format: "%.2f", direction.dx)) dy=\(String(format: "%.2f", direction.dy))")
+    }
+
+    static func attentionReleased() {
+        emit("EVENT_ATTENTION_RELEASED")
+    }
+
+    static func anchor(id: String, anchor: String) {
+        emit("EVENT_ANCHOR id=\(id) anchor=\(anchor)")
+    }
+
     static func phase(id: String, phase: String) {
         emit("EVENT_REPLAY_PHASE id=\(id) phase=\(phase)")
     }
