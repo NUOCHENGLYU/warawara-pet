@@ -46,7 +46,7 @@ enum FirstLaunchState: String {
     }
 
     func save(to defaults: UserDefaults) {
-        defaults.set(rawValue, forKey: key)
+        defaults.set(rawValue, forKey: Self.key)
     }
 
     /// Development-only reset (--debug-reset-first-launch).
