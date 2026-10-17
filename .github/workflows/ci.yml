@@ -71,7 +71,11 @@ jobs:
             grep -q "EVENT_REPLAY_VISIBLE" "/tmp/replay-$KIND.log" || { echo "no VISIBLE for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
             grep -q "EVENT_ASSET_LOADED" "/tmp/replay-$KIND.log" || { echo "no ASSET_LOADED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
             grep -q "EVENT_WINDOW_PRESENTED" "/tmp/replay-$KIND.log" || { echo "no WINDOW_PRESENTED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
-            grep -q "EVENT_SCENE_FAILED" "/tmp/replay-$KIND.log" && { echo "scene failure for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
+            if grep -q "EVENT_SCENE_FAILED" "/tmp/replay-$KIND.log"; then
+              echo "scene failure for $KIND"
+              cat "/tmp/replay-$KIND.log"
+              exit 1
+            fi
             grep -q "EVENT_REPLAY_COMPLETED" "/tmp/replay-$KIND.log" || { echo "no COMPLETED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
             grep -q "EVENT_FINISHED" "/tmp/replay-$KIND.log" || { echo "no FINISHED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
             echo "SMOKE_OK $KIND"
