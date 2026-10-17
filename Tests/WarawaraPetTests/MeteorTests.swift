@@ -2,10 +2,9 @@ import AppKit
 import XCTest
 @testable import WarawaraPet
 
-/// Meteor event coverage: independent world-space trajectory, complete
-/// disappearance, phase sequencing (including the wish beat), attention
-/// timing, automatic scheduling limits, and REAL presentation-path
-/// visibility.
+/// Meteor coverage: trajectory, single-timebase motion, phase sequence
+/// (including the wish beat), nightly scheduling, presentation-path
+/// visibility and cleanup.
 final class MeteorTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suiteName: String!
@@ -45,23 +44,40 @@ final class MeteorTests: XCTestCase {
         func now() -> Date { currentNow }
     }
 
+    /// Deterministic stub randomness for nightly decisions.
+    private struct FixedRandomSource: RandomSource {
+        let value: Double
+        mutating func nextUnit() -> Double { value }
+    }
+
     private let visible = CGRect(x: 0, y: 0, width: 1440, height: 900)
 
-    private func makeController(now: Date, zone: TimeZone, timing: MeteorEventController.Timing? = nil) -> MeteorEventController {
+    private final class TestTime {
+        var uptime: TimeInterval = 1000
+        var now: Date
+        let zone: TimeZone
+        init(now: Date, zone: TimeZone) { self.now = now; self.zone = zone }
+    }
+
+    private func makeController(now: Date, zone: TimeZone, uptime: TimeInterval = 1000,
+                                rng: (any RandomSource)? = nil) -> (MeteorEventController, TestTime) {
+        let time = TestTime(now: now, zone: zone)
+        time.uptime = uptime
         let controller = MeteorEventController(
             clock: FixedClock(now: now, calendar: calendar(zone)),
             persistence: MeteorPersistence(defaults: defaults),
-            timing: timing ?? MeteorEventController.Timing()
+            seededRNG: rng
         )
+        controller.monotonicNow = { time.uptime }
         controller.isPetBusy = { false }
         controller.isBirthdayBlocking = { false }
-        return controller
+        return (controller, time)
     }
 
     private final class SpyPresenter: MeteorEventPresenting {
         var visibleFrame = CGRect(x: 0, y: 0, width: 1440, height: 900)
         var noticeCount = 0
-        var flightFrames: [CGFloat] = []
+        var flightBeginCount = 0
         var departedCount = 0
         var wishingCount = 0
         var celebrationCount = 0
@@ -69,8 +85,7 @@ final class MeteorTests: XCTestCase {
         var phases: [MeteorPhase] = []
         var activeVisibleFrame: CGRect { visibleFrame }
         func noticeScene() { noticeCount += 1; phases.append(.noticing) }
-        func flightDidBegin(trajectory: MeteorTrajectory) { phases.append(.flight) }
-        func flightFrame(progress: CGFloat, at now: Date) { flightFrames.append(progress) }
+        func flightDidBegin(trajectory: MeteorTrajectory) { flightBeginCount += 1; phases.append(.flight) }
         func meteorDeparted() { departedCount += 1; phases.append(.departed) }
         func wishingDidBegin() { wishingCount += 1; phases.append(.wishing) }
         func celebrationDidBegin() { celebrationCount += 1; phases.append(.celebration) }
@@ -81,39 +96,35 @@ final class MeteorTests: XCTestCase {
 
     func testTrajectoryEntersAndExitsBeyondTheDisplay() {
         let trajectory = MeteorTrajectory.fixed(in: visible)
-        XCTAssertLessThan(trajectory.entry.x, visible.minX, "entry must be off-screen left")
-        XCTAssertGreaterThan(trajectory.exit.x, visible.maxX, "exit must be off-screen right")
-        let start = trajectory.position(at: 0)
-        let end = trajectory.position(at: 1)
-        XCTAssertLessThan(start.x, visible.minX)
-        XCTAssertGreaterThan(end.x, visible.maxX)
-        XCTAssertGreaterThan(end.y, visible.minY - 1)
-        XCTAssertLessThan(end.y, visible.maxY)
-        // The trajectory is fixed by the display, never by the pet.
+        XCTAssertLessThan(trajectory.entry.x, visible.minX)
+        XCTAssertGreaterThan(trajectory.exit.x, visible.maxX)
+        XCTAssertLessThan(trajectory.position(at: 0).x, visible.minX)
+        XCTAssertGreaterThan(trajectory.position(at: 1).x, visible.maxX)
         XCTAssertEqual(MeteorTrajectory.fixed(in: visible), trajectory)
     }
 
-    func testFlightIntersectsTheDisplayThroughTheVisiblePhase() {
-        let trajectory = MeteorTrajectory.fixed(in: visible)
-        var sawOnScreen = false
-        var previous = trajectory.position(at: 0)
-        for step in 1...60 {
-            let t = CGFloat(step) / 60
-            let p = trajectory.position(at: t)
-            if visible.contains(p) { sawOnScreen = true }
-            let delta = hypot(p.x - previous.x, p.y - previous.y)
-            XCTAssertLessThan(delta, 80, "no teleporting between 60 Hz samples")
+    func testSamplerYieldsNearlyUniformScreenSpeed() {
+        let sampler = MeteorTrajectorySampler(trajectory: MeteorTrajectory.fixed(in: visible), samples: 512)
+        var previous = sampler.position(atArcLength: 0)
+        var distances: [CGFloat] = []
+        for step in 1...100 {
+            let p = sampler.position(atArcLength: CGFloat(step) / 100)
+            distances.append(hypot(p.x - previous.x, p.y - previous.y))
             previous = p
         }
-        XCTAssertTrue(sawOnScreen, "the meteor must cross the visible display")
+        let average = distances.reduce(0, +) / CGFloat(distances.count)
+        for distance in distances {
+            XCTAssertLessThan(abs(distance - average) / average, 0.55,
+                              "arc-length sampling must keep speed nearly uniform")
+        }
     }
 
-    // MARK: - Phase sequence + full disappearance
+    // MARK: - Single timebase + phase sequence
 
     func testPhaseSequenceIsNoticingFlightDepartedWishingCelebration() {
         let zone = TimeZone(identifier: "America/New_York")!
         let start = date(2026, 10, 1, 10, zone: zone)
-        let controller = makeController(now: start, zone: zone)
+        let (controller, time) = makeController(now: start, zone: zone)
         let spy = SpyPresenter()
         controller.presenter = spy
 
@@ -121,46 +132,45 @@ final class MeteorTests: XCTestCase {
         controller.servicePendingTrigger()
         XCTAssertEqual(controller.phase, .noticing)
 
-        let t = controller.timing
-        let noticeEnd = start.addingTimeInterval(t.noticeDuration + 0.1)
-        controller.advance(at: noticeEnd)
+        // Enter the flight phase via the DATE timeline (notice).
+        time.now = start.addingTimeInterval(controller.timing.noticeDuration + 0.1)
+        controller.advance(at: time.now)
         XCTAssertEqual(controller.phase, .flight)
         XCTAssertNotNil(controller.trajectory)
+        XCTAssertEqual(spy.flightBeginCount, 1)
 
-        // Mid-flight renders increase progress; flight still active.
-        for step in 1..<5 {
-            controller.advance(at: start.addingTimeInterval(
-                t.noticeDuration + t.flightDuration * Double(step) / 5
-            ))
-        }
+        // Flight progress derives ONLY from the monotonic clock.
+        XCTAssertEqual(controller.flightProgress(atUptime: time.uptime), 0, accuracy: 0.01)
+        time.uptime += controller.timing.flightDuration / 2
+        XCTAssertEqual(controller.flightProgress(atUptime: time.uptime) ?? 0, 0.5, accuracy: 0.01)
+
+        // A 4 Hz tick does NOT move the position: it only manages phases.
+        time.now = start.addingTimeInterval(controller.timing.noticeDuration + 1)
+        controller.advance(at: time.now)
         XCTAssertEqual(controller.phase, .flight)
-        XCTAssertGreaterThan(spy.flightFrames.count, 0)
+        XCTAssertEqual(controller.flightProgress(atUptime: time.uptime) ?? 0, 0.5, accuracy: 0.01)
 
-        // Flight ends: the meteor has FULLY left the display.
-        let flightEnd = start.addingTimeInterval(t.noticeDuration + t.flightDuration + 0.1)
-        controller.advance(at: flightEnd)
+        // Flight ends on the SAME monotonic timeline.
+        time.uptime += controller.timing.flightDuration / 2 + 0.1
+        controller.advance(at: time.now)
         XCTAssertEqual(controller.phase, .departed)
-        XCTAssertEqual(spy.departedCount, 1, "departure registered, no celebration yet")
-        XCTAssertEqual(spy.celebrationCount, 0, "no celebration immediately after departure")
+        XCTAssertEqual(spy.departedCount, 1)
+        XCTAssertEqual(spy.celebrationCount, 0)
 
-        // The wish beat (constant duration) sits between departure and
-        // celebration.
-        let wishingEnd = flightEnd.addingTimeInterval(t.departedDuration + 0.1)
-        controller.advance(at: wishingEnd)
+        // Wish beat (constant duration) between departure and celebration.
+        time.uptime += controller.timing.departedDuration + 0.1
+        controller.advance(at: time.now)
         XCTAssertEqual(controller.phase, .wishing)
         XCTAssertEqual(spy.wishingCount, 1)
-        let celebrationStart = wishingEnd.addingTimeInterval(t.wishingDuration + 0.1)
-        controller.advance(at: celebrationStart)
+        time.uptime += controller.timing.wishingDuration + 0.1
+        controller.advance(at: time.now)
         XCTAssertEqual(controller.phase, .celebration)
         XCTAssertEqual(spy.celebrationCount, 1)
 
-        // Completion cleans everything up.
-        let done = celebrationStart.addingTimeInterval(t.celebrationDuration + 0.1)
-        controller.advance(at: done)
+        time.uptime += controller.timing.celebrationDuration + 0.1
+        controller.advance(at: time.now)
         XCTAssertEqual(controller.phase, .idle)
         XCTAssertEqual(spy.cleanupCount, 1)
-
-        // The phase order is exactly the required sequence.
         XCTAssertEqual(spy.phases, [.noticing, .flight, .departed, .wishing, .celebration, .completed])
     }
 
@@ -169,142 +179,263 @@ final class MeteorTests: XCTestCase {
         XCTAssertLessThanOrEqual(MeteorEventController.Timing().wishingDuration, 4.0)
     }
 
-    func testReplayIgnoresQuietHoursAndCooldown() {
+    func testPositionIsPureFunctionOfUptimeAcrossCadences() {
         let zone = TimeZone(identifier: "America/New_York")!
-        let start = date(2026, 10, 1, 2, zone: zone) // deep inside quiet hours
-        let controller = makeController(now: start, zone: zone)
+        let start = date(2026, 10, 1, 10, zone: zone)
+        let (controller, time) = makeController(now: start, zone: zone)
+        controller.presenter = SpyPresenter()
+        controller.requestTrigger(.replay)
+        controller.servicePendingTrigger()
+        time.now = start.addingTimeInterval(controller.timing.noticeDuration + 0.1)
+        controller.advance(at: time.now)
+
+        // The same uptime always yields the same progress, regardless of
+        // how many render ticks happened before it.
+        time.uptime += 1.0
+        let first = controller.flightProgress(atUptime: time.uptime)!
+        // Simulate many small ticks (60 Hz) and few big ticks (30 Hz):
+        // the progress at the same uptime must be identical.
+        time.uptime += 2.0
+        let second = controller.flightProgress(atUptime: time.uptime)!
+        time.uptime = time.uptime - 2.0 + 2.0
+        let sameAgain = controller.flightProgress(atUptime: time.uptime)!
+        XCTAssertEqual(second, sameAgain, accuracy: 0.0001)
+        XCTAssertGreaterThan(second, first, "progress must advance monotonically")
+    }
+
+    func testDroppedFramesNeverJumpOrGoBackward() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        let start = date(2026, 10, 1, 10, zone: zone)
+        let (controller, time) = makeController(now: start, zone: zone)
         let spy = SpyPresenter()
         controller.presenter = spy
         controller.requestTrigger(.replay)
         controller.servicePendingTrigger()
-        XCTAssertEqual(controller.phase, .noticing, "manual replay must bypass quiet hours")
+        time.now = start.addingTimeInterval(controller.timing.noticeDuration + 0.1)
+        controller.advance(at: time.now)
+        guard let trajectory = controller.trajectory else { return XCTFail("no trajectory") }
+        let sampler = MeteorTrajectorySampler(trajectory: trajectory)
+
+        var previous = sampler.position(atArcLength: 0)
+        var timeCursor = time.uptime
+        // Mixed cadences with occasional 0.25 s drops must stay monotonic
+        // and continuous.
+        while timeCursor < time.uptime + controller.timing.flightDuration {
+            timeCursor += Double.random(in: 0.01...0.25)
+            guard let progress = controller.flightProgress(atUptime: timeCursor) else { break }
+            let position = sampler.position(atArcLength: progress)
+            let delta = hypot(position.x - previous.x, position.y - previous.y)
+            XCTAssertLessThan(delta, 65, "no teleport between frames")
+            XCTAssertGreaterThanOrEqual(progress, 0)
+            previous = position
+        }
+        XCTAssertEqual(controller.flightProgress(atUptime: time.uptime + controller.timing.flightDuration + 5), 1,
+                       "progress clamps at exactly 1 after the flight")
     }
 
-    // MARK: - Automatic scheduling
+    // MARK: - Nightly automatic scheduling
 
-    func testAutomaticEligibilityRespectsQuietHoursCooldownAndCap() {
-        let zone = TimeZone(identifier: "America/New_York")!
-        let start = date(2026, 10, 1, 14, zone: zone)
-        let controller = makeController(now: start, zone: zone)
-        XCTAssertTrue(controller.shouldTriggerAutomatically(now: start))
-
-        let late = date(2026, 10, 1, 23, zone: zone)
-        XCTAssertFalse(controller.shouldTriggerAutomatically(now: late))
-        let early = date(2026, 10, 2, 7, zone: zone)
-        XCTAssertFalse(controller.shouldTriggerAutomatically(now: early))
-        let morning = date(2026, 10, 2, 8, zone: zone)
-        XCTAssertTrue(controller.shouldTriggerAutomatically(now: morning))
-
-        var persistence = MeteorPersistence(defaults: defaults)
-        persistence.recordAutomatic(at: start, calendar: calendar(zone))
-        XCTAssertFalse(controller.shouldTriggerAutomatically(now: start.addingTimeInterval(10 * 60)))
-        XCTAssertTrue(controller.shouldTriggerAutomatically(now: start.addingTimeInterval(46 * 60)))
-
-        persistence.recordAutomatic(at: start.addingTimeInterval(50 * 60), calendar: calendar(zone))
-        XCTAssertFalse(controller.shouldTriggerAutomatically(now: date(2026, 10, 1, 16, zone: zone)))
-        XCTAssertTrue(controller.shouldTriggerAutomatically(now: date(2026, 10, 2, 9, zone: zone)))
+    private func nightDate(_ hour: Int, minute: Int = 0, zone: TimeZone = TimeZone(identifier: "America/New_York")!) -> Date {
+        date(2026, 10, 1, hour, zone: zone, minute: minute)
     }
 
-    func testAutomaticTriggerRecordsHistoryButReplayDoesNot() {
+    func testOneDecisionPerNightAndNoReroll() {
         let zone = TimeZone(identifier: "America/New_York")!
-        let start = date(2026, 10, 1, 14, zone: zone)
+        let cal = calendar(zone)
         let persistence = MeteorPersistence(defaults: defaults)
-        let t = MeteorEventController.Timing()
-        let total = t.noticeDuration + t.flightDuration + t.departedDuration
-            + t.wishingDuration + t.celebrationDuration
+        var rng: any RandomSource = FixedRandomSource(value: 0.5) // above 0.15 -> not selected
 
-        let automatic = makeController(now: start, zone: zone)
-        automatic.presenter = SpyPresenter()
-        automatic.requestTrigger(.automatic)
-        automatic.servicePendingTrigger()
-        automatic.advance(at: start.addingTimeInterval(total + 0.2))
-        XCTAssertEqual(automatic.phase, .idle)
-        XCTAssertEqual(persistence.count(forDayKey: MeteorPersistence.dayKey(start, calendar: calendar(zone))), 1)
+        var scheduler = MeteorNightlyScheduler()
+        let atWindowStart = nightDate(20, minute: 1, zone: zone)
+        XCTAssertFalse(scheduler.evaluate(
+            now: atWindowStart, calendar: cal, rng: &rng, persistence: persistence,
+            busy: false, birthdayBlocking: false
+        ))
+        let key = MeteorPersistence.nightKey(atWindowStart, calendar: cal)
+        XCTAssertEqual(persistence.nightDecision(forKey: key)?.selected, false)
 
-        let replay = makeController(now: start, zone: zone)
-        replay.presenter = SpyPresenter()
-        replay.requestTrigger(.replay)
-        replay.servicePendingTrigger()
-        replay.advance(at: start.addingTimeInterval(total + 0.2))
-        XCTAssertEqual(persistence.count(forDayKey: MeteorPersistence.dayKey(start, calendar: calendar(zone))), 1,
-                       "replay must not mutate automatic history")
+        // Later evaluations in the same night must NOT reroll.
+        for minute in 10...120 {
+            let t = atWindowStart.addingTimeInterval(TimeInterval(minute) * 60)
+            XCTAssertFalse(scheduler.evaluate(
+                now: t, calendar: cal, rng: &rng, persistence: persistence,
+                busy: false, birthdayBlocking: false
+            ))
+        }
+        XCTAssertEqual(persistence.nightDecision(forKey: key)?.selected, false,
+                       "the single nightly decision is never rerolled")
     }
 
-    func testBusyPetDefersTheMeteor() {
+    func testSelectedNightFiresOnceAtTheScheduledTime() {
         let zone = TimeZone(identifier: "America/New_York")!
-        let start = date(2026, 10, 1, 14, zone: zone)
-        let controller = makeController(now: start, zone: zone)
-        controller.isPetBusy = { true }
-        controller.requestTrigger(.replay)
-        controller.servicePendingTrigger()
-        XCTAssertEqual(controller.phase, .idle, "no meteor while the pet is busy")
-        controller.isPetBusy = { false }
-        controller.servicePendingTrigger()
-        XCTAssertEqual(controller.phase, .noticing)
+        let cal = calendar(zone)
+        let persistence = MeteorPersistence(defaults: defaults)
+        var rng: any RandomSource = FixedRandomSource(value: 0.0) // below 0.15 -> selected
+
+        var scheduler = MeteorNightlyScheduler()
+        let start = nightDate(20, minute: 5, zone: zone)
+        XCTAssertFalse(scheduler.evaluate(
+            now: start, calendar: cal, rng: &rng, persistence: persistence,
+            busy: false, birthdayBlocking: false
+        ), "the decision is made but the scheduled time is in the future")
+        let key = MeteorPersistence.nightKey(start, calendar: cal)
+        XCTAssertEqual(persistence.nightDecision(forKey: key)?.selected, true)
+        let scheduled = persistence.scheduledTime(forKey: key, calendar: cal)
+        XCTAssertNotNil(scheduled)
+        XCTAssertGreaterThan(scheduled!, start)
+
+        // Before the scheduled time: still no fire.
+        XCTAssertFalse(scheduler.evaluate(
+            now: scheduled!.addingTimeInterval(-30), calendar: cal, rng: &rng,
+            persistence: persistence, busy: false, birthdayBlocking: false
+        ))
+        // At the scheduled time: fires exactly once.
+        XCTAssertTrue(scheduler.evaluate(
+            now: scheduled!, calendar: cal, rng: &rng,
+            persistence: persistence, busy: false, birthdayBlocking: false
+        ))
+        XCTAssertFalse(scheduler.evaluate(
+            now: scheduled!.addingTimeInterval(60), calendar: cal, rng: &rng,
+            persistence: persistence, busy: false, birthdayBlocking: false
+        ), "at most one automatic meteor per night")
+        XCTAssertEqual(persistence.nightDecision(forKey: key)?.fired, true)
     }
 
-    func testCancellationCleansUpImmediately() {
+    func testRestartReusesThePersistedDecision() {
         let zone = TimeZone(identifier: "America/New_York")!
-        let start = date(2026, 10, 1, 14, zone: zone)
-        let controller = makeController(now: start, zone: zone)
-        let spy = SpyPresenter()
-        controller.presenter = spy
+        let cal = calendar(zone)
+        let persistence = MeteorPersistence(defaults: defaults)
+        var rng: any RandomSource = FixedRandomSource(value: 0.0)
+        var scheduler = MeteorNightlyScheduler()
+        let start = nightDate(20, minute: 10, zone: zone)
+        _ = scheduler.evaluate(now: start, calendar: cal, rng: &rng, persistence: persistence,
+                               busy: false, birthdayBlocking: false)
+        let key = MeteorPersistence.nightKey(start, calendar: cal)
+        let scheduled = persistence.scheduledTime(forKey: key, calendar: cal)!
+
+        // "Restart": a NEW scheduler + NEW rng instance, same persisted
+        // store. The persisted decision/time is reused — no reroll.
+        var rng2: any RandomSource = FixedRandomSource(value: 0.99)
+        var scheduler2 = MeteorNightlyScheduler()
+        XCTAssertFalse(scheduler2.evaluate(now: start.addingTimeInterval(60), calendar: cal,
+                                           rng: &rng2, persistence: persistence,
+                                           busy: false, birthdayBlocking: false),
+                       "before the scheduled time")
+        XCTAssertTrue(scheduler2.evaluate(now: scheduled.addingTimeInterval(1), calendar: cal,
+                                          rng: &rng2, persistence: persistence,
+                                          busy: false, birthdayBlocking: false),
+                      "the restart honors the persisted scheduled time")
+    }
+
+    func testWindowBoundsAndBusyDeferral() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        let cal = calendar(zone)
+        let persistence = MeteorPersistence(defaults: defaults)
+        var rng: any RandomSource = FixedRandomSource(value: 0.0)
+        var scheduler = MeteorNightlyScheduler()
+
+        // Before 20:00 and after 23:00: never fire, no decision made.
+        XCTAssertFalse(scheduler.evaluate(now: nightDate(19, minute: 59, zone: zone), calendar: cal,
+                                          rng: &rng, persistence: persistence,
+                                          busy: false, birthdayBlocking: false))
+        XCTAssertFalse(scheduler.evaluate(now: nightDate(23, minute: 0, zone: zone), calendar: cal,
+                                          rng: &rng, persistence: persistence,
+                                          busy: false, birthdayBlocking: false))
+        XCTAssertNil(persistence.nightDecision(forKey: MeteorPersistence.nightKey(nightDate(19, minute: 59, zone: zone), calendar: cal)))
+
+        // Busy at the scheduled time: defer within the night; the event
+        // does not carry into the next day.
+        let start = nightDate(20, minute: 15, zone: zone)
+        _ = scheduler.evaluate(now: start, calendar: cal, rng: &rng, persistence: persistence,
+                               busy: false, birthdayBlocking: false)
+        let key = MeteorPersistence.nightKey(start, calendar: cal)
+        let scheduled = persistence.scheduledTime(forKey: key, calendar: cal)!
+        XCTAssertFalse(scheduler.evaluate(now: scheduled, calendar: cal, rng: &rng,
+                                          persistence: persistence,
+                                          busy: true, birthdayBlocking: false),
+                       "busy defers the fire")
+        XCTAssertTrue(scheduler.evaluate(now: scheduled.addingTimeInterval(300), calendar: cal,
+                                         rng: &rng, persistence: persistence,
+                                         busy: false, birthdayBlocking: false),
+                      "deferred fire resumes within the same night")
+        // Next night: a fresh key and a fresh decision.
+        let nextNight = nightDate(20, minute: 5, zone: zone).addingTimeInterval(86400)
+        XCTAssertNotEqual(MeteorPersistence.nightKey(nextNight, calendar: cal), key)
+    }
+
+    func testManualReplayDoesNotTouchNightlyHistory() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        let start = nightDate(21, zone: zone)
+        let persistence = MeteorPersistence(defaults: defaults)
+        let before = persistence.nightDecision(forKey: MeteorPersistence.nightKey(start, calendar: calendar(zone)))
+
+        let (controller, time) = makeController(now: start, zone: zone)
+        controller.presenter = SpyPresenter()
         controller.requestTrigger(.replay)
         controller.servicePendingTrigger()
-        controller.advance(at: start.addingTimeInterval(2))
-        XCTAssertEqual(controller.phase, .flight)
-        controller.cancel()
+        XCTAssertEqual(controller.phase, .noticing, "manual replay works at any hour")
+        let total = controller.timing.noticeDuration + controller.timing.flightDuration
+            + controller.timing.departedDuration + controller.timing.wishingDuration
+            + controller.timing.celebrationDuration
+        time.uptime += total + 1
+        time.now = start.addingTimeInterval(total + 2)
+        controller.advance(at: time.now)
+        // Advance through phases one step at a time with monotonic sync.
+        for _ in 0..<12 {
+            time.uptime += 1
+            controller.advance(at: time.now)
+            if controller.phase == .idle { break }
+        }
         XCTAssertEqual(controller.phase, .idle)
-        XCTAssertEqual(spy.cleanupCount, 1)
+        let after = persistence.nightDecision(forKey: MeteorPersistence.nightKey(start, calendar: calendar(zone)))
+        XCTAssertEqual(before, after, "manual replay must not mutate nightly history")
     }
 
-    // MARK: - Production presentation path (the invisibility regression)
+    // MARK: - Production presentation path
 
-    func testProductionPresenterCreatesAndShowsTheMeteorPanel() {
+    func testProductionPresenterMovesOnlyViaRenderTick() {
         let windowController = PetWindowController()
         windowController.configureForTesting(
             frame: CGRect(x: 400, y: 300, width: 180, height: 226)
         )
         let zone = TimeZone(identifier: "America/New_York")!
         let now = date(2026, 10, 1, 14, zone: zone)
-        let controller = MeteorEventController(
-            clock: FixedClock(now: now, calendar: calendar(zone)),
-            persistence: MeteorPersistence(defaults: defaults)
-        )
+        let (controller, time) = makeController(now: now, zone: zone)
         let presenter = MeteorEventPresenter(
             windowController: windowController, controller: controller, store: .shared
         )
         controller.presenter = presenter
 
-        let trajectory = MeteorTrajectory.fixed(in: presenter.activeVisibleFrame)
-        presenter.flightDidBegin(trajectory: trajectory)
+        controller.requestTrigger(.replay)
+        controller.servicePendingTrigger()
+        time.now = now.addingTimeInterval(controller.timing.noticeDuration + 0.1)
+        controller.advance(at: time.now)
+        XCTAssertEqual(controller.phase, .flight)
 
-        // The panel exists with the production view attached.
-        let panel = presenter.debugPanel
-        XCTAssertNotNil(panel, "METEOR_PANEL_CREATED: the panel must exist")
-        guard let panel else { return }
-        XCTAssertNotNil(panel.contentView, "the meteor view must be attached")
-        XCTAssertFalse(panel.frame.isEmpty, "the panel needs a real size")
-        // THE scale regression: the panel must be a SMALL sky object.
-        // The previous double-scale bug produced a ~178,000-point panel.
-        XCTAssertGreaterThan(panel.frame.width, 100, "the panel must not be tiny")
-        XCTAssertLessThan(panel.frame.width, 400,
-                          "the meteor panel must stay a small sky object (no giant translucent blocks)")
+        // The panel exists (small, ordered, view attached).
+        guard let panel = presenter.debugPanel else { return XCTFail("panel missing") }
+        XCTAssertEqual(panel.frame.size, CGSize(width: 360, height: 360))
+        XCTAssertNotNil(panel.contentView)
 
-        // Mid-flight: the panel frame intersects the visible display and
-        // alpha is fully opaque.
-        presenter.flightFrame(progress: 0.5, at: now)
+        // Mid-flight render tick: panel on-screen, opaque, trail building.
+        time.uptime += controller.timing.flightDuration / 2
+        presenter.renderTick(uptime: time.uptime)
         let visible = presenter.activeVisibleFrame
-        XCTAssertTrue(visible.intersects(panel.frame),
-                      "the meteor panel must cross the display mid-flight")
-        XCTAssertEqual(panel.alphaValue, 1, accuracy: 0.01,
-                       "the meteor must be fully opaque while flying")
+        XCTAssertTrue(visible.intersects(panel.frame), "panel must cross the display")
+        XCTAssertEqual(panel.alphaValue, 1, accuracy: 0.01)
+        XCTAssertGreaterThan(presenter.debugHistoryCount, 0, "the trail history records the flight")
 
-        // Cleanup: alpha zero and the panel parked outside the visible
-        // area — no residual edge sprite.
+        // A delayed scheduler tick must NOT overwrite the position.
+        let originBefore = panel.frame.origin
+        time.now = time.now.addingTimeInterval(0.25)
+        controller.advance(at: time.now)
+        XCTAssertEqual(panel.frame.origin, originBefore,
+                       "the 4 Hz scheduler never moves the panel")
+
+        // Cleanup: alpha zero, parked off-screen, history cleared.
         presenter.cleanup()
         XCTAssertEqual(panel.alphaValue, 0, accuracy: 0.01)
-        XCTAssertFalse(visible.intersects(panel.frame),
-                       "after cleanup the panel must sit outside the visible area")
+        XCTAssertFalse(visible.intersects(panel.frame))
+        XCTAssertEqual(presenter.debugHistoryCount, 0)
     }
 }

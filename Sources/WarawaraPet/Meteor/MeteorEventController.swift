@@ -60,8 +60,139 @@ struct MeteorTrajectory: Equatable {
     }
 }
 
+/// Arc-length sampler over a trajectory: maps a uniform 0...1 arc-length
+/// fraction to the trajectory parameter so screen-space speed is nearly
+/// constant (the raw cubic Bézier accelerates/decelerates visibly).
+struct MeteorTrajectorySampler {
+    let trajectory: MeteorTrajectory
+    private let parameters: [CGFloat]
+    private let cumulative: [CGFloat]
+    private let totalLength: CGFloat
+
+    init(trajectory: MeteorTrajectory, samples: Int = 256) {
+        self.trajectory = trajectory
+        var params: [CGFloat] = []
+        var lengths: [CGFloat] = []
+        params.reserveCapacity(samples + 1)
+        lengths.reserveCapacity(samples + 1)
+        var previous = trajectory.position(at: 0)
+        var total: CGFloat = 0
+        for index in 0...samples {
+            let t = CGFloat(index) / CGFloat(samples)
+            let p = trajectory.position(at: t)
+            if index > 0 {
+                total += hypot(p.x - previous.x, p.y - previous.y)
+            }
+            params.append(t)
+            lengths.append(total)
+            previous = p
+        }
+        parameters = params
+        cumulative = lengths
+        totalLength = total
+    }
+
+    /// Bézier parameter t for an arc-length fraction s in 0...1.
+    func parameter(for s: CGFloat) -> CGFloat {
+        guard totalLength > 0 else { return 0 }
+        let target = min(max(s, 0), 1) * totalLength
+        var low = 0
+        var high = cumulative.count - 1
+        while low < high {
+            let mid = (low + high) / 2
+            if cumulative[mid] < target {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+        guard low > 0 else { return parameters[0] }
+        let segment = cumulative[low] - cumulative[low - 1]
+        guard segment > 0 else { return parameters[low] }
+        let fraction = (target - cumulative[low - 1]) / segment
+        return parameters[low - 1] + (parameters[low] - parameters[low - 1]) * fraction
+    }
+
+    func position(atArcLength s: CGFloat) -> CGPoint {
+        trajectory.position(at: parameter(for: s))
+    }
+
+    func heading(atArcLength s: CGFloat) -> CGFloat {
+        trajectory.heading(at: parameter(for: s))
+    }
+}
+
+/// Pure nightly meteor scheduling: one Bernoulli decision (15%) per
+/// local night inside the 20:00-23:00 window, at most one automatic
+/// meteor per night, persisted so restarts never reroll.
+struct MeteorNightlyScheduler {
+    static let windowStartHour = 20
+    static let windowEndHour = 23
+    static let probability: Double = 0.15
+    /// Minimum lead time from the moment of the decision.
+    static let minimumLeadSeconds: TimeInterval = 120
+
+    /// Returns true when an automatic trigger should fire NOW.
+    /// Never rolls more than once per local night: the decision and the
+    /// scheduled time are persisted under a date-based night key.
+    func evaluate(
+        now: Date,
+        calendar: Calendar,
+        rng: inout RandomSource,
+        persistence: MeteorPersistence,
+        busy: Bool,
+        birthdayBlocking: Bool
+    ) -> Bool {
+        let hour = calendar.component(.hour, from: now)
+        guard hour >= Self.windowStartHour, hour < Self.windowEndHour else {
+            return false
+        }
+        let nightKey = MeteorPersistence.nightKey(now, calendar: calendar)
+
+        if let decision = persistence.nightDecision(forKey: nightKey) {
+            guard decision.selected, !decision.fired else { return false }
+            guard let scheduledTime = persistence.scheduledTime(forKey: nightKey, calendar: calendar),
+                  now >= scheduledTime else { return false }
+            guard !busy, !birthdayBlocking else { return false } // defer within the night
+            persistence.markNightFired(forKey: nightKey)
+            return true
+        }
+
+        // First evaluation of this night: make the one and only roll.
+        let selected = rng.nextUnit() < Self.probability
+        if !selected {
+            persistence.storeNightDecision(forKey: nightKey, selected: false, seconds: 0)
+            return false
+        }
+        // A random time within the remaining window, never in the past.
+        let startOfDay = calendar.startOfDay(for: now)
+        let windowStart = startOfDay.addingTimeInterval(
+            TimeInterval(Self.windowStartHour * 3600)
+        )
+        let windowEnd = startOfDay.addingTimeInterval(
+            TimeInterval(Self.windowEndHour * 3600)
+        )
+        let earliest = max(now.addingTimeInterval(Self.minimumLeadSeconds), windowStart)
+        guard earliest < windowEnd else {
+            // Not enough window left: skip this night.
+            persistence.storeNightDecision(forKey: nightKey, selected: false, seconds: 0)
+            return false
+        }
+        let span = windowEnd.timeIntervalSince(earliest)
+        let scheduled = earliest.addingTimeInterval(rng.nextUnit() * span)
+        let seconds = scheduled.timeIntervalSince(startOfDay)
+        persistence.storeNightDecision(forKey: nightKey, selected: true, seconds: seconds)
+        return false // fires later this night (or on restart after the time).
+    }
+}
+
 /// Pure meteor event coordinator: eligibility, phases, timing and the
-/// fixed world-space trajectory. The presenter renders it.
+/// fixed world-space trajectory.
+///
+/// TIMEBASE CONTRACT: the 4 Hz scheduler owns PHASES and eligibility;
+/// the continuous renderer owns frame-by-frame position. Both share ONE
+/// monotonic clock (`flightStartUptime`) so progress and phase
+/// boundaries can never disagree. The controller never moves the panel.
 final class MeteorEventController {
     enum Trigger: Equatable { case automatic, replay }
 
@@ -73,23 +204,24 @@ final class MeteorEventController {
         /// The wish: eyes closed. Constant, 2.5-4 s per spec.
         var wishingDuration: TimeInterval = 3.0
         var celebrationDuration: TimeInterval = 2.0
-        /// Quiet hours: no automatic meteors between 23:00 and 08:00.
-        var quietHourStart = 23
-        var quietHourEnd = 8
-        /// Automatic scheduling limits.
-        var cooldown: TimeInterval = 45 * 60
-        var maxPerDay = 2
     }
 
     let timing: Timing
     let clock: BirthdayClock
     let persistence: MeteorPersistence
+    private let nightly: MeteorNightlyScheduler
+    private var rng: any RandomSource
+
+    /// Injectable monotonic clock (host uptime in production); tests
+    /// control this to verify the single-timebase contract.
+    var monotonicNow: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
 
     private(set) var phase: MeteorPhase = .idle
     private(set) var trigger: Trigger?
     private(set) var trajectory: MeteorTrajectory?
     private var startedAt: Date?
-    private var flightStartAt: Date?
+    /// The canonical flight origin on the monotonic clock.
+    private var flightStartUptime: TimeInterval?
     private var pendingTrigger: Trigger?
 
     weak var presenter: MeteorEventPresenting?
@@ -99,23 +231,32 @@ final class MeteorEventController {
 
     var isRunning: Bool { phase != .idle }
 
-    /// Flight start time, exposed for the presenter's 30 Hz render loop.
-    var flightStartedAt: Date? { flightStartAt }
-
-    /// Normalized flight progress (nil outside the flight phase).
-    func flightProgress(at now: Date) -> CGFloat? {
-        guard phase == .flight, let flightStartAt else { return nil }
-        return CGFloat(min(max(now.timeIntervalSince(flightStartAt) / timing.flightDuration, 0), 1))
-    }
-
     init(
         clock: BirthdayClock = SystemBirthdayClock(),
         persistence: MeteorPersistence = MeteorPersistence(),
-        timing: Timing = Timing()
+        timing: Timing = Timing(),
+        nightly: MeteorNightlyScheduler = MeteorNightlyScheduler(),
+        seededRNG: (any RandomSource)? = nil
     ) {
         self.clock = clock
         self.persistence = persistence
         self.timing = timing
+        self.nightly = nightly
+        if let seededRNG {
+            rng = seededRNG
+        } else {
+            rng = SystemRandomSource()
+        }
+    }
+
+    // MARK: - Single canonical flight progress (renderer authority)
+
+    /// Normalized flight progress from the monotonic clock (nil outside
+    /// the flight phase). The ONLY source of frame-by-frame position.
+    func flightProgress(atUptime uptime: TimeInterval) -> CGFloat? {
+        guard phase == .flight, let flightStartUptime else { return nil }
+        let elapsed = uptime - flightStartUptime
+        return CGFloat(min(max(elapsed / timing.flightDuration, 0), 1))
     }
 
     // MARK: - Triggering
@@ -137,31 +278,17 @@ final class MeteorEventController {
         begin(pending)
     }
 
-    /// Automatic eligibility: cooldown, daily cap, quiet hours.
-    func shouldTriggerAutomatically(now: Date) -> Bool {
-        guard !(isPetBusy?() ?? false), !(isBirthdayBlocking?() ?? false) else { return false }
-        let calendar = clock.calendar
-        let hour = calendar.component(.hour, from: now)
-        if hour >= timing.quietHourStart || hour < timing.quietHourEnd { return false }
-        guard now.timeIntervalSince(persistence.lastAutomaticDate ?? .distantPast) >= timing.cooldown else {
-            return false
-        }
-        let dayKey = MeteorPersistence.dayKey(now, calendar: calendar)
-        guard persistence.count(forDayKey: dayKey) < timing.maxPerDay else { return false }
-        return true
-    }
-
     private func begin(_ trigger: Trigger) {
         guard phase == .idle else { return }
         self.trigger = trigger
         startedAt = clock.now()
-        flightStartAt = nil
+        flightStartUptime = nil
         phase = .noticing
         EventDiagnostics.meteor("STARTED trigger=\(trigger)")
         presenter?.noticeScene()
     }
 
-    // MARK: - Advancing
+    // MARK: - Advancing (phases only — never panel movement)
 
     func advance(at now: Date) {
         guard let startedAt else { return }
@@ -175,50 +302,53 @@ final class MeteorEventController {
     }
 
     private func stepOnce(at now: Date, startedAt: Date) {
-        let elapsed = now.timeIntervalSince(startedAt)
+        let dateElapsed = now.timeIntervalSince(startedAt)
         switch phase {
         case .idle:
             return
         case .noticing:
-            if elapsed >= timing.noticeDuration {
+            if dateElapsed >= timing.noticeDuration {
                 phase = .flight
-                flightStartAt = now
+                // The shared origin: phases and the renderer both derive
+                // flight progress from THIS monotonic timestamp.
+                flightStartUptime = monotonicNow()
                 let visible = presenter?.activeVisibleFrame ?? .zero
                 trajectory = MeteorTrajectory.fixed(in: visible)
                 presenter?.flightDidBegin(trajectory: trajectory!)
                 EventDiagnostics.meteor("FLIGHT_BEGAN")
             }
         case .flight:
-            // Flight progress is anchored on TOTAL elapsed time so the
-            // catch-up loop can sweep the whole flight in one pass.
-            let flightElapsed = now.timeIntervalSince(startedAt) - timing.noticeDuration
-            let progress = CGFloat(min(max(flightElapsed / timing.flightDuration, 0), 1))
-            presenter?.flightFrame(progress: progress, at: now)
+            // Phase boundary on the SAME monotonic timeline as the
+            // renderer: the flight ends exactly when progress reaches 1.
+            guard let flightStartUptime else { return }
+            let flightElapsed = monotonicNow() - flightStartUptime
             if flightElapsed >= timing.flightDuration {
                 phase = .departed
                 presenter?.meteorDeparted()
                 EventDiagnostics.meteor("DEPARTED")
             }
         case .departed:
-            let departedElapsed = now.timeIntervalSince(startedAt)
-                - timing.noticeDuration - timing.flightDuration
-            if departedElapsed >= timing.departedDuration {
+            guard let flightStartUptime else { return }
+            let afterFlight = monotonicNow() - flightStartUptime - timing.flightDuration
+            if afterFlight >= timing.departedDuration {
                 phase = .wishing
                 presenter?.wishingDidBegin()
                 EventDiagnostics.meteor("WISHING_BEGAN")
             }
         case .wishing:
-            let wishingElapsed = now.timeIntervalSince(startedAt)
-                - timing.noticeDuration - timing.flightDuration - timing.departedDuration
-            if wishingElapsed >= timing.wishingDuration {
+            guard let flightStartUptime else { return }
+            let afterDepart = monotonicNow() - flightStartUptime
+                - timing.flightDuration - timing.departedDuration
+            if afterDepart >= timing.wishingDuration {
                 phase = .celebration
                 presenter?.celebrationDidBegin()
                 EventDiagnostics.meteor("CELEBRATION_BEGAN")
             }
         case .celebration:
-            if elapsed >= timing.noticeDuration + timing.flightDuration
-                + timing.departedDuration + timing.wishingDuration
-                + timing.celebrationDuration {
+            guard let flightStartUptime else { return }
+            let afterWish = monotonicNow() - flightStartUptime
+                - timing.flightDuration - timing.departedDuration - timing.wishingDuration
+            if afterWish >= timing.celebrationDuration {
                 complete(now: now)
             }
         case .completed, .cancelled:
@@ -229,9 +359,6 @@ final class MeteorEventController {
     private func complete(now: Date) {
         phase = .completed
         presenter?.cleanup()
-        if trigger == .automatic {
-            persistence.recordAutomatic(at: now, calendar: clock.calendar)
-        }
         // The marker must be emitted BEFORE observers: smoke observers
         // may terminate the process.
         EventDiagnostics.meteor("COMPLETED")
@@ -251,68 +378,105 @@ final class MeteorEventController {
 
     private func reset() {
         startedAt = nil
-        flightStartAt = nil
+        flightStartUptime = nil
         trajectory = nil
         trigger = nil
         phase = .idle
     }
 
-    /// App tick: service pending replays, advance playback, and evaluate
-    /// automatic triggering on the same cadence as the birthday event.
+    /// App tick (4 Hz): service pending replays, advance phases, and
+    /// evaluate the nightly automatic decision.
     func tick() {
         let now = clock.now()
         servicePendingTrigger()
         advance(at: now)
         guard phase == .idle else { return }
-        if shouldTriggerAutomatically(now: now) {
+        let shouldFire = nightly.evaluate(
+            now: now,
+            calendar: clock.calendar,
+            rng: &rng,
+            persistence: persistence,
+            busy: isPetBusy?() ?? false,
+            birthdayBlocking: isBirthdayBlocking?() ?? false
+        )
+        if shouldFire {
             requestTrigger(.automatic)
             servicePendingTrigger()
         }
     }
 }
 
-/// The presenter side of the meteor event.
+/// The presenter side of the meteor event. The controller never moves
+/// the panel: the presenter's display-synced renderer is the sole
+/// position authority.
 protocol MeteorEventPresenting: AnyObject {
     /// The display the meteor will fly across (from the pet's screen).
     var activeVisibleFrame: CGRect { get }
     func noticeScene()
     func flightDidBegin(trajectory: MeteorTrajectory)
-    func flightFrame(progress: CGFloat, at now: Date)
     func meteorDeparted()
     func wishingDidBegin()
     func celebrationDidBegin()
     func cleanup()
 }
 
-/// UserDefaults persistence for automatic meteor scheduling.
+/// UserDefaults persistence for the nightly automatic meteor decision.
 struct MeteorPersistence {
-    static let lastKey = "warawarapet.meteor.lastAutomatic"
-    static let dayKeyPrefix = "warawarapet.meteor.day."
-    static let countKeyPrefix = "warawarapet.meteor.count."
-
     private let defaults: UserDefaults
+
+    struct NightDecision: Equatable {
+        var selected: Bool
+        var fired: Bool
+        var secondsSinceMidnight: TimeInterval
+    }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
 
-    var lastAutomaticDate: Date? {
-        guard let interval = defaults.object(forKey: Self.lastKey) as? TimeInterval else { return nil }
-        return Date(timeIntervalSince1970: interval)
-    }
-
-    func count(forDayKey key: String) -> Int {
-        defaults.integer(forKey: Self.countKeyPrefix + key)
-    }
-
-    func recordAutomatic(at date: Date, calendar: Calendar) {
-        defaults.set(date.timeIntervalSince1970, forKey: Self.lastKey)
-        let key = Self.dayKey(date, calendar: calendar)
-        defaults.set(count(forDayKey: key) + 1, forKey: Self.countKeyPrefix + key)
-    }
-
-    static func dayKey(_ date: Date, calendar: Calendar) -> String {
+    /// Night key: the LOCAL calendar date of the evening the 20:00
+    /// window starts on. The window never crosses midnight.
+    static func nightKey(_ date: Date, calendar: Calendar) -> String {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
         return "\(components.year ?? 0)-\(components.month ?? 0)-\(components.day ?? 0)"
+    }
+
+    private func key(_ suffix: String, nightKey: String) -> String {
+        "warawarapet.meteor.night.\(nightKey).\(suffix)"
+    }
+
+    func nightDecision(forKey nightKey: String) -> NightDecision? {
+        let selectedKey = key("selected", nightKey: nightKey)
+        guard defaults.object(forKey: selectedKey) != nil else { return nil }
+        return NightDecision(
+            selected: defaults.bool(forKey: selectedKey),
+            fired: defaults.bool(forKey: key("fired", nightKey: nightKey)),
+            secondsSinceMidnight: defaults.double(forKey: key("seconds", nightKey: nightKey))
+        )
+    }
+
+    func storeNightDecision(forKey nightKey: String, selected: Bool, seconds: TimeInterval) {
+        defaults.set(selected, forKey: key("selected", nightKey: nightKey))
+        defaults.set(false, forKey: key("fired", nightKey: nightKey))
+        defaults.set(seconds, forKey: key("seconds", nightKey: nightKey))
+    }
+
+    func markNightFired(forKey nightKey: String) {
+        defaults.set(true, forKey: key("fired", nightKey: nightKey))
+    }
+
+    /// Resolves the persisted scheduled time against a calendar.
+    func scheduledTime(forKey nightKey: String, calendar: Calendar) -> Date? {
+        guard let decision = nightDecision(forKey: nightKey),
+              decision.selected, decision.secondsSinceMidnight > 0 else { return nil }
+        let components = nightKey.split(separator: "-").compactMap { Int($0) }
+        guard components.count == 3 else { return nil }
+        var dateComponents = DateComponents()
+        dateComponents.year = components[0]
+        dateComponents.month = components[1]
+        dateComponents.day = components[2]
+        dateComponents.timeZone = calendar.timeZone
+        guard let startOfDay = calendar.date(from: dateComponents) else { return nil }
+        return startOfDay.addingTimeInterval(decision.secondsSinceMidnight)
     }
 }

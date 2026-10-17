@@ -82,17 +82,43 @@ final class GiftPreviewGeneratorTests: XCTestCase {
     ) throws {
         let visible = CGRect(x: 0, y: 0, width: 1440, height: 900)
         let trajectory = MeteorTrajectory.fixed(in: visible)
-        guard let image = GiftAssetStore.shared.image(named: "meteor_celfilm.png") else {
-            throw XCTSkip("meteor asset unavailable")
+        guard let headImage = GiftAssetStore.shared.image(named: "meteor_head_from_approved.png") else {
+            throw XCTSkip("meteor head asset unavailable")
         }
-        let state = MeteorViewState()
-        state.image = image
-        let canvasPt: CGFloat = 150 / (881.0 / 1024)
-        state.canvasSize = CGSize(width: canvasPt, height: canvasPt)
+        let sparkleImage = GiftAssetStore.shared.image(named: "meteor_sparkle_from_approved.png")
+        let sampler = MeteorTrajectorySampler(trajectory: trajectory)
+        let headCanvas = CGSize(width: 408.0 * 36.0 / 125.0, height: 408.0 * 36.0 / 125.0)
 
-        for (name, t) in [("100-meteor-entrance", 0.06), ("101-meteor-mid", 0.5), ("102-meteor-exit", 0.94)] {
-            let position = trajectory.position(at: CGFloat(t))
-            state.rotationDegrees = trajectory.heading(at: CGFloat(t)) * 180 / .pi + 15
+        for (name, s) in [("100-meteor-entrance", 0.06), ("101-meteor-mid", 0.5), ("102-meteor-exit", 0.94)] {
+            let progress = CGFloat(s)
+            // Synthesize the exact scene the production renderer builds:
+            // head at the trajectory position plus a short history tail.
+            let sceneState = MeteorSceneState()
+            var segments: [MeteorTrailSegment] = []
+            for strand in 0..<5 {
+                var pts: [CGPoint] = []
+                for step in 0..<10 {
+                    let sp = max(0.0, progress - Double(strand * 2 + step) * 0.012)
+                    let world = sampler.position(atArcLength: CGFloat(sp))
+                    pts.append(CGPoint(x: 60 + (world.x - trajectory.entry.x) * 0.5,
+                                       y: 320 - (world.y - trajectory.entry.y) * 0.5))
+                }
+                segments.append(MeteorTrailSegment(
+                    id: strand, points: pts,
+                    opacity: 0.2 + 0.08 * CGFloat(strand),
+                    width: 2.6 - 0.35 * CGFloat(strand),
+                    colorIndex: strand % 2
+                ))
+            }
+            let headPosition = sampler.position(atArcLength: progress)
+            let panelCenter = CGPoint(x: 60 + (headPosition.x - trajectory.entry.x) * 0.5,
+                                      y: 320 - (headPosition.y - trajectory.entry.y) * 0.5)
+            sceneState.frame = MeteorSceneFrame(
+                headRotation: sampler.heading(atArcLength: progress) * 180 / .pi + 15,
+                headAlpha: 1,
+                trailSegments: segments,
+                sparkles: []
+            )
             let content = ZStack {
                 NightSkyBackground()
                 VStack(spacing: 6) {
@@ -104,11 +130,13 @@ final class GiftPreviewGeneratorTests: XCTestCase {
                         )
                         .frame(width: mainSize.width, height: mainSize.height)
                         .position(x: 300, y: 380)
-                        MeteorView(state: state)
-                            .position(
-                                x: position.x / 1440 * 760,
-                                y: 900 - position.y * 0.75
-                            )
+                        MeteorSceneView(
+                            state: sceneState,
+                            headImage: headImage,
+                            sparkleImage: sparkleImage,
+                            headCanvasSize: headCanvas
+                        )
+                        .position(x: panelCenter.x, y: panelCenter.y)
                     }
                     .frame(width: 760, height: 480)
                 }

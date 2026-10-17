@@ -6,11 +6,18 @@ import Foundation
 final class GiftAssetStore {
     static let shared = GiftAssetStore()
 
+    /// Production meteor assets: the approved-origin head + sparkle
+    /// (from the dynamic-trail handoff). The old full-canvas meteor with
+    /// its baked tail is kept as a verified REFERENCE ONLY — never drawn.
     static let requiredFileNames: [String] = [
+        "meteor_head_from_approved.png",
+        "meteor_sparkle_from_approved.png",
         "meteor_celfilm.png"
     ]
 
     static let expectedSHA256: [String: String] = [
+        "meteor_head_from_approved.png": "ea7b48ed3e2cd88e03728c13e4d00776fc93005a7243cc4164247f3f7703045c",
+        "meteor_sparkle_from_approved.png": "7ee30c62c88974bad019fc99ac931b357754eecdcc822948329180ee21342805",
         "meteor_celfilm.png": "049f0e05b20be1198926be29d697dadadf0b443e41e216e90f0ea1c9abd55312"
     ]
 
