@@ -7,7 +7,6 @@ import SwiftUI
 struct SeasonalPropView: View {
     let kind: SeasonalEventKind
     let store: SeasonalAssetStore
-    let primarySize: CGFloat
     var showSecondary: Bool = false
 
     @State private var alive = false

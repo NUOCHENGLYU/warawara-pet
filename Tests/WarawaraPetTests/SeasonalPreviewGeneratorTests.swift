@@ -44,7 +44,6 @@ final class SeasonalPreviewGeneratorTests: XCTestCase {
         for (name, kind) in scenes {
             let prop = SeasonalPropView(
                 kind: kind, store: store,
-                primarySize: kind.primaryDisplayPoints,
                 showSecondary: kind.showsSecondaryDecor
             )
             .frame(width: 220, height: 220)
@@ -73,7 +72,7 @@ final class SeasonalPreviewGeneratorTests: XCTestCase {
                     Text("cny present (\(suffix))").font(.headline).foregroundColor(caption)
                     HStack(spacing: 30) {
                         rigView(rig, rigLoader, mainSize)
-                        SeasonalPropView(kind: .cny, store: store, primarySize: 55, showSecondary: true)
+                        SeasonalPropView(kind: .cny, store: store, showSecondary: true)
                             .frame(width: 220, height: 220)
                     }
                 }
@@ -128,7 +127,7 @@ final class SeasonalPreviewGeneratorTests: XCTestCase {
                 HStack(alignment: .bottom, spacing: 14) {
                     rigView(rig, rigLoader, mainSize)
                     ForEach(kinds, id: \.self) { kind in
-                        qaCell(kind: kind, store: store)
+                        self.qaCell(kind: kind, store: store)
                     }
                 }
             }
