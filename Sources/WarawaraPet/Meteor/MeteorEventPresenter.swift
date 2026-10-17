@@ -340,7 +340,7 @@ final class MeteorEventPresenter: MeteorEventPresenting {
             let opacity = max(0, sin(phase * .pi)) * CGFloat(max(0, 1 - age / trailMaxAge))
             guard opacity > 0.01 else { continue }
             let perpDx: CGFloat = index % 2 == 0 ? 6 : -6
-            let perpDy: CGFloat = (index * 11) % 14 - 7
+            let perpDy: CGFloat = CGFloat((index * 11) % 14 - 7)
             sparkles.append(MeteorSparkle(
                 id: index,
                 position: toPanel(CGPoint(x: anchor.x + perpDx, y: anchor.y + perpDy)),
