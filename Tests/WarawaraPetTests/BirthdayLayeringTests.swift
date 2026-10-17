@@ -32,9 +32,13 @@ final class BirthdayLayeringTests: XCTestCase {
         }
     }
 
+    private final class PanelBox {
+        var panels: [OrderingSpyPanel] = []
+    }
+
     private func makePresenter(
         windowController: PetWindowController,
-        panels: inout [OrderingSpyPanel]
+        box: PanelBox
     ) -> BirthdayPresenter {
         let persistence = BirthdayPersistence(defaults: defaults)
         let coordinator = BirthdayEventCoordinator(persistence: persistence)
@@ -46,7 +50,7 @@ final class BirthdayLayeringTests: XCTestCase {
         )
         presenter.makePropPanel = { size, interactive in
             let panel = OrderingSpyPanel(size: size, interactive: interactive)
-            panels.append(panel)
+            box.panels.append(panel)
             return panel
         }
         return presenter
@@ -54,13 +58,13 @@ final class BirthdayLayeringTests: XCTestCase {
 
     func testPropsRaisedAboveCompanionsAndSustainedThroughLateOrderFrontCalls() {
         let windowController = PetWindowController()
-        var panels: [OrderingSpyPanel] = []
-        let presenter = makePresenter(windowController: windowController, panels: &panels)
+        let box = PanelBox()
+        let presenter = makePresenter(windowController: windowController, box: box)
 
         // Carrying starts: panels created and ordered front once each.
         presenter.presentCarriedProps()
-        XCTAssertEqual(panels.count, 2, "cake + envelope panels")
-        XCTAssertTrue(panels.allSatisfy { $0.orderFrontCount == 1 })
+        XCTAssertEqual(box.panels.count, 2, "cake + envelope panels")
+        XCTAssertTrue(box.panels.allSatisfy { $0.orderFrontCount == 1 })
 
         // Companion panels get (re-)ordered front AFTER this (group
         // start, pooled reuse): every one of those passes must re-assert
@@ -69,7 +73,7 @@ final class BirthdayLayeringTests: XCTestCase {
         XCTAssertTrue(presenter.propsRaisedAboveCompanions)
         presenter.reassertLayering() // late companion orderFront (fresh panels)
         presenter.reassertLayering() // late companion orderFront (pool reuse)
-        XCTAssertEqual(panels.map(\.orderFrontCount), [4, 4],
+        XCTAssertEqual(box.panels.map(\.orderFrontCount), [4, 4],
                        "props must be re-raised after EVERY companion ordering pass")
         XCTAssertGreaterThanOrEqual(presenter.layeringReassertCount, 3)
     }
@@ -79,9 +83,8 @@ final class BirthdayLayeringTests: XCTestCase {
         windowController.configureForTesting(
             frame: CGRect(x: 400, y: 300, width: 180, height: 200)
         )
-        var panels: [OrderingSpyPanel] = []
-        let presenter = makePresenter(windowController: windowController, panels: &panels)
-
+        let box = PanelBox()
+        let presenter = makePresenter(windowController: windowController, box: box)
         var petReasserts = 0
         // Production wiring: the letter close re-asserts the pet panel
         // AND re-raises the props above it.
@@ -99,7 +102,7 @@ final class BirthdayLayeringTests: XCTestCase {
         NotificationCenter.default.post(name: .birthdayLetterDidClose, object: nil)
         XCTAssertEqual(petReasserts, 1, "letter close re-asserts the pet panel")
         XCTAssertTrue(
-            panels.allSatisfy { $0.orderFrontCount >= 3 },
+            box.panels.allSatisfy { $0.orderFrontCount >= 3 },
             "props must be above the re-asserted pet panel after letter close"
         )
     }
@@ -108,8 +111,8 @@ final class BirthdayLayeringTests: XCTestCase {
         // The AppDelegate wires this callback to the presenter; the
         // presenter side must re-assert every time it fires.
         let windowController = PetWindowController()
-        var panels: [OrderingSpyPanel] = []
-        let presenter = makePresenter(windowController: windowController, panels: &panels)
+        let box = PanelBox()
+        let presenter = makePresenter(windowController: windowController, box: box)
         presenter.presentCarriedProps()
 
         let observer: () -> Void = { [weak presenter] in presenter?.reassertLayering() }
@@ -118,7 +121,7 @@ final class BirthdayLayeringTests: XCTestCase {
         observer()
         observer()
         XCTAssertTrue(
-            panels.allSatisfy { $0.orderFrontCount >= 3 },
+            box.panels.allSatisfy { $0.orderFrontCount >= 3 },
             "the ordered-observer path must keep props in front"
         )
     }
