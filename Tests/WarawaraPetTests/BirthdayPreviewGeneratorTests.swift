@@ -42,6 +42,7 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
         try renderLetterWindow(store: store, to: outputDir)
         try renderFinalEnvelope(rig: rig, rigLoader: rigLoader, mainSize: mainSize, store: store, to: outputDir)
         try renderSecondFixSheets(rig: rig, rigLoader: rigLoader, mainSize: mainSize, companionSize: companionSize, store: store, to: outputDir)
+        try renderPropsInFrontSheets(rig: rig, rigLoader: rigLoader, companionSize: companionSize, store: store, to: outputDir)
 
         for name in ["46-birthday-noticing.png", "47-birthday-carried-gifts.png",
                      "48-birthday-gifts-placed.png", "49-birthday-celebration.png",
@@ -49,7 +50,8 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
                      "52-birthday-letter.png", "53-birthday-final-envelope-light.png",
                      "54-birthday-final-envelope-dark.png",
                      "55-birthday-cake-carried.png", "56-birthday-envelope-carried.png",
-                     "57-birthday-envelope-retired.png", "58-birthday-double-click-reopen.png"] {
+                     "57-birthday-envelope-retired.png", "58-birthday-double-click-reopen.png",
+                     "59-birthday-props-in-front.png"] {
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
                 "missing birthday preview \(name)"
@@ -161,6 +163,42 @@ final class BirthdayPreviewGeneratorTests: XCTestCase {
         }
         try render(reopen, size: CGSize(width: 760, height: 400), scale: 1,
                    to: dir.appendingPathComponent("58-birthday-double-click-reopen.png"))
+    }
+
+    /// 59: the sustained layering invariant — cake/tray and envelope must
+    /// be drawn IN FRONT of overlapping companion bodies (production
+    /// order: companions below, props above).
+    private func renderPropsInFrontSheets(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader,
+        companionSize: CGSize, store: BirthdayAssetStore, to dir: URL
+    ) throws {
+        let content = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 6) {
+                Text("layering invariant: props IN FRONT of overlapping companions").font(.headline)
+                ZStack {
+                    // Carrier companion OVERLAPPING the cake position...
+                    rigView(rig, rigLoader, idleParams(), companionSize)
+                        .position(x: 230, y: 240)
+                    // ...and the envelope position.
+                    rigView(rig, rigLoader, idleParams(), companionSize)
+                        .position(x: 370, y: 250)
+                    // Props drawn LAST = in front (production z-order).
+                    CakePropView(store: store, cakeSize: 85)
+                        .frame(width: 200, height: 230)
+                        .position(x: 230, y: 200)
+                    if let envelope = store.image(named: "envelope_closed.png") {
+                        Image(nsImage: envelope)
+                            .resizable()
+                            .frame(width: 62, height: 62)
+                            .position(x: 370, y: 270)
+                    }
+                }
+                .frame(width: 640, height: 420)
+            }
+        }
+        try render(content, size: CGSize(width: 640, height: 480), scale: 1,
+                   to: dir.appendingPathComponent("59-birthday-props-in-front.png"))
     }
 
     private func renderNoticing(rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, mainSize: CGSize, to dir: URL) throws {

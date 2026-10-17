@@ -45,6 +45,11 @@ final class GroupSequenceController {
     /// scheduling.
     var onActiveChanged: ((Bool) -> Void)?
 
+    /// Fired AFTER companion panels have been (re-)ordered front, so the
+    /// birthday layering can re-assert props above them. Without this the
+    /// cake/envelope sink behind every companion body.
+    var onCompanionPanelsOrdered: (() -> Void)?
+
     /// Live companion centers (id -> screen position) each tick; the
     /// birthday presenter uses this to carry props with companions.
     var onCompanionCenters: (([Int: CGPoint]) -> Void)?
@@ -132,6 +137,10 @@ final class GroupSequenceController {
             panels[companion.config.id] = panel
             runtimes.append(runtime)
         }
+        // Companions were just ordered ABOVE every other floating panel
+        // (including the carried birthday props): tell the layering so it
+        // can re-assert the cake/envelope in front of the carriers.
+        onCompanionPanelsOrdered?()
     }
 
     private func parkPanel(id: Int) {

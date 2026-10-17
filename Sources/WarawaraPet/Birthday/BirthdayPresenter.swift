@@ -16,6 +16,10 @@ final class BirthdayPresenter: BirthdayEventPresenting {
     /// panel's visibility after the letter window closes.
     var reassertPetVisibility: (() -> Void)?
 
+    /// Panel factory (test injection): spy subclasses observe the real
+    /// layering contract without changing production behavior.
+    var makePropPanel: ((CGSize, Bool) -> BirthdayPropPanel)?
+
     private var cakePanel: BirthdayPropPanel?
     private var envelopePanel: BirthdayPropPanel?
     private var letterWindowController: LetterWindowController?
@@ -29,6 +33,9 @@ final class BirthdayPresenter: BirthdayEventPresenting {
     /// panels (regression flag: the cake must render in FRONT of its
     /// carrier companion).
     private(set) var propsRaisedAboveCompanions = false
+    /// Number of full layering re-asserts (tests verify the invariant is
+    /// maintained, not applied only once).
+    private(set) var layeringReassertCount = 0
     private(set) var letterReadCount = 0
     private(set) var letterPresentedCount = 0
     private(set) var envelopeRetiredThisSession = false
@@ -123,6 +130,10 @@ final class BirthdayPresenter: BirthdayEventPresenting {
             cakePanel.animator().setFrameOrigin(origins.cake)
             envelopePanel.animator().setFrameOrigin(origins.envelope)
         }
+        // The delivered desktop layout is the final accepted state:
+        // re-assert the props in front of anything that may have been
+        // ordered above them during delivery.
+        reassertLayering()
         // The pet now looks at the delivered cake.
         aimAttention(at: CGPoint(
             x: origins.cake.x + cakePanelSize.width / 2,
@@ -225,20 +236,35 @@ final class BirthdayPresenter: BirthdayEventPresenting {
     /// The companion panels are ordered front when the group starts
     /// (AFTER the props were first shown), which would put the carrier
     /// body ON TOP of the carried cake. Re-order the prop panels above
-    /// the companions once, so the cake/tray/envelope render in FRONT
-    /// of the carrier silhouette. One-time correction — no permanent
-    /// global window forcing.
+    /// the companions so the cake/tray/envelope render in FRONT of the
+    /// carrier silhouette. The companion-ordering observer re-asserts
+    /// this AFTER every preparePanels() ordering pass.
     private func raisePropsAboveCompanions() {
+        reassertLayering()
+        propsRaisedAboveCompanions = true
+    }
+
+    /// Central birthday-window layering invariant: the carried/delivered
+    /// props must always be visually in front of the pet and companion
+    /// panels. Idempotent; called whenever companions are shown/reused/
+    /// reordered, after delivery, and after the letter closes (which
+    /// re-orders the main pet panel).
+    func reassertLayering() {
+        layeringReassertCount += 1
         cakePanel?.orderFrontRegardless()
         envelopePanel?.orderFrontRegardless()
-        propsRaisedAboveCompanions = true
+        EventReplayLog.birthdayLayering(
+            cakeWindow: cakePanel?.windowNumber,
+            envelopeWindow: envelopePanel?.windowNumber
+        )
     }
 
     // MARK: - Panels
 
     private func ensureCakePanel() {
         guard cakePanel == nil else { return }
-        let panel = BirthdayPropPanel(size: cakePanelSize, interactive: false)
+        let panel = makePropPanel?(cakePanelSize, false)
+            ?? BirthdayPropPanel(size: cakePanelSize, interactive: false)
         let view = CakePropView(store: store, cakeSize: cakeSize, carryHelper: cakeCarryHelper)
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: cakePanelSize)
@@ -249,7 +275,8 @@ final class BirthdayPresenter: BirthdayEventPresenting {
 
     private func ensureEnvelopePanel() {
         guard envelopePanel == nil else { return }
-        let panel = BirthdayPropPanel(size: envelopePanelSize, interactive: false)
+        let panel = makePropPanel?(envelopePanelSize, false)
+            ?? BirthdayPropPanel(size: envelopePanelSize, interactive: false)
         let view = EnvelopePropView(
             store: store,
             envelopeSize: envelopeSize,

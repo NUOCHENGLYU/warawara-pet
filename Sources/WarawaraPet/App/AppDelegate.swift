@@ -54,11 +54,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController.setCompanionCentersObserver { [weak presenter] centers in
             presenter?.companionCentersChanged(centers)
         }
+        windowController.setCompanionPanelsOrderedObserver { [weak presenter] in
+            // Companions were just (re-)ordered front (fresh panels AND
+            // pooled reuse): keep the carried props visually in front.
+            presenter?.reassertLayering()
+        }
         windowController.onPetDoubleClick = { [weak presenter] in
             presenter?.openLetterForDoubleClick()
         }
-        presenter.reassertPetVisibility = { [weak windowController] in
+        presenter.reassertPetVisibility = { [weak windowController, weak presenter] in
+            // Closing the letter re-orders the main pet panel front; the
+            // props must go back above it so the cake stays visible.
             windowController?.reassertPetVisibility()
+            presenter?.reassertLayering()
         }
 
         birthdayCoordinator = coordinator

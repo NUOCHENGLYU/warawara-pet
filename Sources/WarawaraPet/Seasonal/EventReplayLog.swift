@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Consistent runtime replay diagnostics (stdout + unified logging).
@@ -30,6 +31,50 @@ enum EventReplayLog {
 
     static func visible(id: String) {
         emit("EVENT_REPLAY_VISIBLE id=\(id)")
+    }
+
+    // MARK: - Production-presentation diagnostics (post-audit)
+
+    static func presenterAttached(id: String) {
+        emit("EVENT_PRESENTER_ATTACHED id=\(id)")
+    }
+
+    static func assetLoaded(id: String, name: String) {
+        emit("EVENT_ASSET_LOADED id=\(id) name=\(name)")
+    }
+
+    static func assetMissing(id: String, name: String) {
+        emit("EVENT_ASSET_MISSING id=\(id) name=\(name)")
+    }
+
+    static func windowPresented(
+        id: String,
+        visible: Bool,
+        frame: CGRect,
+        level: NSWindow.Level,
+        alpha: CGFloat
+    ) {
+        emit(
+            "EVENT_WINDOW_PRESENTED id=\(id) visible=\(visible) "
+            + "frame=\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width)),\(Int(frame.height)) "
+            + "level=\(level.rawValue) alpha=\(String(format: "%.2f", alpha))"
+        )
+    }
+
+    static func sceneUpdated(id: String, phase: String) {
+        emit("EVENT_SCENE_UPDATED id=\(id) phase=\(phase)")
+    }
+
+    static func sceneFailed(id: String, reason: String) {
+        emit("EVENT_SCENE_FAILED id=\(id) reason=\(reason)")
+    }
+
+    static func finished(id: String) {
+        emit("EVENT_FINISHED id=\(id)")
+    }
+
+    static func birthdayLayering(cakeWindow: Int?, envelopeWindow: Int?) {
+        emit("EVENT_BIRTHDAY_LAYERING cakeWindow=\(cakeWindow.map(String.init) ?? "-") envelopeWindow=\(envelopeWindow.map(String.init) ?? "-")")
     }
 
     static func phase(id: String, phase: String) {

@@ -68,6 +68,22 @@ final class PetWindowController: NSObject {
         groupSequenceController?.onCompanionCenters = observer
     }
 
+    /// Companion panel ordering observer (birthday layering re-asserts
+    /// props above carriers whenever companions are (re-)ordered front).
+    func setCompanionPanelsOrderedObserver(_ observer: @escaping () -> Void) {
+        groupSequenceController?.onCompanionPanelsOrdered = observer
+    }
+
+    /// Test hook: installs a bare pet panel at a known frame without the
+    /// autonomous machinery, so production presenters can be exercised
+    /// against a REAL AppKit window boundary.
+    func configureForTesting(frame: CGRect) {
+        let panel = PetPanel(size: frame.size)
+        panel.setFrame(frame, display: false)
+        panel.orderFrontRegardless()
+        self.panel = panel
+    }
+
     /// Re-asserts the pet panel's visibility (defensive recovery after
     /// the letter window closes or app deactivation).
     func reassertPetVisibility() {
