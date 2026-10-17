@@ -168,4 +168,9 @@ final class EventScheduler {
             pendingReplayKinds.append(kind)
         }
     }
+
+    /// The production presenter for a kind (developer diagnostics).
+    func presenter(for kind: SeasonalEventKind) -> SeasonalEventPresenter? {
+        presenters[kind]
+    }
 }

@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingShowLetterRequested = false
     private var eventScheduler: EventScheduler?
     private var pendingSeasonalReplays: [SeasonalEventKind] = []
+    private var pendingPropDebug: SeasonalEventKind?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Load sprite assets BEFORE the first pet render so the
@@ -127,6 +128,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scheduler.requestReplay(kind: kind)
         }
         pendingSeasonalReplays.removeAll()
+        if let debugKind = pendingPropDebug {
+            pendingPropDebug = nil
+            // Developer static-layout diagnostic: pin the prop fully
+            // opaque at its anchor and exit after the geometry dump.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak scheduler] in
+                scheduler?.presenter(for: debugKind)?.presentStaticProp(kind: debugKind)
+            }
+        }
     }
 
     private func birthdayTick() {
@@ -145,6 +154,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             EventReplayLog.ready(id: kind.replayArgument)
             pendingSeasonalReplays.append(kind)
         }
+    }
+
+    /// Developer-only static layout diagnostic (--prop-debug <kind>).
+    func requestPropDebug(kind: SeasonalEventKind) {
+        pendingPropDebug = kind
     }
 
     /// Called from the main entry point after argument parsing.

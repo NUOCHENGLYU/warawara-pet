@@ -33,11 +33,15 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
     private let sceneModel = SeasonalSceneModel()
     private let effectModel = SeasonalEffectModel()
     private var choreographyTimer: Timer?
+    private var staticDebugTimer: Timer?
     private var phase: SeasonalPhase = .idle
     private var phaseStart = Date()
     private var sceneStart = Date()
     private var lastUpdateLog = Date(timeIntervalSince1970: 0)
     private var attentionDirection: CGVector?
+    /// GROUNDED props keep a frozen world anchor captured at scene start:
+    /// they never follow a pet window that moves during hop/float.
+    private var frozenAnchors: EventAnchorSystem?
 
     /// Production-path observability (tests assert against the REAL
     /// presenter, not a fake).
@@ -96,6 +100,7 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
         phase = .approach
         phaseStart = Date()
         sceneStart = Date()
+        frozenAnchors = EventAnchorSystem(petFrame: petFrame)
         let anchors = EventAnchorSystem(petFrame: petFrame)
         let startPose = SeasonalChoreography.pose(
             kind: kind, phase: .approach, elapsedInPhase: 0, totalElapsed: 0,
@@ -109,17 +114,24 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
         EventReplayLog.visible(id: kind.replayArgument)
         EventReplayLog.anchor(id: kind.replayArgument, anchor: anchorName(for: kind))
         verifyPresentedWindow(kind: kind, panel: propPanel)
+        logPropGeometry(kind: kind, label: "first-appearance", petFrame: petFrame)
         startChoreographyTimer()
     }
 
     func settleProp() {
         phase = .present
         phaseStart = Date()
+        if let kind = coordinator?.kind, let petFrame = windowController?.currentFrame {
+            logPropGeometry(kind: kind, label: "held", petFrame: petFrame)
+        }
     }
 
     func celebrateScene() {
         phase = .celebrate
         phaseStart = Date()
+        if let kind = coordinator?.kind, let petFrame = windowController?.currentFrame {
+            logPropGeometry(kind: kind, label: "max-extent", petFrame: petFrame)
+        }
         // Release the gaze so the small celebration hop can run, then the
         // choreography loop re-acquires attention once the hop finishes.
         windowController?.setEventAttention(nil)
@@ -131,11 +143,99 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
         departCallCount += 1
         phase = .depart
         phaseStart = Date()
+        if let kind = coordinator?.kind, let petFrame = windowController?.currentFrame {
+            logPropGeometry(kind: kind, label: "before-removal", petFrame: petFrame)
+        }
     }
 
     func clearAttention() {
         attentionDirection = nil
         windowController?.setEventAttention(nil)
+    }
+
+    // MARK: - Developer static layout diagnostic (--prop-debug <kind>)
+
+    /// Pins one prop at its semantic anchor, fully opaque, with NO
+    /// choreography or random timing, logs the real runtime geometry once
+    /// per second for six seconds, then exits. Uses the genuine
+    /// SeasonalSceneView, real asset loading and real AppKit panels.
+    func presentStaticProp(kind: SeasonalEventKind) {
+        guard let petFrame = windowController?.currentFrame, petFrame != .zero else {
+            EventReplayLog.sceneFailed(id: kind.replayArgument, reason: "invalid-geometry")
+            exit(1)
+        }
+        verifyAssets(kind: kind)
+        ensurePanels(kind: kind)
+        guard let propPanel else {
+            EventReplayLog.sceneFailed(id: kind.replayArgument, reason: "panel-creation-failed")
+            exit(1)
+        }
+        let anchors = EventAnchorSystem(petFrame: petFrame)
+        let visible = ScreenGeometry.visibleFrame(for: petFrame)
+        let timing = SeasonalTiming.forKind(kind)
+        var pose = SeasonalChoreography.pose(
+            kind: kind, phase: .approach, elapsedInPhase: timing.approachDuration,
+            totalElapsed: timing.approachDuration, anchors: anchors,
+            visibleFrame: visible, timing: timing
+        )
+        if kind == .paperAirplane {
+            // Park the plane at a fixed near-head point instead of
+            // mid-flight.
+            pose.position = CGPoint(x: anchors.headCenter.x + 46, y: anchors.headCenter.y + 30)
+            pose.rotationDegrees = 0
+            pose.showTrail = true
+        }
+        pose.alpha = 1
+        sceneModel.pose = pose
+        phase = .present
+        placePanels(pose: pose, kind: kind, petFrame: petFrame)
+        propPanel.alphaValue = 1
+        propPanel.orderFrontRegardless()
+        logPropGeometry(kind: kind, label: "static", petFrame: petFrame)
+
+        var seconds = 0
+        staticDebugTimer?.invalidate()
+        staticDebugTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            seconds += 1
+            self.logPropGeometry(kind: kind, label: "static+\(seconds)s", petFrame: petFrame)
+            if seconds >= 6 {
+                self.staticDebugTimer?.invalidate()
+                self.staticDebugTimer = nil
+                EventReplayLog.propDebugDone(id: kind.replayArgument)
+                exit(0)
+            }
+        }
+    }
+
+    /// Emits the full runtime geometry record for the current prop panel.
+    private func logPropGeometry(kind: SeasonalEventKind, label: String, petFrame: CGRect) {
+        guard let propPanel else { return }
+        let visible = ScreenGeometry.visibleFrame(for: petFrame)
+        let panelFrame = propPanel.frame
+        let extents = PropRenderGeometry.contentExtentRect(for: kind, lidLift: 1)
+        let contentScreen = PropRenderGeometry.primaryContentScreenRect(
+            panelFrame: panelFrame, kind: kind
+        )
+        let box = PropRenderGeometry.boxes[kind.primaryAsset]
+        EventReplayLog.propGeometry(
+            id: kind.replayArgument,
+            asset: kind.primaryAsset,
+            petFrame: petFrame,
+            desiredWidth: (PropRenderGeometry.targetRatios[kind.primaryAsset] ?? 0)
+                * PropRenderGeometry.petHeight,
+            bboxPx: box.map { "\(Int($0.left)),\(Int($0.top)),\(Int($0.right)),\(Int($0.bottom))" } ?? "-",
+            renderScale: PropRenderGeometry.scale(asset: kind.primaryAsset),
+            contentFrameInPanel: extents,
+            hostingBounds: propPanel.contentView?.bounds ?? .zero,
+            panelFrame: panelFrame,
+            screenFrame: visible,
+            alpha: propPanel.alphaValue,
+            level: propPanel.level,
+            isVisible: propPanel.isVisible,
+            phase: label,
+            withinVisible: visible.intersects(contentScreen)
+        )
     }
 
     // MARK: - Choreography loop (30 Hz — NOT the 1 Hz scheduler)
@@ -160,7 +260,9 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
         let now = Date()
         let elapsedInPhase = now.timeIntervalSince(phaseStart)
         let totalElapsed = now.timeIntervalSince(sceneStart)
-        let anchors = EventAnchorSystem(petFrame: petFrame)
+        // Grounded props stay in their frozen world anchor; held/flying
+        // props follow the live pet frame.
+        let anchors = anchorsFor(kind: kind, livePetFrame: petFrame)
         let visible = ScreenGeometry.visibleFrame(for: petFrame)
         let timing = coordinator?.timing ?? .forKind(kind)
 
@@ -215,7 +317,7 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
     // MARK: - Panels
 
     private func ensurePanels(kind: SeasonalEventKind) {
-        let size = SeasonalSceneMath.panelSize(for: kind)
+        let size = PropRenderGeometry.panelSize(for: kind)
         if propPanel == nil {
             let panel = BirthdayPropPanel(size: size, interactive: false)
             let hosting = NSHostingView(
@@ -238,16 +340,23 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
         }
     }
 
+    private func clampIntoVisible(_ origin: CGPoint, size: CGSize, visible: CGRect) -> CGPoint {
+        CGPoint(
+            x: min(max(origin.x, visible.minX + 4), max(visible.minX + 4, visible.maxX - size.width - 4)),
+            y: min(max(origin.y, visible.minY + 4), max(visible.minY + 4, visible.maxY - size.height - 4))
+        )
+    }
+
     private func placePanels(pose: SeasonalPropPose, kind: SeasonalEventKind, petFrame: CGRect) {
         guard let propPanel else { return }
         let visible = ScreenGeometry.visibleFrame(for: petFrame)
-        let size = SeasonalSceneMath.panelSize(for: kind)
-        let origin = SeasonalSceneMath.origin(anchoredAt: pose.position, kind: kind)
+        let size = PropRenderGeometry.panelSize(for: kind)
+        let origin = PropRenderGeometry.panelOrigin(anchor: pose.position, kind: kind)
         // The paper airplane flies ACROSS screen edges by design: no
         // clamping on its flight path.
         let clamped = kind == .paperAirplane
             ? origin
-            : SeasonalSceneMath.clampedOrigin(origin, panelSize: size, visibleFrame: visible)
+            : clampIntoVisible(origin, size: size, visible: visible)
         propPanel.setFrameOrigin(clamped)
         propPanel.alphaValue = min(max(pose.alpha, 0), 1)
 
@@ -257,10 +366,10 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
                 x: body.midX - 160, y: body.minY - 30,
                 width: 320, height: 320
             )
-            let clamped = SeasonalSceneMath.clampedOrigin(
-                effectFrame.origin, panelSize: effectFrame.size, visibleFrame: visible
+            let clampedEffect = clampIntoVisible(
+                effectFrame.origin, size: effectFrame.size, visible: visible
             )
-            effectPanel.setFrame(CGRect(origin: clamped, size: effectFrame.size), display: false)
+            effectPanel.setFrame(CGRect(origin: clampedEffect, size: effectFrame.size), display: false)
             effectPanel.alphaValue = min(max(effectModel.alpha, 0), 1)
         }
     }
@@ -268,7 +377,11 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
     // MARK: - Attention
 
     private func applyAttention(target: CGPoint, petFrame: CGRect) {
-        let direction = SeasonalSceneMath.attentionDirection(petFrame: petFrame, target: target)
+        let body = BirthdayPropLayout.petBodyRect(petFrame: petFrame)
+        let direction = EventAttentionMath.direction(
+            from: CGPoint(x: body.midX, y: body.midY),
+            to: target
+        )
         if direction == .zero { return }
         if attentionDirection == nil {
             attentionDirection = direction
@@ -280,6 +393,18 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
     }
 
     // MARK: - Anchors
+
+    /// Grounded props (christmas/newYear/cocoa/sprout) keep their frozen
+    /// world anchor; held/flying props (cny/umbrella/airplane) track the
+    /// live pet frame.
+    private func anchorsFor(kind: SeasonalEventKind, livePetFrame: CGRect) -> EventAnchorSystem {
+        switch kind {
+        case .christmas, .newYear, .hotCocoa, .sprout:
+            return frozenAnchors ?? EventAnchorSystem(petFrame: livePetFrame)
+        case .cny, .umbrella, .paperAirplane:
+            return EventAnchorSystem(petFrame: livePetFrame)
+        }
+    }
 
     private func anchorPoint(kind: SeasonalEventKind, anchors: EventAnchorSystem) -> CGPoint {
         switch kind {

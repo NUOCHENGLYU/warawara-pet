@@ -104,20 +104,6 @@ enum SeasonalEventKind: String, CaseIterable, Equatable {
     var showsSecondaryDecor: Bool {
         !secondaryAssets.isEmpty || !decorativeAssets.isEmpty
     }
-
-    /// Display size (points) for the primary prop, from the manifest
-    /// hints tuned to the accepted pet scale.
-    var primaryDisplayPoints: CGFloat {
-        switch self {
-        case .cny: return 55
-        case .christmas: return 72
-        case .newYear: return 65
-        case .umbrella: return 90
-        case .hotCocoa: return 70
-        case .sprout: return 56
-        case .paperAirplane: return 60
-        }
-    }
 }
 
 /// Typed loader for the seasonal/daily props. Same candidate strategy

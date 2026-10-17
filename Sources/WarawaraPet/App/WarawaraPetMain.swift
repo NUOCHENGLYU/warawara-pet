@@ -106,6 +106,20 @@ enum WarawaraPetMain {
                 exit(2)
             }
         }
+        if arguments.contains("--prop-debug") {
+            // Developer-only static layout diagnostic: pins one prop at
+            // its anchor, fully opaque, dumps real runtime geometry for
+            // six seconds, then exits. Not part of the gift experience.
+            if let kind = EventCommandLine.parsePropDebug(arguments: arguments) {
+                appDelegate.requestPropDebug(kind: kind)
+            } else {
+                let raw = arguments.firstIndex(of: "--prop-debug")
+                    .flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil } ?? ""
+                print("EVENT_PROP_DEBUG_UNKNOWN id=\(raw)")
+                print(EventCommandLine.usage)
+                exit(2)
+            }
+        }
         if arguments.contains("--show-letter") {
             appDelegate.requestShowLetter()
         }

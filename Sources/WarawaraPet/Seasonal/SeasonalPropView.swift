@@ -18,10 +18,17 @@ struct SeasonalPropView: View {
                 secondaryDecorations
             }
             if let image = store.image(named: kind.primaryAsset) {
+                let contact = PropRenderGeometry.contactPoint(for: kind)
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
-                    .frame(width: primarySize, height: primarySize)
+                    .frame(
+                        width: PropRenderGeometry.canvasPt(asset: kind.primaryAsset),
+                        height: PropRenderGeometry.canvasPt(asset: kind.primaryAsset)
+                    )
+                    .offset(PropRenderGeometry.canvasOffset(
+                        asset: kind.primaryAsset, fx: contact.x, fy: contact.y, at: .zero
+                    ))
                     .scaleEffect(alive ? 1 : 0.92)
             }
         }
@@ -38,46 +45,34 @@ struct SeasonalPropView: View {
     /// Christmas wreath, New Year popper).
     @ViewBuilder
     private var secondaryDecorations: some View {
-        ForEach(Array(kind.secondaryAssets.enumerated()), id: \.offset) { index, name in
-            if let image = store.image(named: name) {
+        let primaryRect = PropRenderGeometry.primaryContentRectInPanel(for: kind)
+        let center = CGPoint(x: primaryRect.midX, y: primaryRect.midY)
+        ForEach(PropRenderGeometry.decorations(for: kind), id: \.asset) { deco in
+            if let image = store.image(named: deco.asset) {
+                let decoCenter = CGPoint(
+                    x: center.x + deco.dxFrac * primaryRect.width,
+                    y: center.y - deco.dyFrac * primaryRect.height
+                )
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
-                    .frame(width: primarySize * 0.9, height: primarySize * 0.9)
-                    .offset(secondaryOffset(index: index))
+                    .frame(
+                        width: PropRenderGeometry.canvasPt(asset: deco.asset),
+                        height: PropRenderGeometry.canvasPt(asset: deco.asset)
+                    )
+                    .offset(PropRenderGeometry.canvasOffset(
+                        asset: deco.asset, fx: 0.5, fy: 0.5, at: decoCenter
+                    ))
                     .opacity(alive ? 0.9 : 0.25)
             }
         }
-        ForEach(Array(kind.decorativeAssets.enumerated()), id: \.offset) { index, name in
-            if let image = store.image(named: name) {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: primarySize * 0.95, height: primarySize * 0.95)
-                    .offset(decorativeOffset(index: index))
-                    .opacity(alive ? 0.95 : 0.25)
-            }
-        }
-    }
-
-    private func secondaryOffset(index: Int) -> CGSize {
-        switch index {
-        case 0: return CGSize(width: primarySize * 0.55, height: -primarySize * 0.45)
-        case 1: return CGSize(width: -primarySize * 0.55, height: -primarySize * 0.35)
-        default: return CGSize(width: 0, height: -primarySize * 0.55)
-        }
-    }
-
-    private func decorativeOffset(index: Int) -> CGSize {
-        CGSize(width: CGFloat(index) * primarySize * 0.9 - primarySize * 0.45,
-               height: primarySize * 0.5)
     }
 }
 
-/// Production scene renderer: draws the choreography pose (primary asset
-/// or layered open states), decorations, and effect overlays. The panel
-/// centers on the pose's CONTACT point; `SeasonalSceneMath.contentOffset`
-/// places the painted content exactly there.
+/// Production scene renderer: draws the choreography pose through the
+/// authoritative `PropRenderGeometry` (one scale per asset, contact
+/// point at the panel center). All painted content — primary, open
+/// layers, decorations, trail — stays inside the computed extents.
 struct SeasonalSceneView: View {
     let kind: SeasonalEventKind
     let store: SeasonalAssetStore
@@ -91,16 +86,23 @@ struct SeasonalSceneView: View {
                     .resizable()
                     .interpolation(.high)
                     .frame(
-                        width: kind.primaryDisplayPoints * 1.6,
-                        height: kind.primaryDisplayPoints * 0.6
+                        width: PropRenderGeometry.canvasPt(asset: "paper_airplane_trail.png"),
+                        height: PropRenderGeometry.canvasPt(asset: "paper_airplane_trail.png")
                     )
-                    .offset(x: -kind.primaryDisplayPoints * 0.9, y: 0)
+                    .offset(PropRenderGeometry.canvasOffset(
+                        asset: "paper_airplane_trail.png",
+                        fx: 0.5, fy: 0.5,
+                        at: CGPoint(
+                            x: PropRenderGeometry.trailRectInPanel().midX,
+                            y: PropRenderGeometry.trailRectInPanel().midY
+                        )
+                    ))
                     .opacity(0.6)
             }
             if model.pose.lidLift > 0 {
                 giftOpenLayers
             } else if let image = store.optionalImage(named: model.pose.asset) {
-                primaryImage(image)
+                primaryImage(image, asset: model.pose.asset)
             }
             decorations
         }
@@ -109,16 +111,23 @@ struct SeasonalSceneView: View {
         .opacity(Double(model.pose.alpha))
     }
 
-    private func primaryImage(_ image: NSImage) -> some View {
-        Image(nsImage: image)
+    private func primaryImage(_ image: NSImage, asset: String) -> some View {
+        let contact = PropRenderGeometry.contactPoint(for: kind)
+        return Image(nsImage: image)
             .resizable()
             .interpolation(.high)
-            .frame(width: kind.primaryDisplayPoints, height: kind.primaryDisplayPoints)
-            .offset(SeasonalSceneMath.contentOffset(for: kind))
+            .frame(
+                width: PropRenderGeometry.canvasPt(asset: asset),
+                height: PropRenderGeometry.canvasPt(asset: asset)
+            )
+            .offset(PropRenderGeometry.canvasOffset(
+                asset: asset, fx: contact.x, fy: contact.y, at: .zero
+            ))
     }
 
     /// The gift lid rises from the open base on its own layer (lidLift
-    /// 0...1 already eased by the choreography).
+    /// 0...1 already eased by the choreography), sharing the closed
+    /// gift's contact so body and lid stay aligned.
     @ViewBuilder
     private var giftOpenLayers: some View {
         let lift = model.pose.lidLift
@@ -126,48 +135,58 @@ struct SeasonalSceneView: View {
             Image(nsImage: base)
                 .resizable()
                 .interpolation(.high)
-                .frame(width: kind.primaryDisplayPoints, height: kind.primaryDisplayPoints)
-                .offset(SeasonalSceneMath.contentOffset(
+                .frame(
+                    width: PropRenderGeometry.canvasPt(asset: "xmas_gift_open_base.png"),
+                    height: PropRenderGeometry.canvasPt(asset: "xmas_gift_open_base.png")
+                )
+                .offset(PropRenderGeometry.canvasOffset(
                     asset: "xmas_gift_open_base.png",
-                    contact: CGPoint(x: 0, y: -0.5),
-                    displayPoints: kind.primaryDisplayPoints
+                    fx: 0.5, fy: 0,
+                    at: .zero
                 ))
-                .offset(y: 4)
         }
         if let lid = store.optionalImage(named: "xmas_gift_lid.png") {
+            let lidRect = PropRenderGeometry.giftOpenRectsInPanel(lidLift: lift).lid
             Image(nsImage: lid)
                 .resizable()
                 .interpolation(.high)
-                .frame(width: kind.primaryDisplayPoints, height: kind.primaryDisplayPoints)
-                .offset(SeasonalSceneMath.contentOffset(
+                .frame(
+                    width: PropRenderGeometry.canvasPt(asset: "xmas_gift_lid.png"),
+                    height: PropRenderGeometry.canvasPt(asset: "xmas_gift_lid.png")
+                )
+                .offset(PropRenderGeometry.canvasOffset(
                     asset: "xmas_gift_lid.png",
-                    contact: CGPoint(x: 0, y: -0.5),
-                    displayPoints: kind.primaryDisplayPoints
+                    fx: 0.5, fy: 0.5,
+                    at: CGPoint(x: lidRect.midX, y: lidRect.midY)
                 ))
-                .offset(x: lift * 14, y: -lift * 26)
                 .rotationEffect(.degrees(Double(lift * 10)))
         }
     }
 
     private var decorations: some View {
-        ZStack {
-            ForEach(SeasonalSceneMath.decorations(for: kind), id: \.asset) { deco in
+        let primaryRect = PropRenderGeometry.primaryContentRectInPanel(for: kind)
+        let primaryCenter = CGPoint(x: primaryRect.midX, y: primaryRect.midY)
+        return ZStack {
+            ForEach(PropRenderGeometry.decorations(for: kind), id: \.asset) { deco in
                 if let image = store.image(named: deco.asset) {
+                    let size = PropRenderGeometry.contentSizePt(asset: deco.asset)
+                    let center = CGPoint(
+                        x: primaryCenter.x + deco.dxFrac * primaryRect.width,
+                        y: primaryCenter.y - deco.dyFrac * primaryRect.height
+                    )
                     Image(nsImage: image)
                         .resizable()
                         .interpolation(.high)
                         .frame(
-                            width: kind.primaryDisplayPoints * deco.sizeFraction,
-                            height: kind.primaryDisplayPoints * deco.sizeFraction
+                            width: PropRenderGeometry.canvasPt(asset: deco.asset),
+                            height: PropRenderGeometry.canvasPt(asset: deco.asset)
                         )
-                        .offset(
-                            x: deco.dxFraction * kind.primaryDisplayPoints,
-                            y: deco.dyFraction * kind.primaryDisplayPoints
-                        )
+                        .offset(PropRenderGeometry.canvasOffset(
+                            asset: deco.asset, fx: 0.5, fy: 0.5, at: center
+                        ))
                 }
             }
         }
-        .offset(SeasonalSceneMath.contentOffset(for: kind))
     }
 }
 
@@ -181,10 +200,14 @@ struct SeasonalEffectView: View {
     var body: some View {
         ZStack {
             if model.alpha > 0, let image = store.optionalImage(named: model.asset) {
+                let canvas = PropRenderGeometry.canvasPt(asset: model.asset)
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
-                    .frame(width: 300, height: 300)
+                    .frame(width: canvas, height: canvas)
+                    .offset(PropRenderGeometry.canvasOffset(
+                        asset: model.asset, fx: 0.5, fy: 0.5, at: .zero
+                    ))
                     .opacity(Double(model.alpha))
             }
         }

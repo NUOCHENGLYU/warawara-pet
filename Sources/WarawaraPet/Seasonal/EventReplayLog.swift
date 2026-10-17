@@ -93,6 +93,41 @@ enum EventReplayLog {
         emit("EVENT_ANCHOR id=\(id) anchor=\(anchor)")
     }
 
+    static func propGeometry(
+        id: String,
+        asset: String,
+        petFrame: CGRect,
+        desiredWidth: CGFloat,
+        bboxPx: String,
+        renderScale: CGFloat,
+        contentFrameInPanel: CGRect,
+        hostingBounds: CGRect,
+        panelFrame: CGRect,
+        screenFrame: CGRect,
+        alpha: CGFloat,
+        level: NSWindow.Level,
+        isVisible: Bool,
+        phase: String,
+        withinVisible: Bool
+    ) {
+        emit(
+            "EVENT_PROP_GEOMETRY id=\(id) asset=\(asset) "
+            + "petFrame=\(Int(petFrame.minX)),\(Int(petFrame.minY)),\(Int(petFrame.width)),\(Int(petFrame.height)) "
+            + "desiredWidthPt=\(String(format: "%.1f", desiredWidth)) "
+            + "bboxPx=\(bboxPx) renderScale=\(String(format: "%.4f", renderScale)) "
+            + "contentInPanel=\(Int(contentFrameInPanel.minX)),\(Int(contentFrameInPanel.minY)),\(Int(contentFrameInPanel.width)),\(Int(contentFrameInPanel.height)) "
+            + "hostingBounds=\(Int(hostingBounds.width))x\(Int(hostingBounds.height)) "
+            + "panelFrame=\(Int(panelFrame.minX)),\(Int(panelFrame.minY)),\(Int(panelFrame.width)),\(Int(panelFrame.height)) "
+            + "screenFrame=\(Int(screenFrame.width))x\(Int(screenFrame.height)) "
+            + "alpha=\(String(format: "%.2f", alpha)) level=\(level.rawValue) "
+            + "isVisible=\(isVisible) phase=\(phase) withinVisible=\(withinVisible)"
+        )
+    }
+
+    static func propDebugDone(id: String) {
+        emit("EVENT_PROP_DEBUG_DONE id=\(id)")
+    }
+
     static func phase(id: String, phase: String) {
         emit("EVENT_REPLAY_PHASE id=\(id) phase=\(phase)")
     }

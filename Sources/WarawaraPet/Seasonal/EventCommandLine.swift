@@ -6,6 +6,7 @@ enum EventCommandLine {
     static let replayEventFlag = "--replay-event"
     static let replaySmokeFlag = "--replay-smoke"
     static let helpEventsFlag = "--help-events"
+    static let propDebugFlag = "--prop-debug"
 
     /// Extracts the event kind from a full argument list. Returns nil
     /// when the flag is absent or the identifier is unknown.
@@ -33,6 +34,13 @@ enum EventCommandLine {
         guard let flagIndex = arguments.firstIndex(of: replaySmokeFlag),
               arguments.count > flagIndex + 1 else { return nil }
         return arguments[flagIndex + 1]
+    }
+
+    /// Developer-only static layout diagnostic flag.
+    static func parsePropDebug(arguments: [String]) -> SeasonalEventKind? {
+        guard let flagIndex = arguments.firstIndex(of: propDebugFlag),
+              arguments.count > flagIndex + 1 else { return nil }
+        return SeasonalEventKind.fromReplayArgument(arguments[flagIndex + 1])
     }
 
     /// Human-readable usage for event replays.
