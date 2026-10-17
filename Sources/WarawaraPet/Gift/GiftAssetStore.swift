@@ -16,7 +16,7 @@ final class GiftAssetStore {
     ]
 
     static let expectedSHA256: [String: String] = [
-        "meteor_head_from_approved.png": "ea7b48ed3e2cd88e03728c13e4d00776fc93005a7243cc4164247f3f7703045c",
+        "meteor_head_from_approved.png": "9c4560fd2afb0d71c4f6102fe021c4fcd772574f5ab392edbed7809021703f57",
         "meteor_sparkle_from_approved.png": "7ee30c62c88974bad019fc99ac931b357754eecdcc822948329180ee21342805",
         "meteor_celfilm.png": "049f0e05b20be1198926be29d697dadadf0b443e41e216e90f0ea1c9abd55312"
     ]

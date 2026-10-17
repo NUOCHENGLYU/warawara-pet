@@ -87,7 +87,7 @@ final class GiftPreviewGeneratorTests: XCTestCase {
         }
         let sparkleImage = GiftAssetStore.shared.image(named: "meteor_sparkle_from_approved.png")
         let sampler = MeteorTrajectorySampler(trajectory: trajectory)
-        let headCanvas = CGSize(width: 408.0 * 36.0 / 125.0, height: 408.0 * 36.0 / 125.0)
+        let headCanvas = CGSize(width: 1254.0 * 38.0 / 594.0, height: 1254.0 * 38.0 / 594.0)
 
         for (name, s) in [("100-meteor-entrance", 0.06), ("101-meteor-mid", 0.5), ("102-meteor-exit", 0.94)] {
             let progress = CGFloat(s)

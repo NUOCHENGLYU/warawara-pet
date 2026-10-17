@@ -70,11 +70,13 @@ final class MeteorEventPresenter: MeteorEventPresenting {
     private let sparkleCount = 8
     private var sparklePhase: [CGFloat] = []
 
-    /// Accepted apparent star size (points) and the head crop's painted
-    /// star width (source px, from the asset manifest).
-    private let headStarTargetPt: CGFloat = 36
-    private let headStarSourcePx: CGFloat = 125
-    private let headCropPx: CGFloat = 408
+    /// Accepted apparent star size (points) and the FINAL head PNG's
+    /// geometry: the user-supplied final artwork is a 1254x1254 canvas
+    /// containing only the golden star and its local glow (painted star
+    /// core ≈594 px across). No baked tail exists in this asset.
+    private let headStarTargetPt: CGFloat = 38
+    private let headStarSourcePx: CGFloat = 594
+    private let headCropPx: CGFloat = 1254
 
     /// Panel fits the head plus the full trail length behind it.
     private let panelSize = CGSize(width: 360, height: 360)

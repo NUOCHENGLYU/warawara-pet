@@ -67,7 +67,7 @@ jobs:
             exit 1
           fi
           grep -q "METEOR_STARTED" "/tmp/meteor-smoke.log" || { echo "no METEOR_STARTED"; cat "/tmp/meteor-smoke.log"; exit 1; }
-          grep -q "METEOR_PANEL_CREATED" "/tmp/meteor-smoke.log" || { echo "no METEOR_PANEL_CREATED"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "METEOR_PANEL_CREATED.*contentView=1" "/tmp/meteor-smoke.log" || { echo "meteor head asset not rendered"; cat "/tmp/meteor-smoke.log"; exit 1; }
           grep -q "METEOR_ORDERED_FRONT" "/tmp/meteor-smoke.log" || { echo "no METEOR_ORDERED_FRONT"; cat "/tmp/meteor-smoke.log"; exit 1; }
           grep -q "METEOR_PATH_RESOLVED" "/tmp/meteor-smoke.log" || { echo "no METEOR_PATH_RESOLVED"; cat "/tmp/meteor-smoke.log"; exit 1; }
           grep -q "METEOR_FLIGHT_BEGAN" "/tmp/meteor-smoke.log" || { echo "no METEOR_FLIGHT_BEGAN"; cat "/tmp/meteor-smoke.log"; exit 1; }

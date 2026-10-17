@@ -391,6 +391,29 @@ final class MeteorTests: XCTestCase {
         XCTAssertEqual(before, after, "manual replay must not mutate nightly history")
     }
 
+    // MARK: - Final head asset wiring (the user-replaced PNG)
+
+    func testFinalHeadAssetIsTheNew1254CanvasWithoutBakedTail() {
+        let store = GiftAssetStore.shared
+        store.reset()
+        guard let image = store.image(named: "meteor_head_from_approved.png") else {
+            return XCTFail("final head asset missing")
+        }
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff) else {
+            return XCTFail("final head asset not decodable")
+        }
+        XCTAssertEqual(rep.pixelsWide, 1254, "the user-supplied final head PNG is 1254 wide")
+        XCTAssertEqual(rep.pixelsHigh, 1254, "the user-supplied final head PNG is 1254 tall")
+        // The old 408x408 crop must no longer ship.
+        XCTAssertNotEqual(rep.pixelsWide, 408)
+        // Hash verification against the final art.
+        XCTAssertTrue(store.verifySHA256().ok, store.verifySHA256().details)
+        // The old baked-tail canvas is reference-only and must never be
+        // used by the renderer: it stays a verified reference asset.
+        XCTAssertNotNil(store.image(named: "meteor_celfilm.png"))
+    }
+
     // MARK: - Production presentation path
 
     func testProductionPresenterMovesOnlyViaRenderTick() {
