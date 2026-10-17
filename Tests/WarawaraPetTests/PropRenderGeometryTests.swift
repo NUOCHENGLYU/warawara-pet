@@ -133,20 +133,26 @@ final class PropRenderGeometryTests: XCTestCase {
         XCTAssertEqual(base.maxY, 0, accuracy: 0.5, "open base must rest on the same contact")
         let closed = PropRenderGeometry.primaryContentRectInPanel(for: .christmas)
         XCTAssertEqual(closed.maxY, 0, accuracy: 0.5, "closed gift must rest on the same contact")
-        // Lid overlaps the base top seam before lifting.
+        // The lid's bottom sits at the base top seam (with the 6pt
+        // overlap) before lifting.
         let lid0 = PropRenderGeometry.giftOpenRectsInPanel(lidLift: 0).lid
-        XCTAssertLessThanOrEqual(lid0.maxY, base.maxY + 8, "lid must start at the base seam")
-        XCTAssertGreaterThan(lid0.minY, base.minY - 20, "lid must not float away")
+        XCTAssertEqual(lid0.maxY, base.minY + 6, accuracy: 0.5,
+                       "lid bottom must start exactly at the base seam overlap")
     }
 
     func testUmbrellaFullCanopyExtendsOverhead() {
         let size = PropRenderGeometry.contentSizePt(asset: "daily_umbrella.png")
         XCTAssertEqual(size.width, 1.65 * PropRenderGeometry.petHeight, accuracy: 0.01,
                        "full umbrella canopy must be at the calibrated width")
+        XCTAssertEqual(size.height, 0.8633 * 1.65 * PropRenderGeometry.petHeight, accuracy: 1,
+                       "canopy height must match the painted bbox")
         let rect = PropRenderGeometry.primaryContentRectInPanel(for: .umbrella)
-        // Contact near the handle bottom: the canopy extends far above.
-        XCTAssertGreaterThan(rect.maxY, size.height * 0.85,
-                             "canopy must extend above the grip contact")
+        // Contact near the handle bottom: nearly the whole canopy rises
+        // above the grip contact.
+        XCTAssertLessThan(rect.maxY, size.height * 0.1,
+                          "the contact sits near the handle bottom")
+        XCTAssertGreaterThan(size.height, 150,
+                             "the canopy is large enough to cover the head")
         let panel = PropRenderGeometry.panelSize(for: .umbrella)
         let extents = PropRenderGeometry.contentExtentRect(for: .umbrella, lidLift: 1)
         XCTAssertLessThanOrEqual(extents.height, panel.height - 2 * PropRenderGeometry.margin + 0.01)
@@ -230,8 +236,9 @@ final class PropRenderGeometryTests: XCTestCase {
         windowController.configureForTesting(
             frame: CGRect(x: 500, y: 200, width: 180, height: 226)
         )
+        let clock = FixedClock()
         let coordinator = SeasonalEventCoordinator(
-            clock: FixedClock(), persistence: SeasonalPersistence(),
+            clock: clock, persistence: SeasonalPersistence(),
             timing: .forKind(.hotCocoa)
         )
         let presenter = SeasonalEventPresenter(
@@ -241,7 +248,7 @@ final class PropRenderGeometryTests: XCTestCase {
 
         coordinator.requestTrigger(.hotCocoa, trigger: .replay)
         coordinator.servicePendingTrigger()
-        coordinator.advance(at: Date().addingTimeInterval(2.0))
+        coordinator.advance(at: clock.now().addingTimeInterval(2.0))
 
         XCTAssertEqual(presenter.presentCallCount, 1, "cocoa must reach the presenter")
         XCTAssertTrue(presenter.rejectionReasons.isEmpty,
