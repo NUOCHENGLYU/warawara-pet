@@ -140,7 +140,7 @@ final class MeteorTests: XCTestCase {
         XCTAssertEqual(spy.flightBeginCount, 1)
 
         // Flight progress derives ONLY from the monotonic clock.
-        XCTAssertEqual(controller.flightProgress(atUptime: time.uptime), 0, accuracy: 0.01)
+        XCTAssertEqual(controller.flightProgress(atUptime: time.uptime) ?? -1, 0, accuracy: 0.01)
         time.uptime += controller.timing.flightDuration / 2
         XCTAssertEqual(controller.flightProgress(atUptime: time.uptime) ?? 0, 0.5, accuracy: 0.01)
 
