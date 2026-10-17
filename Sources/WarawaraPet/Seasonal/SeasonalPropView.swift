@@ -74,6 +74,124 @@ struct SeasonalPropView: View {
     }
 }
 
+/// Production scene renderer: draws the choreography pose (primary asset
+/// or layered open states), decorations, and effect overlays. The panel
+/// centers on the pose's CONTACT point; `SeasonalSceneMath.contentOffset`
+/// places the painted content exactly there.
+struct SeasonalSceneView: View {
+    let kind: SeasonalEventKind
+    let store: SeasonalAssetStore
+    @ObservedObject var model: SeasonalSceneModel
+
+    var body: some View {
+        ZStack {
+            if model.pose.showTrail,
+               let trail = store.optionalImage(named: "paper_airplane_trail.png") {
+                Image(nsImage: trail)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(
+                        width: kind.primaryDisplayPoints * 1.6,
+                        height: kind.primaryDisplayPoints * 0.6
+                    )
+                    .offset(x: -kind.primaryDisplayPoints * 0.9, y: 0)
+                    .opacity(0.6)
+            }
+            if model.pose.lidLift > 0 {
+                giftOpenLayers
+            } else if let image = store.optionalImage(named: model.pose.asset) {
+                primaryImage(image)
+            }
+            decorations
+        }
+        .scaleEffect(model.pose.scale)
+        .rotationEffect(.degrees(Double(model.pose.rotationDegrees)))
+        .opacity(Double(model.pose.alpha))
+    }
+
+    private func primaryImage(_ image: NSImage) -> some View {
+        Image(nsImage: image)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: kind.primaryDisplayPoints, height: kind.primaryDisplayPoints)
+            .offset(SeasonalSceneMath.contentOffset(for: kind))
+    }
+
+    /// The gift lid rises from the open base on its own layer (lidLift
+    /// 0...1 already eased by the choreography).
+    @ViewBuilder
+    private var giftOpenLayers: some View {
+        let lift = model.pose.lidLift
+        if let base = store.optionalImage(named: "xmas_gift_open_base.png") {
+            Image(nsImage: base)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: kind.primaryDisplayPoints, height: kind.primaryDisplayPoints)
+                .offset(SeasonalSceneMath.contentOffset(
+                    asset: "xmas_gift_open_base.png",
+                    contact: CGPoint(x: 0, y: -0.5),
+                    displayPoints: kind.primaryDisplayPoints
+                ))
+                .offset(y: 4)
+        }
+        if let lid = store.optionalImage(named: "xmas_gift_lid.png") {
+            Image(nsImage: lid)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: kind.primaryDisplayPoints, height: kind.primaryDisplayPoints)
+                .offset(SeasonalSceneMath.contentOffset(
+                    asset: "xmas_gift_lid.png",
+                    contact: CGPoint(x: 0, y: -0.5),
+                    displayPoints: kind.primaryDisplayPoints
+                ))
+                .offset(x: lift * 14, y: -lift * 26)
+                .rotationEffect(.degrees(Double(lift * 10)))
+        }
+    }
+
+    private var decorations: some View {
+        ZStack {
+            ForEach(SeasonalSceneMath.decorations(for: kind), id: \.asset) { deco in
+                if let image = store.image(named: deco.asset) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(
+                            width: kind.primaryDisplayPoints * deco.sizeFraction,
+                            height: kind.primaryDisplayPoints * deco.sizeFraction
+                        )
+                        .offset(
+                            x: deco.dxFraction * kind.primaryDisplayPoints,
+                            y: deco.dyFraction * kind.primaryDisplayPoints
+                        )
+                }
+            }
+        }
+        .offset(SeasonalSceneMath.contentOffset(for: kind))
+    }
+}
+
+/// Effect overlay renderer for the second pooled panel (imaginary rain,
+/// confetti). Click-through by design — the hosting panel ignores mouse
+/// events.
+struct SeasonalEffectView: View {
+    let store: SeasonalAssetStore
+    @ObservedObject var model: SeasonalEffectModel
+
+    var body: some View {
+        ZStack {
+            if model.alpha > 0, let image = store.optionalImage(named: model.asset) {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 300, height: 300)
+                    .opacity(Double(model.alpha))
+            }
+        }
+        .frame(width: 320, height: 320)
+    }
+}
+
 /// Pure scene-motion math: the prop panel's approach/glide path.
 enum SeasonalMotionMath {
     /// Parametric glide for the paper airplane: a smooth S-curve across

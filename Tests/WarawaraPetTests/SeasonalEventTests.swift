@@ -394,8 +394,8 @@ final class SeasonalEventTests: XCTestCase {
             XCTAssertTrue(panel.frame.origin.x.isFinite && panel.frame.origin.y.isFinite,
                           "\(kind): panel frame must be finite")
             XCTAssertTrue(
-                panel.contentView is NSHostingView<SeasonalPropView>,
-                "\(kind): panel must host the PRODUCTION prop view (empty panels are invisible)"
+                panel.contentView is NSHostingView<SeasonalSceneView>,
+                "\(kind): panel must host the PRODUCTION scene view (empty panels are invisible)"
             )
             XCTAssertEqual(panel.level, .floating, "\(kind): prop level must match the pet plane")
 
