@@ -37,7 +37,7 @@ enum EventCommandLine {
 
     /// Human-readable usage for event replays.
     static var usage: String {
-        let kinds = SeasonalEventKind.allCases.map(\.replayArgument).joined(separator: " | ")
+        let kinds = SeasonalEventKind.allCases.map { $0.replayArgument }.joined(separator: " | ")
         return """
         WarawaraPet event replay usage:
           --replay-event <kind>   replay a seasonal/daily event now (any date)

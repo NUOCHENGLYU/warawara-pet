@@ -91,10 +91,7 @@ enum WarawaraPetMain {
             if let kind = EventCommandLine.parseReplayEvent(arguments: arguments) {
                 appDelegate.requestSeasonalReplay(kind: kind)
             } else {
-                let raw = EventCommandLine.rawReplayIdentifier(arguments: arguments) ?? ""
-                print("EVENT_REPLAY_UNKNOWN id=\(raw)")
-                print("valid identifiers: \(SeasonalEventKind.allCases.map(\\.replayArgument).joined(separator: " | "))")
-                print(EventCommandLine.usage)
+                printReplayUnknown(raw: EventCommandLine.rawReplayIdentifier(arguments: arguments) ?? "")
                 exit(2)
             }
         }
@@ -103,9 +100,7 @@ enum WarawaraPetMain {
                 EventReplayLog.smokeMode = true
                 appDelegate.requestSeasonalReplay(kind: kind)
             } else {
-                let raw = EventCommandLine.rawSmokeIdentifier(arguments: arguments) ?? ""
-                print("EVENT_REPLAY_UNKNOWN id=\(raw)")
-                print(EventCommandLine.usage)
+                printReplayUnknown(raw: EventCommandLine.rawSmokeIdentifier(arguments: arguments) ?? "")
                 exit(2)
             }
         }
@@ -113,6 +108,13 @@ enum WarawaraPetMain {
             appDelegate.requestShowLetter()
         }
         app.run()
+    }
+
+    private static func printReplayUnknown(raw: String) {
+        let valid = SeasonalEventKind.allCases.map { $0.replayArgument }.joined(separator: " | ")
+        print("EVENT_REPLAY_UNKNOWN id=\(raw)")
+        print("valid identifiers: \(valid)")
+        print(EventCommandLine.usage)
     }
 
     /// Drives the production expression pipeline headlessly. Inputs: idle
