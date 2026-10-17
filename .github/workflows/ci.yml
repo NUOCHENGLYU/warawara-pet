@@ -78,7 +78,32 @@ jobs:
             fi
             grep -q "EVENT_REPLAY_COMPLETED" "/tmp/replay-$KIND.log" || { echo "no COMPLETED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
             grep -q "EVENT_FINISHED" "/tmp/replay-$KIND.log" || { echo "no FINISHED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
+            grep -q "EVENT_PROP_GEOMETRY" "/tmp/replay-$KIND.log" || { echo "no runtime geometry for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
+            grep -q "withinVisible=true" "/tmp/replay-$KIND.log" || { echo "prop outside visible bounds for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
             echo "SMOKE_OK $KIND"
+          done
+
+      - name: Static prop geometry diagnostic (packaged app)
+        run: |
+          BIN="dist/WarawaraPet.app/Contents/MacOS/WarawaraPet"
+          for KIND in hot-cocoa cny christmas umbrella sprout newyear paper-airplane; do
+            echo "== prop-debug $KIND =="
+            "$BIN" --prop-debug "$KIND" > "/tmp/propdebug-$KIND.log" 2>&1 &
+            PID=$!
+            for i in $(seq 1 30); do
+              if ! kill -0 $PID 2>/dev/null; then break; fi
+              sleep 1
+            done
+            if kill -0 $PID 2>/dev/null; then
+              kill $PID 2>/dev/null
+              echo "TIMEOUT waiting for $KIND"
+              cat "/tmp/propdebug-$KIND.log"
+              exit 1
+            fi
+            grep -q "EVENT_PROP_GEOMETRY" "/tmp/propdebug-$KIND.log" || { echo "no geometry for $KIND"; cat "/tmp/propdebug-$KIND.log"; exit 1; }
+            grep -q "withinVisible=true" "/tmp/propdebug-$KIND.log" || { echo "not within visible bounds for $KIND"; cat "/tmp/propdebug-$KIND.log"; exit 1; }
+            grep -q "EVENT_PROP_DEBUG_DONE" "/tmp/propdebug-$KIND.log" || { echo "debug did not complete for $KIND"; cat "/tmp/propdebug-$KIND.log"; exit 1; }
+            echo "PROP_DEBUG_OK $KIND"
           done
 
       - name: Upload artifact

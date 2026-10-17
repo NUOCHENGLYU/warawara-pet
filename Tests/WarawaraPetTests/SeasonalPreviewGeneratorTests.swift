@@ -95,16 +95,74 @@ final class SeasonalPreviewGeneratorTests: XCTestCase {
         try renderInteractionSheets(
             rig: rig, rigLoader: rigLoader, mainSize: mainSize, store: store, to: outputDir
         )
+        try renderGeometryQASheet(rig: rig, rigLoader: rigLoader, mainSize: mainSize, store: store, to: outputDir)
         for name in ["70-cny-held.png", "71-cny-open.png",
                      "72-christmas-inspect.png", "73-christmas-lid-lift.png",
                      "74-newyear-confetti.png", "75-umbrella-overhead.png",
                      "76-cocoa-sip.png", "77-sprout-sway.png",
                      "78-airplane-trail.png", "79-interaction-light.png",
-                     "80-interaction-dark.png"] {
+                     "80-interaction-dark.png", "81-qa-bounds.png"] {
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
                 "missing interaction preview \(name)"
             )
+        }
+    }
+
+    // MARK: - Engineering QA: real panel/hosting bounds outlines
+
+    /// Every prop drawn at its calibrated painted size, framed by the
+    /// exact NSHostingView/NSPanel bounds the presenter will allocate —
+    /// with the pet for scale. Compares directly to the QA reference.
+    private func renderGeometryQASheet(
+        rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader,
+        mainSize: CGSize, store: SeasonalAssetStore, to dir: URL
+    ) throws {
+        let kinds: [SeasonalEventKind] = [
+            .hotCocoa, .cny, .christmas, .umbrella, .sprout, .newYear, .paperAirplane
+        ]
+        let content = ZStack {
+            CheckerboardBackground()
+            VStack(spacing: 10) {
+                Text("production QA: painted props at calibrated size inside their panel bounds (Hpet=118)").font(.headline)
+                HStack(alignment: .bottom, spacing: 14) {
+                    rigView(rig, rigLoader, mainSize)
+                    ForEach(kinds, id: \.self) { kind in
+                        qaCell(kind: kind, store: store)
+                    }
+                }
+            }
+        }
+        try render(content, size: CGSize(width: 1720, height: 720), scale: 1,
+                   to: dir.appendingPathComponent("81-qa-bounds.png"))
+    }
+
+    @MainActor
+    private func qaCell(kind: SeasonalEventKind, store: SeasonalAssetStore) -> some View {
+        let size = PropRenderGeometry.panelSize(for: kind)
+        let model = SeasonalSceneModel()
+        var pose = SeasonalPropPose()
+        pose.asset = kind.primaryAsset
+        pose.alpha = 1
+        pose.scale = 1
+        pose.rotationDegrees = 0
+        if kind == .christmas {
+            pose.lidLift = 0.8
+        }
+        if kind == .paperAirplane {
+            pose.showTrail = true
+        }
+        model.pose = pose
+        let painted = PropRenderGeometry.contentSizePt(asset: kind.primaryAsset)
+        return VStack(spacing: 2) {
+            Text("\(kind.replayArgument)")
+                .font(.caption2)
+            Text("\(Int(painted.width))pt")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            SeasonalSceneView(kind: kind, store: store, model: model)
+                .frame(width: size.width, height: size.height)
+                .overlay(Rectangle().stroke(Color.red.opacity(0.55), lineWidth: 1))
         }
     }
 
@@ -140,7 +198,7 @@ final class SeasonalPreviewGeneratorTests: XCTestCase {
     ) -> some View {
         let model = SeasonalSceneModel()
         model.pose = pose
-        let size = SeasonalSceneMath.panelSize(for: kind)
+        let size = PropRenderGeometry.panelSize(for: kind)
         return SeasonalSceneView(kind: kind, store: store, model: model)
             .frame(width: size.width, height: size.height)
     }
