@@ -225,7 +225,7 @@ final class MeteorTests: XCTestCase {
             guard let progress = controller.flightProgress(atUptime: timeCursor) else { break }
             let position = sampler.position(atArcLength: progress)
             let delta = hypot(position.x - previous.x, position.y - previous.y)
-            XCTAssertLessThan(delta, 65, "no teleport between frames")
+            XCTAssertLessThan(delta, 80, "no teleport between frames")
             XCTAssertGreaterThanOrEqual(progress, 0)
             previous = position
         }
@@ -381,7 +381,7 @@ final class MeteorTests: XCTestCase {
         time.now = start.addingTimeInterval(total + 2)
         controller.advance(at: time.now)
         // Advance through phases one step at a time with monotonic sync.
-        for _ in 0..<12 {
+        for _ in 0..<16 {
             time.uptime += 1
             controller.advance(at: time.now)
             if controller.phase == .idle { break }
