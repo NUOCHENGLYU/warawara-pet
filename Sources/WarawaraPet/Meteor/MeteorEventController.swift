@@ -271,7 +271,10 @@ final class MeteorEventController {
 
     func servicePendingTrigger() {
         guard let pending = pendingTrigger else { return }
-        if isPetBusy?() == true || isBirthdayBlocking?() == true {
+        // CI smoke mode is deterministic: it bypasses the birthday/busy
+        // blocking so the packaged replay always runs to completion.
+        if !EventDiagnostics.smokeMode,
+           isPetBusy?() == true || isBirthdayBlocking?() == true {
             return
         }
         pendingTrigger = nil
