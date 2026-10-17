@@ -144,15 +144,16 @@ final class PropRenderGeometryTests: XCTestCase {
         let size = PropRenderGeometry.contentSizePt(asset: "daily_umbrella.png")
         XCTAssertEqual(size.width, 1.65 * PropRenderGeometry.petHeight, accuracy: 0.01,
                        "full umbrella canopy must be at the calibrated width")
-        XCTAssertEqual(size.height, 0.8633 * 1.65 * PropRenderGeometry.petHeight, accuracy: 1,
-                       "canopy height must match the painted bbox")
+        let box = PropRenderGeometry.boxes["daily_umbrella.png"]!
+        XCTAssertEqual(size.height, size.width * box.height / box.width, accuracy: 1,
+                       "canopy height must come from the SAME scale (no second fraction)")
+        XCTAssertGreaterThan(size.height, 150,
+                             "the canopy is large enough to cover the head")
         let rect = PropRenderGeometry.primaryContentRectInPanel(for: .umbrella)
         // Contact near the handle bottom: nearly the whole canopy rises
         // above the grip contact.
         XCTAssertLessThan(rect.maxY, size.height * 0.1,
                           "the contact sits near the handle bottom")
-        XCTAssertGreaterThan(size.height, 150,
-                             "the canopy is large enough to cover the head")
         let panel = PropRenderGeometry.panelSize(for: .umbrella)
         let extents = PropRenderGeometry.contentExtentRect(for: .umbrella, lidLift: 1)
         XCTAssertLessThanOrEqual(extents.height, panel.height - 2 * PropRenderGeometry.margin + 0.01)

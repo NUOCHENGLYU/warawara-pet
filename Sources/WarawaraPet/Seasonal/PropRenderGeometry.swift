@@ -298,15 +298,20 @@ enum PropRenderGeometry {
 
     /// The painted content rect of the primary asset in PANEL screen
     /// coordinates (AppKit y-up), given a panel frame: proves the
-    /// artwork is fully inside the window.
+    /// artwork is fully inside the window. The anchor (contact point) is
+    /// recovered from the panel center and the extents midpoint.
     static func primaryContentScreenRect(
         panelFrame: CGRect, kind: SeasonalEventKind
     ) -> CGRect {
         let rect = primaryContentRectInPanel(for: kind)
-        let panelCenter = CGPoint(x: panelFrame.midX, y: panelFrame.midY)
+        let extents = contentExtentRect(for: kind, lidLift: 1)
+        let anchor = CGPoint(
+            x: panelFrame.midX - extents.midX,
+            y: panelFrame.midY + extents.midY
+        )
         return CGRect(
-            x: panelCenter.x + rect.minX,
-            y: panelCenter.y - rect.maxY,
+            x: anchor.x + rect.minX,
+            y: anchor.y - rect.maxY,
             width: rect.width,
             height: rect.height
         )
