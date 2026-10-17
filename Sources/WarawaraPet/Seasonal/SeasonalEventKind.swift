@@ -151,6 +151,28 @@ final class SeasonalAssetStore {
         "daily_paper_airplane.png": "2c64f562853a6fbf4019ca5d4b8301722f74e8f9a3b303acc3b0df031958268d"
     ]
 
+    /// CelFilm v3 ADDITIVE optional assets (verified against their own
+    /// manifest). Absence must never break a scene — the choreography
+    /// falls back to the v1 artwork.
+    static let optionalFileNames: [String] = [
+        "cny_hongbao_open.png", "cny_hongbao_note.png",
+        "xmas_gift_open_base.png", "xmas_gift_lid.png", "xmas_gift_open.png",
+        "daily_umbrella_closed.png", "rain_drops_overlay.png",
+        "paper_airplane_trail.png", "newyear_confetti_overlay.png"
+    ]
+
+    static let optionalSHA256: [String: String] = [
+        "cny_hongbao_open.png": "031ba34397cc4683b8ef42d059269236ea58bb4ba5a2b59b6c26e464db048d27",
+        "cny_hongbao_note.png": "7cf18266f0eeedbaf151ed56502db5363cf01e40d4e7f9c01df08f33563a61b7",
+        "xmas_gift_open_base.png": "4ebe5ac84a0cf8b0878fe402d2c452b175278ddf181fe98c5f31e626bd3a7440",
+        "xmas_gift_lid.png": "0cb55a660f5bf821acb23e7c8e5fe41969f8979c2ddb6475c286a6301f084cee",
+        "xmas_gift_open.png": "9d02302269ac774f8e10ff57a12023ee04d74387eed18d551e0d8f4b1c07369a",
+        "daily_umbrella_closed.png": "49297a10653257087dbcbd6728e408853a31acfd99f233c8139343bf784e8370",
+        "rain_drops_overlay.png": "59f14b1c92591742394f60ad7cd250f3e4883da5aed3ee7c1f631728dc9082d2",
+        "paper_airplane_trail.png": "7a162525d05c3a378082f3faae10d935e7a6f1279d4788a28a4626cdd49af7f7",
+        "newyear_confetti_overlay.png": "6f985d378a5b546233a36e7e0dfa5f51ad80f3cf3130520ab33f39ed3841e603"
+    ]
+
     private var imageCache: [String: NSImage] = [:]
     private var resolvedBaseURL: URL?
 
@@ -187,6 +209,42 @@ final class SeasonalAssetStore {
         guard let image = NSImage(contentsOf: url) else { return nil }
         imageCache[fileName] = image
         return image
+    }
+
+    /// Optional CelFilm v3 layer lookup: nil when absent or undecodable —
+    /// scenes degrade to the v1 artwork gracefully.
+    func optionalImage(named fileName: String) -> NSImage? {
+        image(named: fileName)
+    }
+
+    /// True when every v3 optional asset resolves and decodes.
+    func optionalAssetsPresent() -> (present: Int, total: Int) {
+        var present = 0
+        for name in Self.optionalFileNames {
+            if image(named: name) != nil { present += 1 }
+        }
+        return (present, Self.optionalFileNames.count)
+    }
+
+    /// Verification-only check of the optional assets (absent files are
+    /// reported, not failed).
+    func verifyOptionalAssets() -> (ok: Bool, details: String) {
+        var mismatches: [String] = []
+        var missing: [String] = []
+        for (name, expected) in Self.optionalSHA256 {
+            guard let base = resolveBaseURL(),
+                  let data = try? Data(contentsOf: base.appendingPathComponent(name)) else {
+                missing.append(name)
+                continue
+            }
+            if BirthdaySHA256.hash(data) != expected {
+                mismatches.append(name)
+            }
+        }
+        if mismatches.isEmpty && missing.isEmpty {
+            return (true, "all \(Self.optionalSHA256.count) optional assets match")
+        }
+        return (false, "mismatched: \(mismatches) missing: \(missing)")
     }
 
     func verifyAllRequiredAssets() -> (ok: Bool, details: String) {

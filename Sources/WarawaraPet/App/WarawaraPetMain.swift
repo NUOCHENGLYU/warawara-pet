@@ -20,11 +20,13 @@ enum WarawaraPetMain {
             store.reset()
             let required = store.verifyAllRequiredAssets()
             let hashes = store.verifySHA256()
-            if required.ok && hashes.ok {
-                print("EVENT_ASSETS_OK assets=\(SeasonalAssetStore.requiredFileNames.count)")
+            let optionalHashes = store.verifyOptionalAssets()
+            let optionalCount = store.optionalAssetsPresent()
+            if required.ok && hashes.ok && optionalHashes.ok {
+                print("EVENT_ASSETS_OK assets=\(SeasonalAssetStore.requiredFileNames.count) optional=\(optionalCount.present)/\(optionalCount.total)")
                 exit(0)
             }
-            print("EVENT_ASSETS_FAIL required=[\(required.details)] hashes=[\(hashes.details)]")
+            print("EVENT_ASSETS_FAIL required=[\(required.details)] hashes=[\(hashes.details)] optional=[\(optionalHashes.details)]")
             exit(1)
         }
         if let flagIndex = arguments.firstIndex(of: "--verify-birthday") {
