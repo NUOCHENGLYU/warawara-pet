@@ -65,25 +65,22 @@ final class SeasonalEventPresenter: SeasonalEventPresenting {
         let rest = restOrigin(petFrame: petFrame, visible: visible)
         let start = CGPoint(x: rest.x - 220, y: rest.y + 60)
 
+        propPanel.setFrameOrigin(start)
+        propPanel.alphaValue = 0
+        propPanel.orderFrontRegardless()
+        verifyPresentedWindow(kind: kind, panel: propPanel)
         if kind == .paperAirplane {
             glideActive = true
             motionKind = kind
             motionFrom = start
             motionTo = rest
             motionStart = Date()
-            propPanel.alphaValue = 0
-            propPanel.orderFrontRegardless()
-            verifyPresentedWindow(kind: kind, panel: propPanel)
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.4
                 propPanel.animator().alphaValue = 1
             }
             startMotionTimer()
         } else {
-            propPanel.setFrameOrigin(start)
-            propPanel.alphaValue = 0
-            propPanel.orderFrontRegardless()
-            verifyPresentedWindow(kind: kind, panel: propPanel)
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.5
                 propPanel.animator().alphaValue = 1
