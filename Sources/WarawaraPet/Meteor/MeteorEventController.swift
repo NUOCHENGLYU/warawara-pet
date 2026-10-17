@@ -232,9 +232,10 @@ final class MeteorEventController {
         phase = .idle
     }
 
-    /// App tick: service pending replays and advance playback. Automatic
-    /// triggering is evaluated here, on the same cadence as birthday.
-    func tick(at now: Date) {
+    /// App tick: service pending replays, advance playback, and evaluate
+    /// automatic triggering on the same cadence as the birthday event.
+    func tick() {
+        let now = clock.now()
         servicePendingTrigger()
         advance(at: now)
         guard phase == .idle else { return }

@@ -115,11 +115,27 @@ final class FirstLaunchCelebration {
                 timer.invalidate()
                 return
             }
-            if !self.coordinator.isRunning {
-                timer.invalidate()
-                self.setCelebrationHat?(false)
-                EventDiagnostics.firstLaunch("CELEBRATION_ENDED_HAT_REMOVED")
-            }
+            self.checkCelebrationEnded()
         }
     }
+
+    /// Internal check (also testable): the hat is removed only AFTER the
+    /// celebration was observed running — a deferred pending trigger must
+    /// never count as "ended".
+    func checkCelebrationEnded() {
+        guard sawCelebrationRunning else {
+            if coordinator.isRunning {
+                sawCelebrationRunning = true
+            }
+            return
+        }
+        guard !coordinator.isRunning else { return }
+        sawCelebrationRunning = false
+        retryTimer?.invalidate()
+        retryTimer = nil
+        setCelebrationHat?(false)
+        EventDiagnostics.firstLaunch("CELEBRATION_ENDED_HAT_REMOVED")
+    }
+
+    private var sawCelebrationRunning = false
 }

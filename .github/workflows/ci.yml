@@ -29,10 +29,10 @@ jobs:
         env:
           BIRTHDAY_PREVIEW_OUT: dist/birthday-preview
 
-      - name: Generate seasonal previews
-        run: swift test --filter SeasonalPreviewGeneratorTests
+      - name: Generate gift previews
+        run: swift test --filter GiftPreviewGeneratorTests
         env:
-          SEASONAL_PREVIEW_OUT: dist/seasonal-preview
+          GIFT_PREVIEW_OUT: dist/gift-preview
 
       - name: Package .app and zip
         run: bash Scripts/package-app.sh
@@ -46,65 +46,34 @@ jobs:
           BIRTHDAY="$("dist/WarawaraPet.app/Contents/MacOS/WarawaraPet" --verify-birthday)"
           echo "$BIRTHDAY"
           echo "$BIRTHDAY" | grep -q "BIRTHDAY_OK" || { echo "birthday assets not loaded"; exit 1; }
-          EVENTS="$("dist/WarawaraPet.app/Contents/MacOS/WarawaraPet" --verify-event-assets)"
-          echo "$EVENTS"
-          echo "$EVENTS" | grep -q "EVENT_ASSETS_OK" || { echo "seasonal assets not loaded"; exit 1; }
+          GIFTS="$("dist/WarawaraPet.app/Contents/MacOS/WarawaraPet" --verify-gift-assets)"
+          echo "$GIFTS"
+          echo "$GIFTS" | grep -q "GIFT_ASSETS_OK" || { echo "gift assets not loaded"; exit 1; }
 
-      - name: Smoke-test event replays (packaged app)
+      - name: Smoke-test meteor replay (packaged app)
         run: |
           BIN="dist/WarawaraPet.app/Contents/MacOS/WarawaraPet"
-          for KIND in cny christmas newyear umbrella hot-cocoa sprout paper-airplane; do
-            echo "== replay-smoke $KIND =="
-            "$BIN" --replay-smoke "$KIND" > "/tmp/replay-$KIND.log" 2>&1 &
-            PID=$!
-            for i in $(seq 1 120); do
-              if ! kill -0 $PID 2>/dev/null; then break; fi
-              sleep 1
-            done
-            if kill -0 $PID 2>/dev/null; then
-              kill $PID 2>/dev/null
-              echo "TIMEOUT waiting for $KIND"
-              cat "/tmp/replay-$KIND.log"
-              exit 1
-            fi
-            grep -q "EVENT_REPLAY_STARTED" "/tmp/replay-$KIND.log" || { echo "no STARTED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
-            grep -q "EVENT_REPLAY_VISIBLE" "/tmp/replay-$KIND.log" || { echo "no VISIBLE for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
-            grep -q "EVENT_ASSET_LOADED" "/tmp/replay-$KIND.log" || { echo "no ASSET_LOADED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
-            grep -q "EVENT_WINDOW_PRESENTED" "/tmp/replay-$KIND.log" || { echo "no WINDOW_PRESENTED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
-            if grep -q "EVENT_SCENE_FAILED" "/tmp/replay-$KIND.log"; then
-              echo "scene failure for $KIND"
-              cat "/tmp/replay-$KIND.log"
-              exit 1
-            fi
-            grep -q "EVENT_REPLAY_COMPLETED" "/tmp/replay-$KIND.log" || { echo "no COMPLETED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
-            grep -q "EVENT_FINISHED" "/tmp/replay-$KIND.log" || { echo "no FINISHED for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
-            grep -q "EVENT_PROP_GEOMETRY" "/tmp/replay-$KIND.log" || { echo "no runtime geometry for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
-            grep -q "withinVisible=true" "/tmp/replay-$KIND.log" || { echo "prop outside visible bounds for $KIND"; cat "/tmp/replay-$KIND.log"; exit 1; }
-            echo "SMOKE_OK $KIND"
+          echo "== replay-smoke meteor =="
+          "$BIN" --replay-smoke > "/tmp/meteor-smoke.log" 2>&1 &
+          PID=$!
+          for i in $(seq 1 60); do
+            if ! kill -0 $PID 2>/dev/null; then break; fi
+            sleep 1
           done
-
-      - name: Static prop geometry diagnostic (packaged app)
-        run: |
-          BIN="dist/WarawaraPet.app/Contents/MacOS/WarawaraPet"
-          for KIND in hot-cocoa cny christmas umbrella sprout newyear paper-airplane; do
-            echo "== prop-debug $KIND =="
-            "$BIN" --prop-debug "$KIND" > "/tmp/propdebug-$KIND.log" 2>&1 &
-            PID=$!
-            for i in $(seq 1 30); do
-              if ! kill -0 $PID 2>/dev/null; then break; fi
-              sleep 1
-            done
-            if kill -0 $PID 2>/dev/null; then
-              kill $PID 2>/dev/null
-              echo "TIMEOUT waiting for $KIND"
-              cat "/tmp/propdebug-$KIND.log"
-              exit 1
-            fi
-            grep -q "EVENT_PROP_GEOMETRY" "/tmp/propdebug-$KIND.log" || { echo "no geometry for $KIND"; cat "/tmp/propdebug-$KIND.log"; exit 1; }
-            grep -q "withinVisible=true" "/tmp/propdebug-$KIND.log" || { echo "not within visible bounds for $KIND"; cat "/tmp/propdebug-$KIND.log"; exit 1; }
-            grep -q "EVENT_PROP_DEBUG_DONE" "/tmp/propdebug-$KIND.log" || { echo "debug did not complete for $KIND"; cat "/tmp/propdebug-$KIND.log"; exit 1; }
-            echo "PROP_DEBUG_OK $KIND"
-          done
+          if kill -0 $PID 2>/dev/null; then
+            kill $PID 2>/dev/null
+            echo "TIMEOUT waiting for the meteor"
+            cat "/tmp/meteor-smoke.log"
+            exit 1
+          fi
+          grep -q "METEOR_STARTED" "/tmp/meteor-smoke.log" || { echo "no METEOR_STARTED"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "METEOR_FLIGHT_BEGAN" "/tmp/meteor-smoke.log" || { echo "no METEOR_FLIGHT_BEGAN"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "METEOR_DEPARTED" "/tmp/meteor-smoke.log" || { echo "no METEOR_DEPARTED"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "METEOR_CLEANED_UP" "/tmp/meteor-smoke.log" || { echo "no METEOR_CLEANED_UP"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "METEOR_COMPLETED" "/tmp/meteor-smoke.log" || { echo "no METEOR_COMPLETED"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "EVENT_ATTENTION_ACQUIRED" "/tmp/meteor-smoke.log" || { echo "no attention acquisition"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "EVENT_ATTENTION_RELEASED" "/tmp/meteor-smoke.log" || { echo "no attention release"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          echo "METEOR_SMOKE_OK"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -127,9 +96,9 @@ jobs:
           path: dist/birthday-preview
           retention-days: 30
 
-      - name: Upload seasonal preview artifact
+      - name: Upload gift preview artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WarawaraPet-Seasonal-Daily-Preview
-          path: dist/seasonal-preview
+          name: WarawaraPet-Gift-Preview
+          path: dist/gift-preview
           retention-days: 30

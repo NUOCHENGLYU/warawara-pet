@@ -253,10 +253,7 @@ final class BirthdayPresenter: BirthdayEventPresenting {
         layeringReassertCount += 1
         cakePanel?.orderFrontRegardless()
         envelopePanel?.orderFrontRegardless()
-        EventReplayLog.birthdayLayering(
-            cakeWindow: cakePanel?.windowNumber,
-            envelopeWindow: envelopePanel?.windowNumber
-        )
+        EventDiagnostics.emit("EVENT_BIRTHDAY_LAYERING cakeWindow=\(cakePanel?.windowNumber ?? -1) envelopeWindow=\(envelopePanel?.windowNumber ?? -1)")
     }
 
     // MARK: - Panels

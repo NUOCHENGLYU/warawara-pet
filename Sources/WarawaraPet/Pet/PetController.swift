@@ -397,7 +397,7 @@ final class PetController: ObservableObject {
         beginHop()
     }
 
-    /// Seasonal/daily celebration: a SMALL deterministic hop (the
+    /// Event-driven celebration: a SMALL deterministic hop (the
     /// birthday keeps its full random hop). Inert outside idle — event
     /// choreography releases attention before calling this.
     func performCelebrationHop() {
