@@ -1,4 +1,6 @@
-﻿import XCTest
+﻿import AppKit
+import SwiftUI
+import XCTest
 @testable import WarawaraPet
 
 /// Deterministic tests for seasonal eligibility, daily policy, and the
