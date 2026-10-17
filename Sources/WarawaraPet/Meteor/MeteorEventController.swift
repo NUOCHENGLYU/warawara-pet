@@ -185,16 +185,18 @@ final class MeteorEventController {
                 EventDiagnostics.meteor("FLIGHT_BEGAN")
             }
         case .flight:
-            guard let flightStartAt else { return }
-            let flightElapsed = now.timeIntervalSince(flightStartAt)
+            // Flight progress is anchored on TOTAL elapsed time so the
+            // catch-up loop can sweep the whole flight in one pass (the
+            // presenter's 30 Hz loop still uses flightStartAt in real
+            // time).
+            let flightElapsed = now.timeIntervalSince(startedAt) - timing.noticeDuration
             let progress = CGFloat(min(max(flightElapsed / timing.flightDuration, 0), 1))
             presenter?.flightFrame(progress: progress, at: now)
             if flightElapsed >= timing.flightDuration {
                 phase = .celebration
                 presenter?.meteorDeparted()
                 EventDiagnostics.meteor("DEPARTED")
-            }
-        case .celebration:
+            }        case .celebration:
             if elapsed >= timing.noticeDuration + timing.flightDuration + timing.celebrationDuration {
                 complete(now: now)
             }
