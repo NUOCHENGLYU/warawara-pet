@@ -118,14 +118,14 @@ final class BirthdayAssetTests: XCTestCase {
         XCTAssertEqual(rep.colorAt(x: 0, y: 0)?.alphaComponent ?? 0, 0, accuracy: 0.01)
     }
 
-    func testBirthdayHatPackagedButOptional() {
+    func testBirthdayHatFullyRemovedFromTheBundle() {
         XCTAssertFalse(
             BirthdayAssetStore.requiredFileNames.contains("birthday_hat.png"),
-            "the hat is optional and must not gate verification"
+            "the hat is not a required asset"
         )
-        XCTAssertNotNil(
+        XCTAssertNil(
             BirthdayAssetStore.shared.optionalImage(named: "birthday_hat.png"),
-            "the hat is packaged for a later phase"
+            "the birthday hat must be completely removed from the release"
         )
     }
 

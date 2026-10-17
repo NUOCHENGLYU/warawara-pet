@@ -29,27 +29,16 @@ final class GiftPreviewGeneratorTests: XCTestCase {
         }
         BirthdayAssetStore.shared.reset()
 
-        // Neutral + birthday hat (idle, curious yaw, drag).
+        // Neutral pet sheet.
         try renderSceneSheet(
             name: "90-neutral", rig: rig, rigLoader: rigLoader, mainSize: mainSize,
-            wearables: .none, params: idleParams()
-        )
-        try renderSceneSheet(
-            name: "91-birthday-hat", rig: rig, rigLoader: rigLoader, mainSize: mainSize,
-            wearables: WarawaraWearableState(birthdayHat: true, hatOpacity: 1),
             params: idleParams()
-        )
-        try renderSceneSheet(
-            name: "92-birthday-hat-yaw", rig: rig, rigLoader: rigLoader, mainSize: mainSize,
-            wearables: WarawaraWearableState(birthdayHat: true, hatOpacity: 1),
-            params: curiousParams(gaze: CGVector(dx: -0.7, dy: 0.05))
         )
 
         try renderMeteorSheets(rig: rig, rigLoader: rigLoader, mainSize: mainSize, to: outputDir)
         try renderLetterSheet(store: .shared, to: outputDir)
 
-        for name in ["90-neutral.png", "91-birthday-hat.png", "92-birthday-hat-yaw.png",
-                     "100-meteor-entrance.png", "101-meteor-mid.png",
+        for name in ["90-neutral.png", "100-meteor-entrance.png", "101-meteor-mid.png",
                      "102-meteor-exit.png", "103-letter.png"] {
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: outputDir.appendingPathComponent(name).path),
@@ -66,16 +55,9 @@ final class GiftPreviewGeneratorTests: XCTestCase {
         ))
     }
 
-    private func curiousParams(gaze: CGVector) -> WarawaraPerformanceParameters {
-        WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
-            inputs: WarawaraExpressionInputs(state: .curious, gaze: gaze), breathPhase: 0.25
-        ))
-    }
-
     private func renderSceneSheet(
         name: String,
         rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, mainSize: CGSize,
-        wearables: WarawaraWearableState,
         params: WarawaraPerformanceParameters
     ) throws {
         let outputDir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["GIFT_PREVIEW_OUT"]!)
@@ -85,8 +67,7 @@ final class GiftPreviewGeneratorTests: XCTestCase {
                 Text(name).font(.headline)
                 WarawaraLayeredCharacterView(
                     rig: rig, rigLoader: rigLoader,
-                    parameters: params, renderSize: mainSize,
-                    wearables: wearables
+                    parameters: params, renderSize: mainSize
                 )
                 .frame(width: mainSize.width, height: mainSize.height)
             }

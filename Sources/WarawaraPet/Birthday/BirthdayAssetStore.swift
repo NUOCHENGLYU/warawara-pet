@@ -27,15 +27,13 @@ final class BirthdayAssetStore {
     ]
 
     /// v5 (CelFilm) SHA256 values from ASSET_MANIFEST.json
-    /// (verification only). Sparkle sprites are unchanged from v2/v3;
-    /// birthday_hat is packaged but optional (not required).
+    /// (verification only). Sparkle sprites are unchanged from v2/v3.
     static let expectedSHA256: [String: String] = [
         "cake_lit.png": "2ffd3b40cac4bcc69024cc6bc4198c7f0f79c74c76b773c7180d841b6d3a82fe",
         "cake_tray.png": "580aeeb8d32e8f28506f9d95c06f5e1f0c2ed744fa7a9de6f988f26e0ae17d78",
         "envelope_closed.png": "b53e6a926aa8c679c5652c99adfd8692ec7d6ca8218f31caa2c9fa6126b3f822",
         "envelope_open.png": "e4959e860c9107bb9bb09c68f7bc2791705ff502a94e1ca838b2454b9159f1b5",
         "letter_paper_blank.png": "b091a30e198f3b7c709f2f693fb1695cbbb9ee05538c265795b35854baae1446",
-        "birthday_hat.png": "4aa3c81bc454e4b39f200876dd29a7d45b64be8a6ed39e4941cff87d51751151",
         "sparkle_gold_large.png": "2dd7ba88c8f5eb37941ec864e4021bb2a3ff55ccbb49dcb1d584aa6607a933c1",
         "sparkle_gold_lower.png": "b21afc54f285e75f95d1e2d9b83980315894f3e5bbb55aab991c228c0e3c0486",
         "sparkle_gold_star.png": "2709e4170f3f47065161b5dfc53483050c1bf50f21fa4d6ff4641cfb567262e6"

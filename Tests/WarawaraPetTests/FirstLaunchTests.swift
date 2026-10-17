@@ -65,13 +65,9 @@ final class FirstLaunchTests: XCTestCase {
         let now = date(2026, 10, 18, 10, zone: zone)
         let (handler, coordinator) = makeHandler(now: now, zone: zone)
 
-        var hatRequests: [Bool] = []
-        handler.setCelebrationHat = { hatRequests.append($0) }
-
         handler.start()
         XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.pending.rawValue,
                        "the surprise is owed, not completed before playback")
-        XCTAssertTrue(hatRequests.isEmpty, "no hat before the celebration actually runs")
 
         // The birthday tick services the pending trigger: the celebration
         // runs and the machine observes it.
@@ -79,7 +75,6 @@ final class FirstLaunchTests: XCTestCase {
         XCTAssertTrue(coordinator.isRunning)
         handler.evaluate()
         XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.running.rawValue)
-        XCTAssertTrue(hatRequests.contains(true), "the hat appears while the surprise runs")
         XCTAssertFalse(coordinator.shouldTriggerAutomatically,
                        "the surprise must not consume annual eligibility")
     }
@@ -88,12 +83,9 @@ final class FirstLaunchTests: XCTestCase {
         let zone = TimeZone(identifier: "America/New_York")!
         let now = date(2026, 10, 17, 9, zone: zone)
         let (handler, coordinator) = makeHandler(now: now, zone: zone)
-        var hatRequests: [Bool] = []
-        handler.setCelebrationHat = { hatRequests.append($0) }
 
         handler.start()
         XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.pending.rawValue)
-        XCTAssertTrue(hatRequests.isEmpty, "no separate surprise on the birthday itself")
         XCTAssertTrue(coordinator.shouldTriggerAutomatically,
                       "the annual October 17 event must stay intact")
         // The annual event plays (services its automatic trigger): the
@@ -106,7 +98,6 @@ final class FirstLaunchTests: XCTestCase {
         coordinator.requestCancellation()
         handler.evaluate()
         XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.completed.rawValue)
-        XCTAssertTrue(hatRequests.contains(false), "the hat is removed after completion")
     }
 
     func testInterruptedRunningCelebrationReplaysSafely() {
@@ -137,12 +128,9 @@ final class FirstLaunchTests: XCTestCase {
         let now = date(2026, 11, 5, 10, zone: zone)
         defaults.set(FirstLaunchState.completed.rawValue, forKey: FirstLaunchState.key)
         let (handler, coordinator) = makeHandler(now: now, zone: zone)
-        var hatRequests: [Bool] = []
-        handler.setCelebrationHat = { hatRequests.append($0) }
         handler.start()
         coordinator.servicePendingTrigger()
         XCTAssertFalse(coordinator.isRunning)
-        XCTAssertTrue(hatRequests.isEmpty)
     }
 
     func testLegacySingleKeyBuildMigratesToCompleted() {

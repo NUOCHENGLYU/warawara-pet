@@ -17,8 +17,6 @@ final class PetWindowController: NSObject {
     private var screenObserver: NSObjectProtocol?
     private var groupSequenceController: GroupSequenceController?
     private var groupActiveObservers: [(Bool) -> Void] = []
-    /// Final-gift wearable runtime (observed by the pet view).
-    var wearableRuntime = WearableRuntime()
 
     var currentFrame: CGRect {
         panel?.frame ?? .zero
@@ -141,10 +139,7 @@ final class PetWindowController: NSObject {
 
         let panel = PetPanel(size: Self.petSize)
 
-        let hostingView = PetHostingView(rootView: PetView(
-            controller: petController,
-            wearableRuntime: wearableRuntime
-        ))
+        let hostingView = PetHostingView(rootView: PetView(controller: petController))
         hostingView.frame = NSRect(origin: .zero, size: Self.petSize)
         hostingView.interactionController = interaction
         interaction.onDoubleClick = { [weak self] in

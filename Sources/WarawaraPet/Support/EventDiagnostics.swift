@@ -21,10 +21,6 @@ enum EventDiagnostics {
         emit("EVENT_ATTENTION_RELEASED")
     }
 
-    static func wearableChanged(id: String, active: Bool) {
-        emit("WEARABLE_CHANGED id=\(id) active=\(active)")
-    }
-
     static func meteor(_ event: String) {
         emit("METEOR_\(event)")
     }

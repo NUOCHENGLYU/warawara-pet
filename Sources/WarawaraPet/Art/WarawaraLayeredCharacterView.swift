@@ -9,8 +9,6 @@ struct WarawaraLayeredCharacterView: View {
     let rigLoader: WarawaraRigLoader
     let parameters: WarawaraPerformanceParameters
     let renderSize: CGSize
-    /// Active wearables (only the birthday hat in the final gift).
-    var wearables: WarawaraWearableState = .none
 
     /// Previous mouth style, crossfaded out on style changes.
     @State private var previousMouthStyle: WarawaraMouthStyle?
@@ -45,7 +43,6 @@ struct WarawaraLayeredCharacterView: View {
                 x: faceTransform?.offset(in: renderSize).width ?? 0,
                 y: faceTransform?.offset(in: renderSize).height ?? 0
             )
-            birthdayHatLayer
         }
         .frame(width: renderSize.width, height: renderSize.height)
         .scaleEffect(breathScale, anchor: bodyCenterUnit)
@@ -82,46 +79,6 @@ struct WarawaraLayeredCharacterView: View {
             x: rig.eyesLayer?.anchor.x ?? 0.5,
             y: rig.eyesLayer?.anchor.y ?? 0.5
         )
-    }
-
-    // MARK: - Birthday hat
-
-    private var headGeometry: WearableCompositor.HeadGeometry {
-        WearableCompositor.headGeometry(
-            renderSize: renderSize,
-            bodyBounds: rig.bodyBounds
-        )
-    }
-
-    @ViewBuilder
-    private var birthdayHatLayer: some View {
-        if wearables.birthdayHat,
-           let image = BirthdayAssetStore.shared.image(named: "birthday_hat.png") {
-            let box = WearableCompositor.birthdayHatBox
-            let center = WearableCompositor.hatCenter(
-                head: headGeometry,
-                bodyBounds: rig.bodyBounds,
-                renderSize: renderSize,
-                box: box
-            )
-            let canvasPt = 1024 * WearableCompositor.hatScale(
-                bodyBounds: rig.bodyBounds, renderSize: renderSize, box: box
-            )
-            Image(nsImage: image)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: canvasPt, height: canvasPt)
-                .position(
-                    x: center.x + (faceTransform?.offset(in: renderSize).width ?? 0),
-                    y: center.y + (faceTransform?.offset(in: renderSize).height ?? 0)
-                )
-                .scaleEffect(
-                    x: faceTransform?.scaleX ?? 1,
-                    y: 1,
-                    anchor: .center
-                )
-                .opacity(Double(wearables.hatOpacity))
-        }
     }
 
     // MARK: - Body
@@ -437,7 +394,6 @@ struct WarawaraExpressionDriverView: View {
     let rigLoader: WarawaraRigLoader
     let inputs: WarawaraExpressionInputs
     let renderSize: CGSize
-    var wearables: WarawaraWearableState = .none
 
     @StateObject private var model = WarawaraExpressionDriverModel()
 
@@ -447,8 +403,7 @@ struct WarawaraExpressionDriverView: View {
                 rig: rig,
                 rigLoader: rigLoader,
                 parameters: model.parameters,
-                renderSize: renderSize,
-                wearables: wearables
+                renderSize: renderSize
             )
             .onChange(of: context.date) { newDate in
                 model.tick(at: newDate, inputs: inputs)

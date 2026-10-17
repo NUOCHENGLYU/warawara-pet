@@ -90,10 +90,6 @@ final class FirstLaunchCelebration {
     private let maxAttempts = 14
     private var state: FirstLaunchState = .fresh
     private var sawCelebrationRunningThisSession = false
-    private var lastHatRequested: Bool?
-
-    /// Called when the celebration requests/retracts the birthday hat.
-    var setCelebrationHat: ((Bool) -> Void)?
 
     init(
         coordinator: BirthdayEventCoordinator,
@@ -168,15 +164,6 @@ final class FirstLaunchCelebration {
             break
         }
 
-        let hatOn = state == .running || (coordinator.isRunning && state != .completed)
-        // Notify only on REAL changes; the initial "off" state is silent
-        // so consumers observe only meaningful hat transitions.
-        if lastHatRequested == nil && !hatOn {
-            lastHatRequested = false
-        } else if hatOn != lastHatRequested {
-            lastHatRequested = hatOn
-            setCelebrationHat?(hatOn)
-        }
         EventDiagnostics.firstLaunch("STATE_\(state.rawValue.uppercased())")
     }
 

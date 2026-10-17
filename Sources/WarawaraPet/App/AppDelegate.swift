@@ -12,7 +12,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var meteorController: MeteorEventController?
     private var meteorPresenter: MeteorEventPresenter?
     private var pendingMeteorReplay = false
-    private var wearableController: WearableController?
     private var firstLaunchHandler: FirstLaunchCelebration?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -35,7 +34,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petWindowController = controller
 
         wireBirthdayEvent(windowController: controller)
-        wireWearables(windowController: controller)
         wireMeteor(windowController: controller)
         wireFirstLaunchCelebration(windowController: controller)
     }
@@ -100,13 +98,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The birthday hat wearable (October 17 + first-launch surprise).
-    private func wireWearables(windowController: PetWindowController) {
-        let controller = WearableController(runtime: windowController.wearableRuntime)
-        wearableController = controller
-        controller.start()
-    }
-
     /// The rare meteor event: independent world-space flight.
     private func wireMeteor(windowController: PetWindowController) {
         let controller = MeteorEventController(
@@ -149,9 +140,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             windowController: windowController,
             clock: SystemBirthdayClock()
         )
-        handler.setCelebrationHat = { [weak self] active in
-            self?.wearableController?.celebrationRequestsBirthdayHat = active
-        }
         firstLaunchHandler = handler
         // The pet and the birthday presenter are fully wired at this
         // point: the surprise is dispatched against a ready pipeline.
@@ -165,7 +153,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         coordinator.servicePendingTrigger()
         coordinator.advance()
         meteorController?.tick()
-        wearableController?.tick()
     }
 
     /// Called from the main entry point for --replay-meteor.
@@ -205,7 +192,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         birthdayMonitorTimer?.invalidate()
         birthdayMonitorTimer = nil
-        wearableController?.stop()
         meteorPresenter?.cleanup()
         petWindowController?.saveCurrentPosition()
     }
