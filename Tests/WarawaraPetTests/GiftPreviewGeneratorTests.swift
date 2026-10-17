@@ -3,9 +3,8 @@ import SwiftUI
 import XCTest
 @testable import WarawaraPet
 
-/// Phase 7 production visual QA: the REAL rig + wearable compositor at
-/// realistic desktop size. Not concept art — these are the actual
-/// production views the app renders.
+/// Phase 7 production visual QA: the REAL rig + birthday-hat compositor,
+/// the meteor at keyframes, and the letter reading surface.
 @MainActor
 final class GiftPreviewGeneratorTests: XCTestCase {
     func testGenerateGiftPreviews() throws {
@@ -30,35 +29,26 @@ final class GiftPreviewGeneratorTests: XCTestCase {
         }
         BirthdayAssetStore.shared.reset()
 
-        let sheets: [(String, WarawaraWearableState, WarawaraPerformanceParameters, WearableRenderParameters)] = [
-            ("90-neutral", .none, idleParams(), .default),
-            ("91-christmas-hat", WarawaraWearableState(headwear: .christmasHat), idleParams(), .default),
-            ("92-birthday-hat", WarawaraWearableState(headwear: .birthdayHat), idleParams(), .default),
-            ("93-headphones-front", WarawaraWearableState(headwear: .headphones), idleParams(), .default),
-            ("94-headphones-yaw-left", WarawaraWearableState(headwear: .headphones), curiousParams(gaze: CGVector(dx: -0.7, dy: 0.05)), .default),
-            ("95-headphones-yaw-right", WarawaraWearableState(headwear: .headphones), curiousParams(gaze: CGVector(dx: 0.7, dy: 0.05)), .default),
-            ("96-headphones-drag", WarawaraWearableState(headwear: .headphones), dragParams(), .default),
-            ("97-scarf-front", WarawaraWearableState(scarf: true), idleParams(), .default),
-            ("98-scarf-curious", WarawaraWearableState(scarf: true), curiousParams(gaze: CGVector(dx: -0.55, dy: -0.15)), WearableRenderParameters(tasselSway: 2.5)),
-            ("99-scarf-hop", WarawaraWearableState(scarf: true), hopParams(), WearableRenderParameters(tasselSway: 4))
-        ]
-        for (name, wearables, params, motion) in sheets {
-            let content = sceneSheet(
-                rig: rig, rigLoader: rigLoader, mainSize: mainSize,
-                wearables: wearables, params: params, motion: motion,
-                title: name
-            )
-            try render(content, size: CGSize(width: 560, height: 480), scale: 1,
-                       to: outputDir.appendingPathComponent("\(name).png"))
-        }
+        // Neutral + birthday hat (idle, curious yaw, drag).
+        try renderSceneSheet(
+            name: "90-neutral", rig: rig, rigLoader: rigLoader, mainSize: mainSize,
+            wearables: .none, params: idleParams()
+        )
+        try renderSceneSheet(
+            name: "91-birthday-hat", rig: rig, rigLoader: rigLoader, mainSize: mainSize,
+            wearables: WarawaraWearableState(birthdayHat: true, hatOpacity: 1),
+            params: idleParams()
+        )
+        try renderSceneSheet(
+            name: "92-birthday-hat-yaw", rig: rig, rigLoader: rigLoader, mainSize: mainSize,
+            wearables: WarawaraWearableState(birthdayHat: true, hatOpacity: 1),
+            params: curiousParams(gaze: CGVector(dx: -0.7, dy: 0.05))
+        )
 
         try renderMeteorSheets(rig: rig, rigLoader: rigLoader, mainSize: mainSize, to: outputDir)
         try renderLetterSheet(store: .shared, to: outputDir)
 
-        for name in ["90-neutral.png", "91-christmas-hat.png", "92-birthday-hat.png",
-                     "93-headphones-front.png", "94-headphones-yaw-left.png",
-                     "95-headphones-yaw-right.png", "96-headphones-drag.png",
-                     "97-scarf-front.png", "98-scarf-curious.png", "99-scarf-hop.png",
+        for name in ["90-neutral.png", "91-birthday-hat.png", "92-birthday-hat-yaw.png",
                      "100-meteor-entrance.png", "101-meteor-mid.png",
                      "102-meteor-exit.png", "103-letter.png"] {
             XCTAssertTrue(
@@ -82,41 +72,27 @@ final class GiftPreviewGeneratorTests: XCTestCase {
         ))
     }
 
-    private func dragParams() -> WarawaraPerformanceParameters {
-        WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
-            inputs: WarawaraExpressionInputs(
-                state: .dragged,
-                dragDeformation: PetDeformation(stretchScale: 1.12, anchor: CGVector(dx: 0.5, dy: -0.2))
-            ),
-            breathPhase: 0.25
-        ))
-    }
-
-    private func hopParams() -> WarawaraPerformanceParameters {
-        WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
-            inputs: WarawaraExpressionInputs(state: .hop, hopProgress: 0.5), breathPhase: 0.25
-        ))
-    }
-
-    private func sceneSheet(
+    private func renderSceneSheet(
+        name: String,
         rig: WarawaraRigManifest, rigLoader: WarawaraRigLoader, mainSize: CGSize,
         wearables: WarawaraWearableState,
-        params: WarawaraPerformanceParameters,
-        motion: WearableRenderParameters,
-        title: String
-    ) -> some View {
-        ZStack {
+        params: WarawaraPerformanceParameters
+    ) throws {
+        let outputDir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["GIFT_PREVIEW_OUT"]!)
+        let content = ZStack {
             CheckerboardBackground()
             VStack(spacing: 8) {
-                Text(title).font(.headline)
+                Text(name).font(.headline)
                 WarawaraLayeredCharacterView(
                     rig: rig, rigLoader: rigLoader,
                     parameters: params, renderSize: mainSize,
-                    wearables: wearables, wearableMotion: motion
+                    wearables: wearables
                 )
                 .frame(width: mainSize.width, height: mainSize.height)
             }
         }
+        try render(content, size: CGSize(width: 560, height: 480), scale: 1,
+                   to: outputDir.appendingPathComponent("\(name).png"))
     }
 
     private func renderMeteorSheets(

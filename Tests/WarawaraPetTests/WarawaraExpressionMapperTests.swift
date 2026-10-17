@@ -257,4 +257,28 @@ final class WarawaraExpressionMapperTests: XCTestCase {
         let reopeningLate = WarawaraExpressionDriver.blinkPulse(phase + 0.23, period: 10, phase: 0)
         XCTAssertGreaterThan(closingEarly, reopeningLate)
     }
+
+    /// The meteor wish: eyes softly closed regardless of the body state.
+    func testWishingEyesCloseSoftlyInAnyState() {
+        let curiousWish = WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+            inputs: WarawaraExpressionInputs(state: .curious, gaze: CGVector(dx: 0.5, dy: 0.2), wishingEyes: true),
+            breathPhase: 0.25, blink: 0
+        ))
+        XCTAssertEqual(curiousWish.eyeOpenness, 0.08, accuracy: 0.001,
+                       "wishing must close the eyes even while curious")
+        XCTAssertEqual(curiousWish.mouthStyle, .soft)
+
+        let idleWish = WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+            inputs: WarawaraExpressionInputs(state: .idle, wishingEyes: true),
+            breathPhase: 0.25, blink: 0
+        ))
+        XCTAssertEqual(idleWish.eyeOpenness, 0.08, accuracy: 0.001)
+
+        // Without the wish the idle face stays open.
+        let idleNormal = WarawaraExpressionMapper.targetParameters(for: WarawaraExpressionContext(
+            inputs: WarawaraExpressionInputs(state: .idle),
+            breathPhase: 0.25, blink: 0
+        ))
+        XCTAssertEqual(idleNormal.eyeOpenness, 1, accuracy: 0.001)
+    }
 }

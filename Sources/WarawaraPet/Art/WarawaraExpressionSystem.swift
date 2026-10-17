@@ -12,6 +12,8 @@ struct WarawaraExpressionInputs: Equatable {
     var dragDeformation: PetDeformation = .neutral
     var hopProgress: CGFloat = 0
     var floatProgress: CGFloat = 0
+    /// The meteor wish: eyes softly closed while true.
+    var wishingEyes: Bool = false
 
     static let neutral = WarawaraExpressionInputs()
 }
@@ -151,6 +153,14 @@ enum WarawaraExpressionMapper {
             p.mouthOpenAmount = 0.15
             p.bodySquashX = 1.03
             p.bodySquashY = 0.97
+        }
+
+        // The meteor wish: a soft closed-eye look, applied AFTER the
+        // state mapping so it reads clearly regardless of the pose.
+        if inputs.wishingEyes {
+            p.eyeOpenness = 0.08
+            p.mouthStyle = .soft
+            p.mouthOpenAmount = 0.12
         }
 
         // Blink ownership: blink is a FAST, unsmoothed channel passed

@@ -59,8 +59,7 @@ struct PetView: View {
             loader: .shared,
             placeholderSizeClass: .main,
             expressionInputs: expressionInputs,
-            wearables: wearableRuntime.state,
-            wearableMotion: wearableRuntime.motion
+            wearables: wearableRuntime.state
         )
         .modifier(PoseEffect(
             deformation: controller.dragDeformation,
@@ -99,7 +98,8 @@ struct PetView: View {
             gaze: controller.eventAttentionDirection ?? controller.curiosityDirection,
             dragDeformation: controller.dragDeformation,
             hopProgress: controller.hopProgress,
-            floatProgress: controller.floatProgress
+            floatProgress: controller.floatProgress,
+            wishingEyes: controller.wishing
         )
     }
 

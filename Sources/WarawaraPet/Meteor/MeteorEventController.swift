@@ -2,11 +2,16 @@ import CoreGraphics
 import Foundation
 
 /// Meteor phases. The pet notices, tracks the flight until complete
-/// disappearance, then celebrates.
+/// disappearance, makes a wish (eyes closed), then celebrates.
 enum MeteorPhase: Equatable {
     case idle
     case noticing
     case flight
+    /// The meteor has fully left the display; the pet keeps gazing
+    /// toward the exit briefly.
+    case departed
+    /// Eyes closed, a quiet wish (constant duration).
+    case wishing
     case celebration
     case completed
     case cancelled
@@ -63,6 +68,10 @@ final class MeteorEventController {
     struct Timing {
         var noticeDuration: TimeInterval = 1.2
         var flightDuration: TimeInterval = 6.5
+        /// Gaze-hold after the meteor fully exits.
+        var departedDuration: TimeInterval = 0.9
+        /// The wish: eyes closed. Constant, 2.5-4 s per spec.
+        var wishingDuration: TimeInterval = 3.0
         var celebrationDuration: TimeInterval = 2.0
         /// Quiet hours: no automatic meteors between 23:00 and 08:00.
         var quietHourStart = 23
@@ -133,12 +142,7 @@ final class MeteorEventController {
         guard !(isPetBusy?() ?? false), !(isBirthdayBlocking?() ?? false) else { return false }
         let calendar = clock.calendar
         let hour = calendar.component(.hour, from: now)
-        if timing.quietHourEnd <= timing.quietHourStart {
-            // Overnight quiet window.
-            if hour >= timing.quietHourStart || hour < timing.quietHourEnd { return false }
-        } else if hour >= timing.quietHourStart || hour < timing.quietHourEnd {
-            return false
-        }
+        if hour >= timing.quietHourStart || hour < timing.quietHourEnd { return false }
         guard now.timeIntervalSince(persistence.lastAutomaticDate ?? .distantPast) >= timing.cooldown else {
             return false
         }
@@ -162,7 +166,7 @@ final class MeteorEventController {
     func advance(at now: Date) {
         guard let startedAt else { return }
         var safety = 0
-        while safety < 10 {
+        while safety < 12 {
             safety += 1
             let before = phase
             stepOnce(at: now, startedAt: startedAt)
@@ -186,18 +190,35 @@ final class MeteorEventController {
             }
         case .flight:
             // Flight progress is anchored on TOTAL elapsed time so the
-            // catch-up loop can sweep the whole flight in one pass (the
-            // presenter's 30 Hz loop still uses flightStartAt in real
-            // time).
+            // catch-up loop can sweep the whole flight in one pass.
             let flightElapsed = now.timeIntervalSince(startedAt) - timing.noticeDuration
             let progress = CGFloat(min(max(flightElapsed / timing.flightDuration, 0), 1))
             presenter?.flightFrame(progress: progress, at: now)
             if flightElapsed >= timing.flightDuration {
-                phase = .celebration
+                phase = .departed
                 presenter?.meteorDeparted()
                 EventDiagnostics.meteor("DEPARTED")
-            }        case .celebration:
-            if elapsed >= timing.noticeDuration + timing.flightDuration + timing.celebrationDuration {
+            }
+        case .departed:
+            let departedElapsed = now.timeIntervalSince(startedAt)
+                - timing.noticeDuration - timing.flightDuration
+            if departedElapsed >= timing.departedDuration {
+                phase = .wishing
+                presenter?.wishingDidBegin()
+                EventDiagnostics.meteor("WISHING_BEGAN")
+            }
+        case .wishing:
+            let wishingElapsed = now.timeIntervalSince(startedAt)
+                - timing.noticeDuration - timing.flightDuration - timing.departedDuration
+            if wishingElapsed >= timing.wishingDuration {
+                phase = .celebration
+                presenter?.celebrationDidBegin()
+                EventDiagnostics.meteor("CELEBRATION_BEGAN")
+            }
+        case .celebration:
+            if elapsed >= timing.noticeDuration + timing.flightDuration
+                + timing.departedDuration + timing.wishingDuration
+                + timing.celebrationDuration {
                 complete(now: now)
             }
         case .completed, .cancelled:
@@ -258,6 +279,8 @@ protocol MeteorEventPresenting: AnyObject {
     func flightDidBegin(trajectory: MeteorTrajectory)
     func flightFrame(progress: CGFloat, at now: Date)
     func meteorDeparted()
+    func wishingDidBegin()
+    func celebrationDidBegin()
     func cleanup()
 }
 

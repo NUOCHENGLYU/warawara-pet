@@ -4,8 +4,12 @@ import SwiftUI
 /// Production realization of the meteor event:
 /// - ONE pooled, click-through, transparent panel that follows the
 ///   FIXED world-space trajectory (never attached to the pet window);
+/// - the panel is CREATED AND ORDERED FRONT at flight start (the
+///   previous invisibility bug: a never-ordered NSPanel stays hidden
+///   even with alpha 1 and correct frames);
 /// - continuous 30 Hz attention tracking through the flight;
-/// - celebration after the meteor has FULLY disappeared;
+/// - gaze-hold after departure, then a closed-eye wish, then a
+///   celebration hop;
 /// - exact cleanup: alpha zero, parked off-screen, no residual sprite.
 final class MeteorEventPresenter: MeteorEventPresenting {
     private weak var windowController: PetWindowController?
@@ -17,11 +21,16 @@ final class MeteorEventPresenter: MeteorEventPresenting {
     private var trajectory: MeteorTrajectory?
     private var attentionDirection: CGVector?
     private var cleanupDone = false
+    private var panelOrdered = false
+    private var lastFrameLog = Date(timeIntervalSince1970: 0)
     private let viewState = MeteorViewState()
 
     /// Meteor painted content width in points (~1.35 x pet height — a
     /// real sky object, not a desktop prop).
     private let contentWidth: CGFloat = 150
+
+    /// Test access to the production panel.
+    var debugPanel: BirthdayPropPanel? { panel }
 
     init(
         windowController: PetWindowController,
@@ -41,6 +50,7 @@ final class MeteorEventPresenter: MeteorEventPresenting {
 
     func noticeScene() {
         cleanupDone = false
+        panelOrdered = false
         guard let petFrame = windowController?.currentFrame, petFrame != .zero else { return }
         // Look toward the entry side (top-left, off-screen).
         let body = BirthdayPropLayout.petBodyRect(petFrame: petFrame)
@@ -56,6 +66,15 @@ final class MeteorEventPresenter: MeteorEventPresenting {
 
     func flightDidBegin(trajectory: MeteorTrajectory) {
         self.trajectory = trajectory
+        let visible = activeVisibleFrame
+        EventDiagnostics.emit(String(
+            format: "METEOR_PATH_RESOLVED entry=%.0f,%.0f exit=%.0f,%.0f c1=%.0f,%.0f c2=%.0f,%.0f visible=%.0fx%.0f",
+            trajectory.entry.x, trajectory.entry.y,
+            trajectory.exit.x, trajectory.exit.y,
+            trajectory.control1.x, trajectory.control1.y,
+            trajectory.control2.x, trajectory.control2.y,
+            visible.width, visible.height
+        ))
         ensurePanel()
         startTimer()
         // First frame immediately (still fully off-screen at t = 0).
@@ -69,10 +88,31 @@ final class MeteorEventPresenter: MeteorEventPresenting {
     }
 
     func meteorDeparted() {
-        // The meteor is fully beyond the display: release the gaze, then
-        // the pet celebrates.
+        // The meteor is fully beyond the display: hold the gaze toward
+        // the exit direction for the departed beat.
+        if let trajectory {
+            let direction = EventAttentionMath.direction(
+                from: petBodyCenter,
+                to: trajectory.exit
+            )
+            if direction != .zero {
+                attentionDirection = direction
+                windowController?.setEventAttention(direction)
+            }
+        }
+        panel?.alphaValue = 0
+        EventDiagnostics.emit("METEOR_ALPHA alpha=0")
+    }
+
+    func wishingDidBegin() {
+        // Release the gaze and close the eyes for the wish.
         attentionDirection = nil
         windowController?.setEventAttention(nil)
+        windowController?.setWishing(true)
+    }
+
+    func celebrationDidBegin() {
+        windowController?.setWishing(false)
         windowController?.performCelebrationHop()
     }
 
@@ -89,11 +129,21 @@ final class MeteorEventPresenter: MeteorEventPresenting {
                 x: visible.minX + 40,
                 y: visible.minY - panel.frame.height - 80
             ))
+            EventDiagnostics.emit(String(
+                format: "METEOR_CLEANED_UP frame=%.0f,%.0f alpha=%.2f",
+                panel.frame.minX, panel.frame.minY, panel.alphaValue
+            ))
         }
         trajectory = nil
         attentionDirection = nil
         windowController?.setEventAttention(nil)
-        EventDiagnostics.meteor("CLEANED_UP")
+        windowController?.setWishing(false)
+    }
+
+    private var petBodyCenter: CGPoint {
+        guard let petFrame = windowController?.currentFrame else { return .zero }
+        let body = BirthdayPropLayout.petBodyRect(petFrame: petFrame)
+        return CGPoint(x: body.midX, y: body.midY)
     }
 
     // MARK: - 30 Hz render loop (independent of the 4 Hz scheduler)
@@ -127,23 +177,34 @@ final class MeteorEventPresenter: MeteorEventPresenting {
             y: position.y - size.height / 2
         ))
         viewState.rotationDegrees = trajectory.heading(at: progress) * 180 / .pi + 15
-        panel.alphaValue = 1
+        if panel.alphaValue < 0.99 {
+            panel.alphaValue = 1
+            EventDiagnostics.emit(String(
+                format: "METEOR_ALPHA alpha=%.2f frame=%.0f,%.0f visible=%d level=%d",
+                panel.alphaValue, panel.frame.minX, panel.frame.minY,
+                panel.isVisible ? 1 : 0, Int(panel.level.rawValue)
+            ))
+        }
+        if now.timeIntervalSince(lastFrameLog) >= 1 {
+            lastFrameLog = now
+            EventDiagnostics.emit(String(
+                format: "METEOR_FRAME progress=%.2f x=%.0f y=%.0f panel=%.0f,%.0f",
+                progress, position.x, position.y, panel.frame.minX, panel.frame.minY
+            ))
+        }
 
         // Continuous attention tracking toward the moving meteor.
-        if let petFrame = windowController?.currentFrame, petFrame != .zero {
-            let body = BirthdayPropLayout.petBodyRect(petFrame: petFrame)
-            let direction = EventAttentionMath.direction(
-                from: CGPoint(x: body.midX, y: body.midY),
-                to: position
-            )
-            if direction != .zero {
-                if attentionDirection == nil {
-                    attentionDirection = direction
-                    windowController?.setEventAttention(direction)
-                } else if direction != attentionDirection {
-                    attentionDirection = direction
-                    windowController?.updateEventAttention(direction)
-                }
+        let direction = EventAttentionMath.direction(
+            from: petBodyCenter,
+            to: position
+        )
+        if direction != .zero {
+            if attentionDirection == nil {
+                attentionDirection = direction
+                windowController?.setEventAttention(direction)
+            } else if direction != attentionDirection {
+                attentionDirection = direction
+                windowController?.updateEventAttention(direction)
             }
         }
     }
@@ -166,6 +227,16 @@ final class MeteorEventPresenter: MeteorEventPresenting {
         }
         newPanel.alphaValue = 0
         panel = newPanel
+        EventDiagnostics.emit(String(
+            format: "METEOR_PANEL_CREATED size=%.0fx%.0f contentView=%d",
+            panelSize.width, panelSize.height, newPanel.contentView != nil ? 1 : 0
+        ))
+        // THE visibility fix: a brand-new NSPanel is invisible until it
+        // is ordered front. Without this the meteor never appears even
+        // with alpha 1 and correct frames.
+        newPanel.orderFrontRegardless()
+        panelOrdered = true
+        EventDiagnostics.emit("METEOR_ORDERED_FRONT")
     }
 }
 

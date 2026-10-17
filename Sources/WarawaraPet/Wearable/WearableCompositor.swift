@@ -1,36 +1,81 @@
-import CoreGraphics
 import Foundation
 
-/// Wearable render state published into the character pipeline.
+/// Wearable render state published into the character pipeline. The
+/// final gift keeps exactly ONE wearable: the birthday hat.
 struct WarawaraWearableState: Equatable {
-    /// The active headwear (nil = bare head). Precedence is resolved by
-    /// the controller; the renderer only displays this value.
-    var headwear: WearableKind?
-    /// The red scarf coexists with any headwear.
-    var scarf: Bool = false
-    /// Crossfade amounts (0...1); the controller eases these.
-    var headwearOpacity: CGFloat = 1
-    var scarfOpacity: CGFloat = 1
+    var birthdayHat: Bool = false
+    /// Crossfade amount (0...1); the controller eases this.
+    var hatOpacity: CGFloat = 1
 
     static let none = WarawaraWearableState()
 }
 
-/// Small motion extras computed by the controller (tassel sway etc.).
-struct WearableRenderParameters: Equatable {
-    /// Tassel/secondary sway in points (0 = neutral).
-    var tasselSway: CGFloat = 0
+/// The runtime observed by the pet view.
+final class WearableRuntime: ObservableObject {
+    @Published private(set) var state: WarawaraWearableState = .none
 
-    static let `default` = WearableRenderParameters()
+    func update(state: WarawaraWearableState) {
+        if self.state != state { self.state = state }
+    }
 }
 
-/// Authoritative wearable registration, computed in POINTS inside the
-/// rig's render canvas. Everything derives from the rig's normalized
-/// bodyBounds + mouth anchor, so accessories follow the body through
-/// every pose transform — no window-frame math, no hardcoded screen
-/// offsets.
+/// Birthday-hat-only wearable controller:
+/// - October 17 (local calendar), or
+/// - an active celebration requests it (first-launch surprise).
+/// Crossfades instead of hard switches. No other wearables exist.
+final class WearableController {
+    private let runtime: WearableRuntime
+    private let clock: BirthdayClock
+    private var timer: Timer?
+    private var opacity: CGFloat = 0
+
+    /// External celebration state (first-launch surprise) can request
+    /// the birthday hat outside October 17.
+    var celebrationRequestsBirthdayHat = false
+
+    init(
+        runtime: WearableRuntime,
+        clock: BirthdayClock = SystemBirthdayClock()
+    ) {
+        self.runtime = runtime
+        self.clock = clock
+    }
+
+    func start() {
+        guard timer == nil else { return }
+        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            self?.tick()
+        }
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    func tick() {
+        let now = clock.now()
+        let calendar = clock.calendar
+        let target: CGFloat = (celebrationRequestsBirthdayHat
+            || BirthdayDateMath.isBirthday(date: now, calendar: calendar)) ? 1 : 0
+
+        let factor: CGFloat = 1 - exp(-0.25 / 0.35)
+        opacity += (target - opacity) * factor
+        if opacity < 0.02 { opacity = 0 }
+        if opacity > 0.98 { opacity = 1 }
+
+        runtime.update(state: WarawaraWearableState(
+            birthdayHat: opacity > 0.02,
+            hatOpacity: opacity
+        ))
+    }
+}
+
+/// Authoritative birthday-hat registration, computed in POINTS inside
+/// the rig's render canvas from the rig's normalized bodyBounds — the
+/// hat follows the body through every pose transform.
 enum WearableCompositor {
 
-    /// Painted content bbox of an asset, normalized canvas (top-left).
     struct PaintedBox {
         let x: CGFloat
         let y: CGFloat
@@ -38,99 +83,38 @@ enum WearableCompositor {
         let height: CGFloat
     }
 
-    static let headphonesBox = PaintedBox(x: 122.0 / 1024, y: 169.0 / 1024,
-                                          width: 780.0 / 1024, height: 685.0 / 1024)
-    static let christmasHatBox = PaintedBox(x: 127.0 / 1024, y: 198.0 / 1024,
-                                            width: 770.0 / 1024, height: 627.0 / 1024)
+    /// Installed Birthday CelFilm v5 hat painting (design-locked).
     static let birthdayHatBox = PaintedBox(x: 198.0 / 1024, y: 91.0 / 1024,
                                            width: 628.0 / 1024, height: 832.0 / 1024)
-    static let scarfFrontBox = PaintedBox(x: 127.0 / 1024, y: 345.0 / 1024,
-                                          width: 770.0 / 1024, height: 477.0 / 1024)
 
-    /// The character's head/collar landmarks in RENDER POINTS, derived
-    /// from the rig's normalized body bounds and mouth anchor.
     struct HeadGeometry: Equatable {
-        /// Head top arc center (points).
         let topCenter: CGPoint
-        /// Head width (points).
         let width: CGFloat
-        /// Ear level center (points) — headphone cup center target.
-        let earCenter: CGPoint
-        /// Collar level Y (points) — scarf front collar top target.
-        let collarY: CGFloat
-        /// Mouth anchor Y (points) — the scarf must stay below this.
-        let mouthY: CGFloat
     }
 
     static func headGeometry(
         renderSize: CGSize,
-        bodyBounds: CGRect,
-        mouthAnchor: CGPoint?
+        bodyBounds: CGRect
     ) -> HeadGeometry {
         let bodyW = bodyBounds.width * renderSize.width
         let bodyTopY = bodyBounds.minY * renderSize.height
         let bodyH = bodyBounds.height * renderSize.height
-        let headWidth = bodyW * 0.52
-        let topCenter = CGPoint(
-            x: bodyBounds.midX * renderSize.width,
-            y: bodyTopY + bodyH * 0.06
-        )
-        let earCenter = CGPoint(
-            x: topCenter.x,
-            y: bodyTopY + bodyH * 0.22
-        )
-        let mouthY = (mouthAnchor?.y ?? (bodyBounds.minY + bodyBounds.height * 0.36))
-            * renderSize.height
-        let collarY = min(
-            max(mouthY + bodyH * 0.055, bodyTopY + bodyH * 0.34),
-            bodyTopY + bodyH * 0.48
-        )
         return HeadGeometry(
-            topCenter: topCenter,
-            width: headWidth,
-            earCenter: earCenter,
-            collarY: collarY,
-            mouthY: mouthY
+            topCenter: CGPoint(
+                x: bodyBounds.midX * renderSize.width,
+                y: bodyTopY + bodyH * 0.06
+            ),
+            width: bodyW * 0.52
         )
     }
 
-    // MARK: - Canvas scales (points per source pixel)
-
-    /// Headphones: the headset spans ~0.86 of the body width.
-    static func headphonesScale(bodyBounds: CGRect, renderSize: CGSize) -> CGFloat {
-        (bodyBounds.width * renderSize.width * 0.86) / (headphonesBox.width * 1024)
-    }
-
-    /// Hats: the brim spans ~0.62 of the body width.
+    /// Hat scale: the brim spans ~0.62 of the body width.
     static func hatScale(bodyBounds: CGRect, renderSize: CGSize, box: PaintedBox) -> CGFloat {
         (bodyBounds.width * renderSize.width * 0.62) / (box.width * 1024)
     }
 
-    /// Scarf: the collar band spans ~0.92 of the body width.
-    static func scarfScale(bodyBounds: CGRect, renderSize: CGSize) -> CGFloat {
-        (bodyBounds.width * renderSize.width * 0.92) / (scarfFrontBox.width * 1024)
-    }
-
-    // MARK: - Image-center placements (points)
-
-    /// Headphones image center: the painting's cup/band vertical center
-    /// (0.633 of the source canvas) lands on the ear level.
-    static func headphonesCenter(
-        head: HeadGeometry,
-        bodyBounds: CGRect,
-        renderSize: CGSize
-    ) -> CGPoint {
-        let scale = headphonesScale(bodyBounds: bodyBounds, renderSize: renderSize)
-        let canvasPt = 1024 * scale
-        let cupCenterFraction = (442.0 + 854.0) / 2 / 1024
-        return CGPoint(
-            x: head.earCenter.x,
-            y: head.earCenter.y - (cupCenterFraction - 0.5) * canvasPt
-        )
-    }
-
-    /// Hat image center: the brim's bottom edge (box bottom) sits
-    /// slightly INTO the head top arc so there is never a gap.
+    /// Hat image center: the brim's bottom edge sits slightly INTO the
+    /// head top arc so there is never a gap.
     static func hatCenter(
         head: HeadGeometry,
         bodyBounds: CGRect,
@@ -145,28 +129,5 @@ enum WearableCompositor {
             x: head.topCenter.x,
             y: head.topCenter.y + overlap - (brimBottomFraction - 0.5) * canvasPt
         )
-    }
-
-    /// Scarf image center: the front collar's top edge (front-box top)
-    /// sits exactly at the collar level, below the mouth.
-    static func scarfCenter(
-        bodyBounds: CGRect,
-        renderSize: CGSize,
-        head: HeadGeometry
-    ) -> CGPoint {
-        let scale = scarfScale(bodyBounds: bodyBounds, renderSize: renderSize)
-        let canvasPt = 1024 * scale
-        return CGPoint(
-            x: bodyBounds.midX * renderSize.width,
-            y: head.collarY - (scarfFrontBox.y - 0.5) * canvasPt
-        )
-    }
-
-    /// Horizontal shift applied to headwear when the head yaws (the
-    /// accessories ride the accepted 2.5D face transform).
-    static func yawShift(yawDegrees: CGFloat, renderSize: CGSize) -> CGFloat {
-        guard abs(yawDegrees) > 0.01 else { return 0 }
-        let normalized = min(max(yawDegrees / WarawaraTurnGeometry.maxYawDegrees, -1), 1)
-        return normalized * renderSize.width * 0.045
     }
 }

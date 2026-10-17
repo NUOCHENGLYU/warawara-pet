@@ -6,13 +6,12 @@ enum EventCommandLine {
     /// Human-readable usage.
     static var usage: String {
         """
-        WarawaraPet final gift usage:
+        WarawaraPet usage:
           --replay-birthday              replay the birthday event
           --replay-meteor                replay the meteor event
           --show-letter                  open the birthday letter
-          --debug-wear <kind>            force a wearable (development):
-            <kind> = birthday-hat | christmas-hat | headphones | red-scarf
           --verify-gift-assets           headless packaged-art verification
+          --debug-reset-first-launch     development: clear first-launch state
           --help-events                  show this usage
         """
     }

@@ -19,6 +19,9 @@ final class PetController: ObservableObject {
     /// looks at something specific (arriving companions / gifts).
     @Published private(set) var eventAttentionDirection: CGVector?
     private var eventAttentionActive = false
+    /// The meteor's "wish" beat: eyes gently closed while the body keeps
+    /// its pose. Driven by the meteor presenter.
+    @Published private(set) var wishing = false
 
     let personalityTuning = PersonalityTuning.default
 
@@ -294,6 +297,12 @@ final class PetController: ObservableObject {
 
     /// True while the mouse tracker must yield to event attention.
     var isEventAttentionActive: Bool { eventAttentionActive }
+
+    /// The meteor wish: eyes close softly while active.
+    func setWishing(_ on: Bool) {
+        guard wishing != on else { return }
+        wishing = on
+    }
 
     // MARK: - Curiosity visual tracking (active only while curious)
     // State detection stays on the low-frequency awareness timer; this

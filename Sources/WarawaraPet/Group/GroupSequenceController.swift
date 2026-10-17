@@ -50,6 +50,10 @@ final class GroupSequenceController {
     /// cake/envelope sink behind every companion body.
     var onCompanionPanelsOrdered: (() -> Void)?
 
+    /// Fired when the companions begin their ascent/exit (the main pet
+    /// keeps gazing toward the exit until the group fully ends).
+    var onAscentBegan: (() -> Void)?
+
     /// Live companion centers (id -> screen position) each tick; the
     /// birthday presenter uses this to carry props with companions.
     var onCompanionCenters: (([Int: CGPoint]) -> Void)?
@@ -180,6 +184,9 @@ final class GroupSequenceController {
         phaseStart = Date()
         if newState == .finishing || newState == .cancelled {
             fadeStart = Date()
+        }
+        if newState == .ascending {
+            onAscentBegan?()
         }
     }
 

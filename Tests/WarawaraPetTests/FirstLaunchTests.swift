@@ -1,8 +1,9 @@
 import XCTest
 @testable import WarawaraPet
 
-/// First-launch birthday surprise: fresh-install detection, migration,
-/// October 17 deferral, deduplication and interrupted-playback recovery.
+/// First-launch birthday surprise state machine: fresh detection (no
+/// unrelated keys), pending/running/completed transitions, interruption
+/// recovery, October 17 deferral to the annual event, and deduplication.
 final class FirstLaunchTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suiteName: String!
@@ -45,156 +46,154 @@ final class FirstLaunchTests: XCTestCase {
     private func makeHandler(
         now: Date, zone: TimeZone,
         windowController: PetWindowController = PetWindowController()
-    ) -> (FirstLaunchCelebration, BirthdayEventCoordinator, PetWindowController) {
-        let persistence = BirthdayPersistence(defaults: defaults)
+    ) -> (FirstLaunchCelebration, BirthdayEventCoordinator) {
         let coordinator = BirthdayEventCoordinator(
             clock: FixedClock(now: now, calendar: calendar(zone)),
-            persistence: persistence
+            persistence: BirthdayPersistence(defaults: defaults)
         )
         let handler = FirstLaunchCelebration(
             coordinator: coordinator,
-            persistence: persistence,
             windowController: windowController,
             clock: FixedClock(now: now, calendar: calendar(zone)),
             defaults: defaults
         )
-        return (handler, coordinator, windowController)
+        return (handler, coordinator)
     }
 
-    func testFreshFirstLaunchOnOctober18PlaysTheSurpriseOnce() {
+    func testCleanMachineNotOnBirthdayPlaysTheSurprise() {
         let zone = TimeZone(identifier: "America/New_York")!
         let now = date(2026, 10, 18, 10, zone: zone)
-        let (handler, coordinator, _) = makeHandler(now: now, zone: zone)
+        let (handler, coordinator) = makeHandler(now: now, zone: zone)
 
         var hatRequests: [Bool] = []
         handler.setCelebrationHat = { hatRequests.append($0) }
 
         handler.start()
-        XCTAssertTrue(defaults.bool(forKey: FirstLaunchCelebration.completedKey),
-                      "completion must persist BEFORE playback")
-        XCTAssertTrue(hatRequests.contains(true), "the birthday hat is requested during the surprise")
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.pending.rawValue,
+                       "the surprise is owed, not completed before playback")
+        XCTAssertTrue(hatRequests.isEmpty, "no hat before the celebration actually runs")
+
+        // The birthday tick services the pending trigger: the celebration
+        // runs and the machine observes it.
+        coordinator.servicePendingTrigger()
+        XCTAssertTrue(coordinator.isRunning)
+        handler.evaluate()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.running.rawValue)
+        XCTAssertTrue(hatRequests.contains(true), "the hat appears while the surprise runs")
         XCTAssertFalse(coordinator.shouldTriggerAutomatically,
                        "the surprise must not consume annual eligibility")
-
-        // Second launch: nothing happens again.
-        let (handler2, coordinator2, _) = makeHandler(now: now, zone: zone)
-        var hatRequests2: [Bool] = []
-        handler2.setCelebrationHat = { hatRequests2.append($0) }
-        handler2.start()
-        XCTAssertTrue(hatRequests2.isEmpty, "the surprise is once-only")
-        XCTAssertFalse(coordinator2.shouldTriggerAutomatically)
     }
 
-    func testFreshFirstLaunchOnOctober17DefersToTheAnnualEvent() {
+    func testCleanMachineOnOctober17DefersToTheAnnualEvent() {
         let zone = TimeZone(identifier: "America/New_York")!
         let now = date(2026, 10, 17, 9, zone: zone)
-        let (handler, coordinator, _) = makeHandler(now: now, zone: zone)
+        let (handler, coordinator) = makeHandler(now: now, zone: zone)
         var hatRequests: [Bool] = []
         handler.setCelebrationHat = { hatRequests.append($0) }
+
         handler.start()
-        XCTAssertTrue(defaults.bool(forKey: FirstLaunchCelebration.completedKey))
-        XCTAssertTrue(hatRequests.isEmpty,
-                      "no first-launch surprise on the birthday itself")
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.pending.rawValue)
+        XCTAssertTrue(hatRequests.isEmpty, "no separate surprise on the birthday itself")
         XCTAssertTrue(coordinator.shouldTriggerAutomatically,
-                      "the annual October 17 path must stay intact")
+                      "the annual October 17 event must stay intact")
+        // The annual event plays (services its automatic trigger): the
+        // machine watches it, then completes.
+        coordinator.checkAutomaticTrigger()
+        coordinator.servicePendingTrigger()
+        XCTAssertTrue(coordinator.isRunning)
+        handler.evaluate()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.running.rawValue)
+        coordinator.requestCancellation()
+        handler.evaluate()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.completed.rawValue)
+        XCTAssertTrue(hatRequests.contains(false), "the hat is removed after completion")
     }
 
-    func testExistingInstallationIsNeverTreatedAsFresh() {
+    func testInterruptedRunningCelebrationReplaysSafely() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        let now = date(2026, 10, 18, 10, zone: zone)
+        let (handler, coordinator) = makeHandler(now: now, zone: zone)
+        handler.start()
+        coordinator.servicePendingTrigger()
+        handler.evaluate()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.running.rawValue)
+
+        // The app quits mid-celebration: `running` is persisted. On the
+        // next launch a fresh coordinator sees the state and replays.
+        let (handler2, coordinator2) = makeHandler(now: now, zone: zone)
+        handler2.start()
+        coordinator2.servicePendingTrigger()
+        XCTAssertTrue(coordinator2.isRunning, "interrupted celebration must be replayed safely")
+        handler2.evaluate()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.running.rawValue)
+        // The replay finishes: completion recorded.
+        coordinator2.requestCancellation()
+        handler2.evaluate()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.completed.rawValue)
+    }
+
+    func testCompletedInstallationNeverReplays() {
         let zone = TimeZone(identifier: "America/New_York")!
         let now = date(2026, 11, 5, 10, zone: zone)
-        // An existing install always has a legacy marker (saved pet
-        // position), but NOT the new first-launch key.
-        defaults.set(612.0, forKey: "pet.position.x")
-        defaults.set(104.0, forKey: "pet.position.y")
-
-        let (handler, coordinator, _) = makeHandler(now: now, zone: zone)
+        defaults.set(FirstLaunchState.completed.rawValue, forKey: FirstLaunchState.key)
+        let (handler, coordinator) = makeHandler(now: now, zone: zone)
         var hatRequests: [Bool] = []
         handler.setCelebrationHat = { hatRequests.append($0) }
         handler.start()
-        XCTAssertTrue(hatRequests.isEmpty, "existing installs must not get the surprise")
-        XCTAssertTrue(defaults.bool(forKey: FirstLaunchCelebration.completedKey),
-                      "the migration marks the installation complete")
-        XCTAssertFalse(coordinator.shouldTriggerAutomatically)
+        coordinator.servicePendingTrigger()
+        XCTAssertFalse(coordinator.isRunning)
+        XCTAssertTrue(hatRequests.isEmpty)
     }
 
-    func testSameYearDeduplicationAfterFirstLaunchOutsideOctober() {
+    func testLegacySingleKeyBuildMigratesToCompleted() {
         let zone = TimeZone(identifier: "America/New_York")!
-        let launchDay = date(2026, 10, 18, 10, zone: zone)
-        let (handler, _, _) = makeHandler(now: launchDay, zone: zone)
+        let now = date(2026, 11, 5, 10, zone: zone)
+        // The previous build's own completion marker (our key only):
+        defaults.set(true, forKey: FirstLaunchState.legacyCompletedKey)
+        let (handler, coordinator) = makeHandler(now: now, zone: zone)
         handler.start()
-        XCTAssertTrue(defaults.bool(forKey: FirstLaunchCelebration.completedKey))
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.completed.rawValue)
+        XCTAssertFalse(defaults.bool(forKey: FirstLaunchState.legacyCompletedKey))
+        coordinator.servicePendingTrigger()
+        XCTAssertFalse(coordinator.isRunning, "migrated installs must not replay")
+    }
 
-        // Any later date in the same year: no duplicate celebration.
-        let later = date(2026, 12, 24, 12, zone: zone)
-        let (handler2, coordinator2, _) = makeHandler(now: later, zone: zone)
-        handler2.start()
-        XCTAssertFalse(coordinator2.shouldTriggerAutomatically)
+    func testPendingStateKeepsRetryingWithoutDuplicateTriggers() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        let now = date(2026, 10, 18, 10, zone: zone)
+        let (handler, coordinator) = makeHandler(now: now, zone: zone)
+        handler.start()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.pending.rawValue)
 
-        // Future years keep the normal annual October 17 event.
+        // The trigger is not yet serviced: repeated evaluations keep the
+        // machine in pending without stacking duplicate triggers.
+        handler.evaluate()
+        handler.evaluate()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.pending.rawValue)
+
+        // Once the birthday tick services the trigger, the machine
+        // recovers into running.
+        coordinator.servicePendingTrigger()
+        XCTAssertTrue(coordinator.isRunning)
+        handler.evaluate()
+        XCTAssertEqual(defaults.string(forKey: FirstLaunchState.key), FirstLaunchState.running.rawValue)
+    }
+
+    func testAnnualBirthdayStillWorksAfterCompletion() {
+        let zone = TimeZone(identifier: "America/New_York")!
+        defaults.set(FirstLaunchState.completed.rawValue, forKey: FirstLaunchState.key)
         let nextYear = date(2027, 10, 17, 9, zone: zone)
-        let (_, coordinator3, _) = makeHandler(now: nextYear, zone: zone)
-        XCTAssertTrue(coordinator3.shouldTriggerAutomatically,
+        let (_, coordinator) = makeHandler(now: nextYear, zone: zone)
+        XCTAssertTrue(coordinator.shouldTriggerAutomatically,
                       "future annual birthdays must still trigger")
     }
 
-    func testBusyLaunchDefersThenPlaysWhenIdle() {
-        let zone = TimeZone(identifier: "America/New_York")!
-        let now = date(2026, 10, 18, 10, zone: zone)
-        let windowController = PetWindowController()
-        windowController.configureForTesting(frame: CGRect(x: 500, y: 200, width: 180, height: 226))
-        let (handler, coordinator, _) = makeHandler(now: now, zone: zone, windowController: windowController)
-        var hatRequests: [Bool] = []
-        handler.setCelebrationHat = { hatRequests.append($0) }
-
-        // Pet busy (dragging) at launch: the handler defers; the pending
-        // trigger is requested but not serviced while busy.
-        handler.start()
-        XCTAssertTrue(defaults.bool(forKey: FirstLaunchCelebration.completedKey),
-                      "completion is persisted even while deferred")
-
-        // The celebration coordinator becomes running once serviced.
-        coordinator.servicePendingTrigger()
-        XCTAssertTrue(coordinator.isRunning)
-        _ = hatRequests
-    }
-
-    func testHatRemovedOnlyAfterObservedCelebration() {
-        let zone = TimeZone(identifier: "America/New_York")!
-        let now = date(2026, 10, 18, 10, zone: zone)
-        let (handler, coordinator, _) = makeHandler(now: now, zone: zone)
-        var hatRequests: [Bool] = []
-        handler.setCelebrationHat = { hatRequests.append($0) }
-
-        handler.start()
-        // Before the celebration is observed running, the hat must NOT
-        // be removed (deferred trigger is not "ended").
-        handler.checkCelebrationEnded()
-        XCTAssertFalse(hatRequests.contains(false))
-
-        // The celebration runs...
-        coordinator.servicePendingTrigger()
-        XCTAssertTrue(coordinator.isRunning)
-        handler.checkCelebrationEnded()
-        XCTAssertFalse(hatRequests.contains(false), "still running: hat stays")
-
-        // ...and finishes: the hat is gracefully removed.
-        coordinator.requestCancellation()
-        handler.checkCelebrationEnded()
-        XCTAssertTrue(hatRequests.contains(false), "hat removed after the celebration")
-    }
-
-    func testInterruptedPlaybackNeverReplays() {
-        let zone = TimeZone(identifier: "America/New_York")!
-        let now = date(2026, 10, 18, 10, zone: zone)
-        let (handler, _, _) = makeHandler(now: now, zone: zone)
-        handler.start()
-        // Simulate the app quitting mid-celebration: completion was
-        // already persisted, so the next launch never replays.
-        XCTAssertTrue(defaults.bool(forKey: FirstLaunchCelebration.completedKey))
-        let (handler2, _, _) = makeHandler(now: now, zone: zone)
-        var hatRequests: [Bool] = []
-        handler2.setCelebrationHat = { hatRequests.append($0) }
-        handler2.start()
-        XCTAssertTrue(hatRequests.isEmpty)
+    func testDebugResetClearsAllFirstLaunchState() {
+        defaults.set(FirstLaunchState.completed.rawValue, forKey: FirstLaunchState.key)
+        defaults.set(true, forKey: FirstLaunchState.legacyCompletedKey)
+        FirstLaunchState.resetForDebugging(defaults: defaults)
+        XCTAssertNil(defaults.string(forKey: FirstLaunchState.key))
+        XCTAssertFalse(defaults.bool(forKey: FirstLaunchState.legacyCompletedKey))
+        XCTAssertEqual(FirstLaunchState.load(defaults: defaults), .fresh)
     }
 }

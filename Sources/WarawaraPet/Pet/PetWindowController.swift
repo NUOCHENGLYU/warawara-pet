@@ -74,6 +74,11 @@ final class PetWindowController: NSObject {
         controller?.updateEventAttention(direction)
     }
 
+    /// The meteor wish beat: eyes close softly while active.
+    func setWishing(_ on: Bool) {
+        controller?.setWishing(on)
+    }
+
     /// Companion center positions observer (birthday props ride along
     /// with carrier companions during delivery).
     func setCompanionCentersObserver(_ observer: @escaping ([Int: CGPoint]) -> Void) {
@@ -84,6 +89,11 @@ final class PetWindowController: NSObject {
     /// props above carriers whenever companions are (re-)ordered front).
     func setCompanionPanelsOrderedObserver(_ observer: @escaping () -> Void) {
         groupSequenceController?.onCompanionPanelsOrdered = observer
+    }
+
+    /// Companion ascent observer (the main pet gazes toward the exit).
+    func setCompanionAscentObserver(_ observer: @escaping () -> Void) {
+        groupSequenceController?.onAscentBegan = observer
     }
 
     /// Test hook: installs a bare pet panel at a known frame without the

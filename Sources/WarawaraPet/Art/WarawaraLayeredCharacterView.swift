@@ -9,10 +9,8 @@ struct WarawaraLayeredCharacterView: View {
     let rigLoader: WarawaraRigLoader
     let parameters: WarawaraPerformanceParameters
     let renderSize: CGSize
-    /// Active wearables (nil/empty = bare character). Rendered INSIDE
-    /// this view so they inherit every body transform.
+    /// Active wearables (only the birthday hat in the final gift).
     var wearables: WarawaraWearableState = .none
-    var wearableMotion: WearableRenderParameters = .default
 
     /// Previous mouth style, crossfaded out on style changes.
     @State private var previousMouthStyle: WarawaraMouthStyle?
@@ -30,10 +28,9 @@ struct WarawaraLayeredCharacterView: View {
         //      per-layer translations
         //   -> minimal eye-local gaze inside the facial frame
         //   -> whole-group breath / squash / lean (unchanged)
-        // Wearables weave through the same hierarchy:
-        //   rear accessory layers -> body -> face -> front layers.
+        // The birthday hat renders in front of the face group so it
+        // inherits every body transform.
         ZStack {
-            wearableRearLayers
             bodyLayer
             Group {
                 eyesLayer
@@ -48,7 +45,7 @@ struct WarawaraLayeredCharacterView: View {
                 x: faceTransform?.offset(in: renderSize).width ?? 0,
                 y: faceTransform?.offset(in: renderSize).height ?? 0
             )
-            wearableFrontLayers
+            birthdayHatLayer
         }
         .frame(width: renderSize.width, height: renderSize.height)
         .scaleEffect(breathScale, anchor: bodyCenterUnit)
@@ -87,140 +84,44 @@ struct WarawaraLayeredCharacterView: View {
         )
     }
 
-    // MARK: - Wearables
+    // MARK: - Birthday hat
 
     private var headGeometry: WearableCompositor.HeadGeometry {
         WearableCompositor.headGeometry(
             renderSize: renderSize,
-            bodyBounds: rig.bodyBounds,
-            mouthAnchor: rig.mouthLayer?.anchor
+            bodyBounds: rig.bodyBounds
         )
     }
 
-    /// Face-shift in points: headwear rides the same 2.5D turn as the
-    /// face so it never looks pasted.
-    private var faceShift: CGSize {
-        faceTransform?.offset(in: renderSize) ?? .zero
-    }
-
     @ViewBuilder
-    private var wearableRearLayers: some View {
-        if wearables.headwear == .headphones,
-           let image = GiftAssetStore.shared.image(named: "audio_headphones_rear.png") {
-            let center = WearableCompositor.headphonesCenter(
-                head: headGeometry, bodyBounds: rig.bodyBounds, renderSize: renderSize
+    private var birthdayHatLayer: some View {
+        if wearables.birthdayHat,
+           let image = BirthdayAssetStore.shared.image(named: "birthday_hat.png") {
+            let box = WearableCompositor.birthdayHatBox
+            let center = WearableCompositor.hatCenter(
+                head: headGeometry,
+                bodyBounds: rig.bodyBounds,
+                renderSize: renderSize,
+                box: box
             )
-            let canvasPt = 1024 * WearableCompositor.headphonesScale(
-                bodyBounds: rig.bodyBounds, renderSize: renderSize
+            let canvasPt = 1024 * WearableCompositor.hatScale(
+                bodyBounds: rig.bodyBounds, renderSize: renderSize, box: box
             )
             Image(nsImage: image)
                 .resizable()
                 .interpolation(.high)
                 .frame(width: canvasPt, height: canvasPt)
-                .position(x: center.x, y: center.y)
-                .opacity(Double(wearables.headwearOpacity))
-        }
-        if wearables.scarf,
-           let image = GiftAssetStore.shared.image(named: "cny_red_scarf_rear.png") {
-            // Identical canvas transform to the FRONT scarf layer: the
-            // split layers reconstruct the source painting exactly.
-            scarfCanvasImage(image, asset: "cny_red_scarf_rear.png")
-                .opacity(Double(wearables.scarfOpacity))
-        }
-    }
-
-    @ViewBuilder
-    private var wearableFrontLayers: some View {
-        switch wearables.headwear {
-        case .headphones:
-            if let image = GiftAssetStore.shared.image(named: "audio_headphones_front.png") {
-                let center = WearableCompositor.headphonesCenter(
-                    head: headGeometry, bodyBounds: rig.bodyBounds, renderSize: renderSize
+                .position(
+                    x: center.x + (faceTransform?.offset(in: renderSize).width ?? 0),
+                    y: center.y + (faceTransform?.offset(in: renderSize).height ?? 0)
                 )
-                let canvasPt = 1024 * WearableCompositor.headphonesScale(
-                    bodyBounds: rig.bodyBounds, renderSize: renderSize
+                .scaleEffect(
+                    x: faceTransform?.scaleX ?? 1,
+                    y: 1,
+                    anchor: .center
                 )
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: canvasPt, height: canvasPt)
-                    .position(
-                        x: center.x + faceShift.width,
-                        y: center.y + faceShift.height
-                    )
-                    .scaleEffect(
-                        x: faceTransform?.scaleX ?? 1,
-                        y: 1,
-                        anchor: .center
-                    )
-                    .opacity(Double(wearables.headwearOpacity))
-            }
-        case .christmasHat:
-            if let image = GiftAssetStore.shared.image(named: "christmas_hat.png") {
-                hatCanvasImage(image, asset: "christmas_hat.png", box: WearableCompositor.christmasHatBox)
-                    .opacity(Double(wearables.headwearOpacity))
-            }
-        case .birthdayHat:
-            if let image = BirthdayAssetStore.shared.image(named: "birthday_hat.png") {
-                hatCanvasImage(image, asset: "birthday_hat.png", box: WearableCompositor.birthdayHatBox)
-                    .opacity(Double(wearables.headwearOpacity))
-            }
-        case .redScarf, nil:
-            EmptyView()
+                .opacity(Double(wearables.hatOpacity))
         }
-        if wearables.scarf,
-           let image = GiftAssetStore.shared.image(named: "cny_red_scarf_front.png") {
-            scarfCanvasImage(image, asset: "cny_red_scarf_front.png")
-                .offset(x: faceShift.width * 0.35, y: wearableMotion.tasselSway)
-                .rotationEffect(.degrees(Double(wearableMotion.tasselSway * 5)))
-                .opacity(Double(wearables.scarfOpacity))
-        }
-    }
-
-    /// Hat: brim contacts the head top arc and the whole hat follows the
-    /// face shift during turns.
-    @ViewBuilder
-    private func hatCanvasImage(
-        _ image: NSImage, asset: String, box: WearableCompositor.PaintedBox
-    ) -> some View {
-        let center = WearableCompositor.hatCenter(
-            head: headGeometry,
-            bodyBounds: rig.bodyBounds,
-            renderSize: renderSize,
-            box: box
-        )
-        let canvasPt = 1024 * WearableCompositor.hatScale(
-            bodyBounds: rig.bodyBounds, renderSize: renderSize, box: box
-        )
-        Image(nsImage: image)
-            .resizable()
-            .interpolation(.high)
-            .frame(width: canvasPt, height: canvasPt)
-            .position(
-                x: center.x + faceShift.width,
-                y: center.y + faceShift.height
-            )
-            .scaleEffect(
-                x: faceTransform?.scaleX ?? 1,
-                y: 1,
-                anchor: .center
-            )
-    }
-
-    /// Scarf layers: identical canvas transform for front and rear.
-    @ViewBuilder
-    private func scarfCanvasImage(_ image: NSImage, asset: String) -> some View {
-        let center = WearableCompositor.scarfCenter(
-            bodyBounds: rig.bodyBounds, renderSize: renderSize, head: headGeometry
-        )
-        let canvasPt = 1024 * WearableCompositor.scarfScale(
-            bodyBounds: rig.bodyBounds, renderSize: renderSize
-        )
-        Image(nsImage: image)
-            .resizable()
-            .interpolation(.high)
-            .frame(width: canvasPt, height: canvasPt)
-            .position(x: center.x, y: center.y)
     }
 
     // MARK: - Body
@@ -537,7 +438,6 @@ struct WarawaraExpressionDriverView: View {
     let inputs: WarawaraExpressionInputs
     let renderSize: CGSize
     var wearables: WarawaraWearableState = .none
-    var wearableMotion: WearableRenderParameters = .default
 
     @StateObject private var model = WarawaraExpressionDriverModel()
 
@@ -548,8 +448,7 @@ struct WarawaraExpressionDriverView: View {
                 rigLoader: rigLoader,
                 parameters: model.parameters,
                 renderSize: renderSize,
-                wearables: wearables,
-                wearableMotion: wearableMotion
+                wearables: wearables
             )
             .onChange(of: context.date) { newDate in
                 model.tick(at: newDate, inputs: inputs)

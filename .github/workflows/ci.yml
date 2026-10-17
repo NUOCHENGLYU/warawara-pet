@@ -67,8 +67,14 @@ jobs:
             exit 1
           fi
           grep -q "METEOR_STARTED" "/tmp/meteor-smoke.log" || { echo "no METEOR_STARTED"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "METEOR_PANEL_CREATED" "/tmp/meteor-smoke.log" || { echo "no METEOR_PANEL_CREATED"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "METEOR_ORDERED_FRONT" "/tmp/meteor-smoke.log" || { echo "no METEOR_ORDERED_FRONT"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "METEOR_PATH_RESOLVED" "/tmp/meteor-smoke.log" || { echo "no METEOR_PATH_RESOLVED"; cat "/tmp/meteor-smoke.log"; exit 1; }
           grep -q "METEOR_FLIGHT_BEGAN" "/tmp/meteor-smoke.log" || { echo "no METEOR_FLIGHT_BEGAN"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "METEOR_FRAME" "/tmp/meteor-smoke.log" || { echo "no METEOR_FRAME"; cat "/tmp/meteor-smoke.log"; exit 1; }
           grep -q "METEOR_DEPARTED" "/tmp/meteor-smoke.log" || { echo "no METEOR_DEPARTED"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "METEOR_WISHING_BEGAN" "/tmp/meteor-smoke.log" || { echo "no METEOR_WISHING_BEGAN"; cat "/tmp/meteor-smoke.log"; exit 1; }
+          grep -q "METEOR_CELEBRATION_BEGAN" "/tmp/meteor-smoke.log" || { echo "no METEOR_CELEBRATION_BEGAN"; cat "/tmp/meteor-smoke.log"; exit 1; }
           grep -q "METEOR_CLEANED_UP" "/tmp/meteor-smoke.log" || { echo "no METEOR_CLEANED_UP"; cat "/tmp/meteor-smoke.log"; exit 1; }
           grep -q "METEOR_COMPLETED" "/tmp/meteor-smoke.log" || { echo "no METEOR_COMPLETED"; cat "/tmp/meteor-smoke.log"; exit 1; }
           grep -q "EVENT_ATTENTION_ACQUIRED" "/tmp/meteor-smoke.log" || { echo "no attention acquisition"; cat "/tmp/meteor-smoke.log"; exit 1; }

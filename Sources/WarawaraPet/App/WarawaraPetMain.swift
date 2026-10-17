@@ -14,23 +14,22 @@ enum WarawaraPetMain {
             WarawaraTurnGeometry.turnDisabled = true
         }
         if arguments.contains("--verify-gift-assets") {
-            // Headless check against the packaged .app: all Phase 7 gift
-            // artwork (wearables + meteor + birthday) must resolve and
-            // match their manifest hashes.
+            // Headless check against the packaged .app: the meteor and
+            // birthday artwork must resolve and match their hashes.
             let store = GiftAssetStore.shared
             store.reset()
             let required = store.verifyAllRequiredAssets()
             let hashes = store.verifySHA256()
-            let splits = store.verifySplitIntegrity()
             let birthday = BirthdayAssetStore.shared
             birthday.reset()
             let birthdayRequired = birthday.verifyAllRequiredAssets()
             let birthdayHashes = birthday.verifySHA256()
-            if required.ok && hashes.ok && splits.ok && birthdayRequired.ok && birthdayHashes.ok {
-                print("GIFT_ASSETS_OK assets=\(GiftAssetStore.requiredFileNames.count) splits=ok birthday=ok")
+            let letterLength = birthday.letterText()?.count ?? -1
+            if required.ok && hashes.ok && birthdayRequired.ok && birthdayHashes.ok && letterLength > 0 {
+                print("GIFT_ASSETS_OK meteor=ok birthday=ok letterChars=\(letterLength)")
                 exit(0)
             }
-            print("GIFT_ASSETS_FAIL required=[\(required.details)] hashes=[\(hashes.details)] splits=[\(splits.details)] birthday=[\(birthdayRequired.details)/\(birthdayHashes.details)]")
+            print("GIFT_ASSETS_FAIL required=[\(required.details)] hashes=[\(hashes.details)] birthday=[\(birthdayRequired.details)/\(birthdayHashes.details)] letterChars=\(letterLength)")
             exit(1)
         }
         if let flagIndex = arguments.firstIndex(of: "--verify-birthday") {
@@ -99,16 +98,12 @@ enum WarawaraPetMain {
             EventDiagnostics.smokeMode = true
             appDelegate.requestMeteorReplay()
         }
-        if arguments.contains("--debug-wear") {
-            let kind = arguments.firstIndex(of: "--debug-wear")
-                .flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil } ?? ""
-            if let wearable = WearableKind(debugArgument: kind) {
-                appDelegate.requestWearableDebug(wearable)
-            } else {
-                print("WEARABLE_DEBUG_UNKNOWN id=\(kind)")
-                print("valid: birthday-hat | christmas-hat | headphones | red-scarf")
-                exit(2)
-            }
+        if arguments.contains("--debug-reset-first-launch") {
+            // Development only: clears the first-launch celebration state
+            // so the surprise can be re-verified locally.
+            FirstLaunchState.resetForDebugging()
+            print("FIRST_LAUNCH_DEBUG_RESET")
+            exit(0)
         }
         if arguments.contains("--help-events") {
             print(EventCommandLine.usage)

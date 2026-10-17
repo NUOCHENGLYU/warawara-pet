@@ -14,7 +14,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingMeteorReplay = false
     private var wearableController: WearableController?
     private var firstLaunchHandler: FirstLaunchCelebration?
-    private var pendingWearableDebug: WearableKind?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Load sprite assets BEFORE the first pet render so the
@@ -68,6 +67,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // pooled reuse): keep the carried props visually in front.
             presenter?.reassertLayering()
         }
+        windowController.setCompanionAscentObserver { [weak presenter] in
+            // Companions are leaving: the main pet gazes toward the exit.
+            presenter?.companionAscentBegan()
+        }
         windowController.onPetDoubleClick = { [weak presenter] in
             presenter?.openLetterForDoubleClick()
         }
@@ -97,17 +100,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Wearables: calendar eligibility (birthday/Christmas hats, Lunar
-    /// New Year scarf) + audio-reactive headphones, published into the
-    /// pet's render inputs via the shared runtime.
+    /// The birthday hat wearable (October 17 + first-launch surprise).
     private func wireWearables(windowController: PetWindowController) {
         let controller = WearableController(runtime: windowController.wearableRuntime)
         wearableController = controller
         controller.start()
-        if let debugKind = pendingWearableDebug {
-            pendingWearableDebug = nil
-            controller.debugForce(kind: debugKind)
-        }
     }
 
     /// The rare meteor event: independent world-space flight.
@@ -149,7 +146,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let birthdayCoordinator else { return }
         let handler = FirstLaunchCelebration(
             coordinator: birthdayCoordinator,
-            persistence: BirthdayPersistence(),
             windowController: windowController,
             clock: SystemBirthdayClock()
         )
@@ -175,15 +171,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller.requestTrigger(.replay)
         } else {
             pendingMeteorReplay = true
-        }
-    }
-
-    /// Developer wearable override (--debug-wear <kind>).
-    func requestWearableDebug(_ kind: WearableKind) {
-        if let controller = wearableController {
-            controller.debugForce(kind: kind)
-        } else {
-            pendingWearableDebug = kind
         }
     }
 

@@ -1,141 +1,167 @@
 import Foundation
 
-/// Once-only first-launch birthday surprise.
+/// Explicit first-launch celebration state machine.
 ///
-/// A GENUINELY fresh installation plays the birthday celebration on the
-/// very first launch — even on October 18 or any other day — so the gift
-/// survives a late opening. Rules:
-/// - Existing installations are detected through legacy markers that
-///   have always been written (position store, birthday persistence),
-///   NOT merely by the absence of the new key.
-/// - On October 17 the annual path owns the celebration; first-launch
-///   only records completion (no duplicate surprise).
-/// - Completion is persisted BEFORE playback, so interrupted playback
-///   never replays the surprise on the next launch.
-/// - Manual --replay-birthday never touches first-launch or annual
-///   eligibility.
+/// States are persisted under ONE key owned by this machine — fresh
+/// detection never depends on unrelated keys:
+///
+/// - `fresh`     (key absent): never celebrated on this install.
+/// - `pending`   celebration owed: either deferred (busy), interrupted
+///               before it started, or the launch day IS October 17 (the
+///               annual event owns the day; the machine watches it).
+/// - `running`   celebration observed running (persisted at start).
+/// - `completed` celebration observed finishing.
+///
+/// Recovery rules:
+/// - `fresh` at launch -> request the surprise (any date). If busy,
+///   stay `fresh`/`pending` and keep retrying.
+/// - `pending` at launch -> if not October 17, request it again
+///   (recovers interrupted pending). On October 17, wait for the annual
+///   event and just watch it.
+/// - `running` at launch -> the previous session was interrupted mid-
+///   celebration: safely replay it.
+/// - `completed` -> never again. Manual --replay-birthday is unaffected.
+enum FirstLaunchState: String {
+    case fresh
+    case pending
+    case running
+    case completed
+
+    static let key = "warawarapet.firstlaunch.state"
+    /// The previous build's boolean completion marker (our own key
+    /// only): migrate it, never anything unrelated.
+    static let legacyCompletedKey = "warawarapet.firstlaunch.celebrationCompleted"
+
+    static func load(defaults: UserDefaults) -> FirstLaunchState {
+        if defaults.bool(forKey: legacyCompletedKey) {
+            // Migration from the previous single-key build.
+            defaults.removeObject(forKey: legacyCompletedKey)
+            defaults.set(FirstLaunchState.completed.rawValue, forKey: key)
+            return .completed
+        }
+        if let raw = defaults.string(forKey: key), let state = FirstLaunchState(rawValue: raw) {
+            return state
+        }
+        return .fresh
+    }
+
+    func save(to defaults: UserDefaults) {
+        defaults.set(rawValue, forKey: key)
+    }
+
+    /// Development-only reset (--debug-reset-first-launch).
+    static func resetForDebugging(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key)
+        defaults.removeObject(forKey: legacyCompletedKey)
+    }
+}
+
 final class FirstLaunchCelebration {
-    static let completedKey = "warawarapet.firstlaunch.celebrationCompleted"
-
-    /// Keys written by every previously-used installation.
-    static let legacyMarkers: [String] = [
-        BirthdayPersistence.completedYearsKey,
-        BirthdayPersistence.envelopeUnlockedKey,
-        BirthdayPersistence.envelopeRetiredKey,
-        "pet.position.x",
-        "pet.position.y"
-    ]
-
     private let coordinator: BirthdayEventCoordinator
-    private let persistence: BirthdayPersistence
     private weak var windowController: PetWindowController?
     private let clock: BirthdayClock
     private let defaults: UserDefaults
-    private var retryTimer: Timer?
+    private var timer: Timer?
     private var attempts = 0
     private let maxAttempts = 14
+    private var state: FirstLaunchState = .fresh
+
     /// Called when the celebration requests/retracts the birthday hat.
     var setCelebrationHat: ((Bool) -> Void)?
 
     init(
         coordinator: BirthdayEventCoordinator,
-        persistence: BirthdayPersistence = BirthdayPersistence(),
         windowController: PetWindowController,
         clock: BirthdayClock = SystemBirthdayClock(),
         defaults: UserDefaults = .standard
     ) {
         self.coordinator = coordinator
-        self.persistence = persistence
         self.windowController = windowController
         self.clock = clock
         self.defaults = defaults
     }
 
     func start() {
+        state = FirstLaunchState.load(defaults: defaults)
         evaluate()
+        // A 1 Hz safety net catches the running->completed transition
+        // even when the celebration ends without our watch timer.
+        guard timer == nil else { return }
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.evaluate()
+        }
     }
 
-    private func evaluate() {
-        guard !defaults.bool(forKey: Self.completedKey) else { return }
-        if hasLegacyInstallMarker() {
-            // Existing installation migration: never treat as fresh.
-            defaults.set(true, forKey: Self.completedKey)
-            EventDiagnostics.firstLaunch("EXISTING_INSTALL_MIGRATED")
-            return
-        }
+    /// Single deterministic evaluation step (also unit-testable).
+    func evaluate() {
         let now = clock.now()
-        if BirthdayDateMath.isBirthday(date: now, calendar: clock.calendar) {
-            // The annual October 17 celebration owns today; record
-            // completion so the surprise never fires later this year.
-            defaults.set(true, forKey: Self.completedKey)
-            EventDiagnostics.firstLaunch("BIRTHDAY_TODAY_DEFERRED_TO_ANNUAL")
-            return
+        let isBirthday = BirthdayDateMath.isBirthday(date: now, calendar: clock.calendar)
+        let busy = (windowController?.isPetDragging ?? false)
+            || (windowController?.isPetSleeping ?? false)
+
+        switch state {
+        case .fresh:
+            if coordinator.isRunning {
+                // An event (annual or replay) is already playing: watch it.
+                transition(to: .running)
+            } else if busy {
+                // Never request while the pet is busy; stay fresh and the
+                // periodic evaluation retries.
+            } else if isBirthday {
+                // October 17: the annual event owns today. Watch it and
+                // never double-trigger.
+                transition(to: .pending)
+                requestTriggerIfNeeded()
+            } else {
+                // Genuinely fresh, any other day: the surprise plays now.
+                transition(to: .pending)
+                requestTriggerIfNeeded()
+            }
+        case .pending:
+            if coordinator.isRunning {
+                transition(to: .running)
+            } else if !isBirthday && !busy {
+                // Interrupted/deferred pending: recover with a safe replay.
+                requestTriggerIfNeeded()
+            }
+        case .running:
+            if coordinator.isRunning {
+                // Still celebrating: the hat stays on.
+            } else {
+                // The celebration finished (this session or the previous
+                // one was interrupted and finished the replay).
+                transition(to: .completed)
+            }
+        case .completed:
+            break
         }
-        attemptTrigger()
+
+        setCelebrationHat?(state == .running || (coordinator.isRunning && state != .completed))
+        EventDiagnostics.firstLaunch("STATE_\(state.rawValue.uppercased())")
     }
 
-    private func hasLegacyInstallMarker() -> Bool {
-        Self.legacyMarkers.contains { defaults.object(forKey: $0) != nil }
-    }
-
-    private func attemptTrigger() {
-        attempts += 1
-        guard !(windowController?.isPetDragging ?? false),
-              !(windowController?.isPetSleeping ?? false),
-              !coordinator.isRunning else {
-            scheduleRetry()
-            return
-        }
-        // Persist completion BEFORE playback: interrupted playback must
-        // never replay the surprise.
-        defaults.set(true, forKey: Self.completedKey)
-        EventDiagnostics.firstLaunch("CELEBRATION_BEGAN")
-        setCelebrationHat?(true)
-        coordinator.requestTrigger(.replay)
-        watchForCelebrationEnd()
-    }
-
-    private func scheduleRetry() {
+    private func requestTriggerIfNeeded() {
+        guard !coordinator.isRunning else { return }
         guard attempts < maxAttempts else {
             EventDiagnostics.firstLaunch("DEFERRED_TIMEOUT")
             return
         }
-        retryTimer?.invalidate()
-        retryTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { [weak self] _ in
-            self?.attemptTrigger()
-        }
+        attempts += 1
+        // The trigger is pending until the birthday tick services it;
+        // evaluate() observes isRunning and advances the state machine.
+        coordinator.requestTrigger(.replay)
     }
 
-    /// Remove the birthday hat once the surprise celebration finishes
-    /// (graceful crossfade is handled by the wearable controller).
-    private func watchForCelebrationEnd() {
-        retryTimer?.invalidate()
-        retryTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] timer in
-            guard let self else {
-                timer.invalidate()
-                return
-            }
-            self.checkCelebrationEnded()
+    private func transition(to newState: FirstLaunchState) {
+        guard state != newState else { return }
+        state = newState
+        state.save(to: defaults)
+        if newState == .completed {
+            setCelebrationHat?(false)
+            EventDiagnostics.firstLaunch("COMPLETED")
+        }
+        if newState == .running {
+            EventDiagnostics.firstLaunch("RUNNING")
         }
     }
-
-    /// Internal check (also testable): the hat is removed only AFTER the
-    /// celebration was observed running — a deferred pending trigger must
-    /// never count as "ended".
-    func checkCelebrationEnded() {
-        guard sawCelebrationRunning else {
-            if coordinator.isRunning {
-                sawCelebrationRunning = true
-            }
-            return
-        }
-        guard !coordinator.isRunning else { return }
-        sawCelebrationRunning = false
-        retryTimer?.invalidate()
-        retryTimer = nil
-        setCelebrationHat?(false)
-        EventDiagnostics.firstLaunch("CELEBRATION_ENDED_HAT_REMOVED")
-    }
-
-    private var sawCelebrationRunning = false
 }

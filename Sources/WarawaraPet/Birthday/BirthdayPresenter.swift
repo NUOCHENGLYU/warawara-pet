@@ -210,27 +210,74 @@ final class BirthdayPresenter: BirthdayEventPresenting {
         }
         guard attached, !delivered else { return }
         if let carrier = centers[0], let cakePanel {
+            // The cake/tray rides at the carrier's HAND height, below the
+            // body center — visibly carried, never floating overhead.
             cakePanel.setFrameOrigin(CGPoint(
                 x: carrier.x - cakePanelSize.width / 2,
-                y: carrier.y - 4
+                y: carrier.y - 20
             ))
         }
         if let carrier = centers[1], let envelopePanel {
+            // The envelope rides at the carrier's front-carry position
+            // (hands), not at the forehead.
             envelopePanel.setFrameOrigin(CGPoint(
-                x: carrier.x + 26 - envelopePanelSize.width / 2,
-                y: carrier.y + 10
+                x: carrier.x + 18 - envelopePanelSize.width / 2,
+                y: carrier.y - 8
             ))
         }
     }
 
-    /// Called by the app wiring when the group sequence ends.
+    /// Called by the app wiring when the group sequence starts/ends.
     func groupActivityChanged(_ active: Bool) {
         if active {
             raisePropsAboveCompanions()
             coordinator?.companionGroupDidStart()
+            beginCelebrationGlance()
         } else {
+            cancelCelebrationGlance()
+            // The companions have fully left: release the departure gaze
+            // and return to center.
+            windowController?.setEventAttention(nil)
             coordinator?.companionGroupDidEnd()
         }
+    }
+
+    /// Companions begin their ascent: the pet keeps looking toward the
+    /// exit direction until the group truly ends (groupActivityChanged
+    /// false releases it).
+    func companionAscentBegan() {
+        windowController?.setEventAttention(CGVector(dx: 0, dy: 0.85))
+    }
+
+    // MARK: - Celebration glance (left -> right -> center)
+
+    private var glanceWorkItems: [DispatchWorkItem] = []
+
+    /// While the companions gather around the props, the main pet
+    /// glances left, holds, glances right, holds, then returns to the
+    /// cake — a natural celebration, never a one-frame flicker.
+    private func beginCelebrationGlance() {
+        cancelCelebrationGlance()
+        var items: [DispatchWorkItem] = []
+        let left = DispatchWorkItem { [weak self] in
+            self?.windowController?.setEventAttention(CGVector(dx: -0.55, dy: 0.05))
+        }
+        let right = DispatchWorkItem { [weak self] in
+            self?.windowController?.setEventAttention(CGVector(dx: 0.55, dy: 0.05))
+        }
+        let center = DispatchWorkItem { [weak self] in
+            self?.windowController?.setEventAttention(nil)
+        }
+        items = [left, right, center]
+        glanceWorkItems = items
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: left)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.7, execute: right)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: center)
+    }
+
+    private func cancelCelebrationGlance() {
+        for item in glanceWorkItems { item.cancel() }
+        glanceWorkItems.removeAll()
     }
 
     /// The companion panels are ordered front when the group starts
@@ -312,6 +359,43 @@ final class BirthdayPresenter: BirthdayEventPresenting {
         envelopeActive = true
         delivered = true
         envelopeRetiredThisSession = false
+        startEnvelopeFollow()
+    }
+
+    /// The delivered envelope is HELD by the pet: it gently follows the
+    /// pet frame (low-rate smoothing — no jitter during hop/float, no
+    /// teleports).
+    private var envelopeFollowTimer: Timer?
+
+    private func startEnvelopeFollow() {
+        stopEnvelopeFollow()
+        envelopeFollowTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.followPetWithEnvelope()
+        }
+    }
+
+    private func stopEnvelopeFollow() {
+        envelopeFollowTimer?.invalidate()
+        envelopeFollowTimer = nil
+    }
+
+    private func followPetWithEnvelope() {
+        guard let envelopePanel,
+              let petFrame = windowController?.currentFrame, petFrame != .zero else { return }
+        let visible = ScreenGeometry.visibleFrame(for: petFrame)
+        let target = BirthdayPropLayout.clamped(
+            BirthdayPropLayout.envelopeOrigin(petFrame: petFrame, panelSize: envelopePanelSize),
+            panelSize: envelopePanelSize,
+            visibleFrame: visible
+        )
+        let current = envelopePanel.frame.origin
+        let dx = target.x - current.x
+        let dy = target.y - current.y
+        guard hypot(dx, dy) > 1 else { return }
+        envelopePanel.setFrameOrigin(CGPoint(
+            x: current.x + dx * 0.30,
+            y: current.y + dy * 0.30
+        ))
     }
 
     /// Gently retires the large desktop envelope after the first read.
@@ -320,6 +404,7 @@ final class BirthdayPresenter: BirthdayEventPresenting {
         guard !envelopeRetiredThisSession else { return }
         envelopeRetiredThisSession = true
         envelopeActive = false
+        stopEnvelopeFollow()
         persistence.markEnvelopeRetired()
         guard let envelopePanel else { return }
         envelopePanel.ignoresMouseEvents = true
