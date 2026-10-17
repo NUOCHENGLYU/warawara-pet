@@ -246,10 +246,13 @@ final class SeasonalEventCoordinator {
             ))
         }
         if let kind, let trigger {
+            // FINISHED is emitted BEFORE observers: smoke observers may
+            // terminate the process, so the marker must not depend on
+            // observers returning.
+            EventReplayLog.finished(id: kind.replayArgument)
             for observer in completionObservers {
                 observer(kind, trigger)
             }
-            EventReplayLog.finished(id: kind.replayArgument)
             EventReplayLog.completed(id: kind.replayArgument)
         }
         presenter?.clearAttention()
