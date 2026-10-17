@@ -150,7 +150,25 @@ final class BirthdaySecondFixTests: XCTestCase {
     func testDoubleClickReopenRequiresLetterAvailability() {
         let windowController = PetWindowController()
         let persistence = BirthdayPersistence(defaults: defaults)
-        let coordinator = BirthdayEventCoordinator(persistence: persistence)
+        // Fixed non-birthday date: the availability gate must not depend
+        // on the real system calendar (Oct 17 is the recipient birthday).
+        final class FixedClock: BirthdayClock {
+            let calendar: Calendar = {
+                var cal = Calendar(identifier: .gregorian)
+                cal.timeZone = TimeZone(identifier: "America/New_York")!
+                return cal
+            }()
+            func now() -> Date {
+                var components = DateComponents()
+                components.year = 2026; components.month = 8; components.day = 1
+                components.hour = 9; components.timeZone = calendar.timeZone
+                return calendar.date(from: components)!
+            }
+        }
+        let coordinator = BirthdayEventCoordinator(
+            clock: FixedClock(),
+            persistence: persistence
+        )
         let presenter = BirthdayPresenter(
             windowController: windowController,
             coordinator: coordinator,
