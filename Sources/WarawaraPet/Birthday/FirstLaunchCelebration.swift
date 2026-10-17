@@ -142,7 +142,11 @@ final class FirstLaunchCelebration {
         }
 
         let hatOn = state == .running || (coordinator.isRunning && state != .completed)
-        if hatOn != lastHatRequested {
+        // Notify only on REAL changes; the initial "off" state is silent
+        // so consumers observe only meaningful hat transitions.
+        if lastHatRequested == nil && !hatOn {
+            lastHatRequested = false
+        } else if hatOn != lastHatRequested {
             lastHatRequested = hatOn
             setCelebrationHat?(hatOn)
         }
