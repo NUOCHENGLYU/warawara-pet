@@ -99,7 +99,7 @@ struct WarawaraLayeredCharacterView: View {
 
     /// Face-shift in points: headwear rides the same 2.5D turn as the
     /// face so it never looks pasted.
-    private var faceShift: CGPoint {
+    private var faceShift: CGSize {
         faceTransform?.offset(in: renderSize) ?? .zero
     }
 
@@ -145,8 +145,8 @@ struct WarawaraLayeredCharacterView: View {
                     .interpolation(.high)
                     .frame(width: canvasPt, height: canvasPt)
                     .position(
-                        x: center.x + faceShift.x,
-                        y: center.y + faceShift.y
+                        x: center.x + faceShift.width,
+                        y: center.y + faceShift.height
                     )
                     .scaleEffect(
                         x: faceTransform?.scaleX ?? 1,
@@ -166,12 +166,12 @@ struct WarawaraLayeredCharacterView: View {
                     .opacity(Double(wearables.headwearOpacity))
             }
         case .redScarf, nil:
-            break
+            EmptyView()
         }
         if wearables.scarf,
            let image = GiftAssetStore.shared.image(named: "cny_red_scarf_front.png") {
             scarfCanvasImage(image, asset: "cny_red_scarf_front.png")
-                .offset(x: faceShift.x * 0.35, y: wearableMotion.tasselSway)
+                .offset(x: faceShift.width * 0.35, y: wearableMotion.tasselSway)
                 .rotationEffect(.degrees(Double(wearableMotion.tasselSway * 5)))
                 .opacity(Double(wearables.scarfOpacity))
         }
@@ -197,8 +197,8 @@ struct WarawaraLayeredCharacterView: View {
             .interpolation(.high)
             .frame(width: canvasPt, height: canvasPt)
             .position(
-                x: center.x + faceShift.x,
-                y: center.y + faceShift.y
+                x: center.x + faceShift.width,
+                y: center.y + faceShift.height
             )
             .scaleEffect(
                 x: faceTransform?.scaleX ?? 1,

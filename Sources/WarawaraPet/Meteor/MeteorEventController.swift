@@ -278,7 +278,7 @@ struct MeteorPersistence {
         defaults.integer(forKey: Self.countKeyPrefix + key)
     }
 
-    mutating func recordAutomatic(at date: Date, calendar: Calendar) {
+    func recordAutomatic(at date: Date, calendar: Calendar) {
         defaults.set(date.timeIntervalSince1970, forKey: Self.lastKey)
         let key = Self.dayKey(date, calendar: calendar)
         defaults.set(count(forDayKey: key) + 1, forKey: Self.countKeyPrefix + key)
