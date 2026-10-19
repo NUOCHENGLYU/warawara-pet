@@ -13,8 +13,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var meteorPresenter: MeteorEventPresenter?
     private var pendingMeteorReplay = false
     private var firstLaunchHandler: FirstLaunchCelebration?
+    private var pendingFaultInjection: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LifecycleDiagnostics.launch()
         // Load sprite assets BEFORE the first pet render so the
         // character view draws the artwork instead of the placeholder.
         // Failures are recorded and logged; the UI marks the fallback.
@@ -36,6 +38,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wireBirthdayEvent(windowController: controller)
         wireMeteor(windowController: controller)
         wireFirstLaunchCelebration(windowController: controller)
+
+        if let fault = pendingFaultInjection {
+            pendingFaultInjection = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak controller] in
+                FaultInjection.apply(fault, windowController: controller)
+            }
+        }
+    }
+
+    /// The user double-clicked the already-running app bundle: restore
+    /// the pet window non-activating-ly (hidden/offscreen recovery) —
+    /// works under accessory/LSUIElement activation policy.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        LifecycleDiagnostics.log("REOPEN_RECEIVED", details: "hasVisibleWindows=\(flag)")
+        petWindowController?.runRecoveryCheck(reason: "reopen")
+        return true
     }
 
     /// Creates the birthday coordinator + presenter and starts the light
@@ -164,6 +182,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Development fault injection (--fault-inject <name>): hidden-panel,
+    /// offscreen-frame, screen-change, wake-recovery. Explicit CLI flags
+    /// only — never affects normal use.
+    func requestFaultInjection(_ name: String) {
+        if petWindowController != nil {
+            FaultInjection.apply(name, windowController: petWindowController!)
+        } else {
+            pendingFaultInjection = name
+        }
+    }
+
     /// Called from the main entry point after argument parsing.
     func requestBirthdayReplay() {
         if let coordinator = birthdayCoordinator {
@@ -190,6 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        LifecycleDiagnostics.quit()
         birthdayMonitorTimer?.invalidate()
         birthdayMonitorTimer = nil
         meteorPresenter?.cleanup()

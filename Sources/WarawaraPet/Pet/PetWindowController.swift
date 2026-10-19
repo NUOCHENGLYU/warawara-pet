@@ -17,9 +17,55 @@ final class PetWindowController: NSObject {
     private var screenObserver: NSObjectProtocol?
     private var groupSequenceController: GroupSequenceController?
     private var groupActiveObservers: [(Bool) -> Void] = []
+    /// Sleep/wake + display lifecycle recovery (throttled, non-activating).
+    private var lifecycleMonitor: WindowLifecycleMonitor?
 
     var currentFrame: CGRect {
         panel?.frame ?? .zero
+    }
+
+    /// The pet panel (lifecycle recovery + tests).
+    var petPanel: PetPanel? { panel }
+
+    /// Restores the pet panel when it was hidden or ended up off-screen
+    /// (e.g. the display it lived on was unplugged during sleep). This
+    /// only restores the WINDOW — it never wakes a sleepy/sleeping pet.
+    @discardableResult
+    func restorePetWindow(reason: String) -> Bool {
+        guard let panel else { return false }
+        let frame = panel.frame
+        let screens = ScreenGeometry.screenVisibleFrames()
+        let needs = WindowRecovery.needsRecovery(
+            frame: frame, screens: screens, isVisible: panel.isVisible
+        )
+        guard needs else { return false }
+        let mainVisible = NSScreen.main?.visibleFrame
+            ?? CGRect(x: 0, y: 0, width: 1280, height: 800)
+        let recovered = WindowRecovery.recoveryFrame(
+            frame, screens: screens, mainScreenVisible: mainVisible,
+            margin: Self.windowMargin
+        )
+        panel.setFrame(recovered, display: true)
+        panel.orderFrontRegardless()
+        LifecycleDiagnostics.log("WINDOW_RECOVERED", details: "reason=\(reason)")
+        return true
+    }
+
+    // MARK: - Fault injection (development only; explicit CLI flags)
+
+    /// Moves the panel far off every screen (simulates an unplugged
+    /// display restoring a stale frame).
+    func injectOffscreenFrame() {
+        guard let panel else { return }
+        panel.setFrameOrigin(CGPoint(x: 999_999, y: 999_999))
+        LifecycleDiagnostics.log("FAULT_INJECT", details: "name=offscreen-frame")
+    }
+
+    /// Hides the panel entirely (simulates the hidden-after-wake case).
+    func injectHiddenPanel() {
+        guard let panel else { return }
+        panel.orderOut(nil)
+        LifecycleDiagnostics.log("FAULT_INJECT", details: "name=hidden-panel")
     }
 
     /// True while the user is actively dragging the main pet (birthday
@@ -159,11 +205,29 @@ final class PetWindowController: NSObject {
             queue: .main
         ) { [weak self] _ in
             guard let self, let frame = self.panel?.frame else { return }
+            LifecycleDiagnostics.screenChange(screenCount: NSScreen.screens.count)
+            // Clamp into the current displays; if the panel was hidden
+            // or lost its screen, recover it (throttled, non-activating).
             self.setWindowFrame(frame, animated: false)
+            self.lifecycleMonitor?.checkAndRestore(reason: "screen-change")
         }
 
         petController.startAutonomousBehavior()
         wireGroupSequence()
+        startLifecycleMonitor()
+    }
+
+    private func startLifecycleMonitor() {
+        guard lifecycleMonitor == nil else { return }
+        let monitor = WindowLifecycleMonitor(windowController: self)
+        monitor.start()
+        lifecycleMonitor = monitor
+    }
+
+    /// Runs one recovery check (reopen/wake paths use this).
+    @discardableResult
+    func runRecoveryCheck(reason: String) -> Bool {
+        lifecycleMonitor?.checkAndRestore(reason: reason) ?? false
     }
 
     // MARK: - Group sequence (Phase 3)

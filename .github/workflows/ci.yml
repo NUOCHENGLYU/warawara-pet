@@ -7,6 +7,16 @@ on:
   workflow_dispatch:
 
 jobs:
+  sonoma-check:
+    name: macOS 14 Sonoma build + tests
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (Sonoma 14)
+        run: swift build -c release
+      - name: Run unit tests (Sonoma 14)
+        run: swift test
+
   build-and-test:
     name: Build, test, and package
     runs-on: macos-15

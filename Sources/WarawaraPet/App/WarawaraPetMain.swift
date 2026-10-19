@@ -105,6 +105,18 @@ enum WarawaraPetMain {
             print("FIRST_LAUNCH_DEBUG_RESET")
             exit(0)
         }
+        if let faultIndex = arguments.firstIndex(of: "--fault-inject") {
+            // Development only: inject a window-recovery fault so the
+            // recovery paths can be exercised on a real Mac.
+            let name = faultIndex + 1 < arguments.count ? arguments[faultIndex + 1] : ""
+            if FaultInjection.knownNames.contains(name) {
+                appDelegate.requestFaultInjection(name)
+            } else {
+                print("FAULT_INJECT_UNKNOWN name=\(name)")
+                print("valid: \(FaultInjection.knownNames.joined(separator: " | "))")
+                exit(2)
+            }
+        }
         if arguments.contains("--diagnose-first-launch") {
             // Non-destructive inspection of the REAL profile's
             // first-launch decision. Never writes anything.

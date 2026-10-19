@@ -13,6 +13,8 @@ enum EventCommandLine {
           --verify-gift-assets           headless packaged-art verification
           --diagnose-first-launch        inspect the first-launch decision
           --debug-reset-first-launch     development: clear first-launch state
+          --fault-inject <name>          development: window-recovery fault
+            <name> = offscreen-frame | hidden-panel | screen-change | wake-recovery
           --help-events                  show this usage
         """
     }
