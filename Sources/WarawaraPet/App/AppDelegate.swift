@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let fault = pendingFaultInjection {
             pendingFaultInjection = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak controller] in
+                guard let controller else { return }
                 FaultInjection.apply(fault, windowController: controller)
             }
         }
