@@ -224,10 +224,13 @@ final class PetWindowController: NSObject {
         lifecycleMonitor = monitor
     }
 
-    /// Runs one recovery check (reopen/wake paths use this).
+    /// Runs one recovery check (reopen/wake paths use this). The monitor
+    /// is created lazily so test harnesses and fault injection work even
+    /// without the full showPet() pipeline.
     @discardableResult
     func runRecoveryCheck(reason: String) -> Bool {
-        lifecycleMonitor?.checkAndRestore(reason: reason) ?? false
+        startLifecycleMonitor()
+        return lifecycleMonitor?.checkAndRestore(reason: reason) ?? false
     }
 
     // MARK: - Group sequence (Phase 3)
