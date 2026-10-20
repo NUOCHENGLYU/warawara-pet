@@ -431,6 +431,9 @@ final class SuspensionSimulationTests: XCTestCase {
         // visible to the CI script immediately.
         func marker(_ line: String) {
             if let path = ProcessInfo.processInfo.environment["SUSPENSION_HOST_MARKER"] {
+                if !FileManager.default.fileExists(atPath: path) {
+                    FileManager.default.createFile(atPath: path, contents: nil)
+                }
                 if let handle = FileHandle(forWritingAtPath: path) {
                     handle.seekToEndOfFile()
                     handle.write(Data((line + "\n").utf8))

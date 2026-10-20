@@ -23,6 +23,7 @@ jobs:
         run: |
           MARKER=/tmp/stopcont.marker
           rm -f "$MARKER"
+          touch "$MARKER"
           SUSPENSION_HOST_SPIN=long SUSPENSION_HOST_MARKER="$MARKER" \
             swift test --filter 'testSuspensionHostSurvivesStopCont' > /tmp/stopcont.log 2>&1 &
           PID=$!
