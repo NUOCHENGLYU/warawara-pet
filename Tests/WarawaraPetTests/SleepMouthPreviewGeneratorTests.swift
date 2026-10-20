@@ -122,7 +122,7 @@ final class SleepMouthPreviewGeneratorTests: XCTestCase {
                     ForEach(Array(frames.enumerated()), id: \.offset) { _, frame in
                         VStack(spacing: 0) {
                             Text(frame.0).font(.system(size: 7))
-                            character(frame.1, rig: rig, rigLoader: rigLoader, size: size)
+                            self.character(frame.1, rig: rig, rigLoader: rigLoader, size: size)
                                 .frame(width: 120, height: 120)
                         }
                     }
