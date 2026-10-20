@@ -178,7 +178,7 @@ real Mac. Key defaults:
 | `hopMinDelay` / `hopMaxDelay` | 6 / 14 s | hop cadence |
 | `sleepyTimeout` | 240 s | system inactivity before sleepy |
 | `sleepTimeout` | 480 s | before sleeping |
-| `breathingPeriod` | 4 s | sleep breathing |
+| `breathBasePeriod` / `breathSleepyExtraPerDrowsiness` | 4 s / 2.5 s | continuous breathing period: 4 s awake easing to 6.5 s asleep (single phase accumulator in `WarawaraExpressionDriver`) |
 | `wakeTransitionDuration` | 0.3 s | wake spring response |
 | `awarenessTickInterval` | 0.15 s | curiosity/inactivity sampling |
 
