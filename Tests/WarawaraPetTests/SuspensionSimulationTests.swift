@@ -424,10 +424,20 @@ final class SuspensionSimulationTests: XCTestCase {
         let longSpin = ProcessInfo.processInfo.environment["SUSPENSION_HOST_SPIN"] == "long"
         let spinDuration: TimeInterval = longSpin ? 45 : 3
         let wallBefore = Date()
-        // stderr is unbuffered: the markers appear in the CI log the
-        // moment they are written, so the freeze step can react while
-        // the spin is still running.
+        // XCTest's harness captures the test's stdout/stderr and only
+        // flushes them when the test ends, so the CI freeze step cannot
+        // react to them live. When SUSPENSION_HOST_MARKER is set the
+        // markers are also written straight into that file, which is
+        // visible to the CI script immediately.
         func marker(_ line: String) {
+            if let path = ProcessInfo.processInfo.environment["SUSPENSION_HOST_MARKER"] {
+                if let handle = FileHandle(forWritingAtPath: path) {
+                    handle.seekToEndOfFile()
+                    handle.write(Data((line + "\n").utf8))
+                    handle.synchronizeFile()
+                    handle.closeFile()
+                }
+            }
             FileHandle.standardError.write(Data((line + "\n").utf8))
         }
         marker("SUSPENSION_HOST_BEGIN")

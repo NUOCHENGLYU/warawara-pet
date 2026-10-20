@@ -21,32 +21,35 @@ jobs:
           exit ${PIPESTATUS[0]}
       - name: SIGSTOP/SIGCONT host freeze test
         run: |
-          SUSPENSION_HOST_SPIN=long swift test --filter 'testSuspensionHostSurvivesStopCont' > /tmp/stopcont.log 2>&1 &
+          MARKER=/tmp/stopcont.marker
+          rm -f "$MARKER"
+          SUSPENSION_HOST_SPIN=long SUSPENSION_HOST_MARKER="$MARKER" \
+            swift test --filter 'testSuspensionHostSurvivesStopCont' > /tmp/stopcont.log 2>&1 &
           PID=$!
-          PATTERN='WarawaraPetPackageTests.xctest'
+          PATTERN='WarawaraPetPackageTests|xctest'
           trap 'pkill -CONT -f "$PATTERN" 2>/dev/null || true' EXIT
           for i in $(seq 1 360); do
-            if grep -q "SUSPENSION_HOST_BEGIN" /tmp/stopcont.log 2>/dev/null; then break; fi
+            if grep -q "SUSPENSION_HOST_BEGIN" "$MARKER" 2>/dev/null; then break; fi
             if ! kill -0 $PID 2>/dev/null; then break; fi
             sleep 1
           done
-          if ! grep -q "SUSPENSION_HOST_BEGIN" /tmp/stopcont.log 2>/dev/null; then
+          if ! grep -q "SUSPENSION_HOST_BEGIN" "$MARKER" 2>/dev/null; then
             echo "host test never reached the spin loop"; cat /tmp/stopcont.log; exit 1
           fi
-          # Freeze the xctest runner by process name (never the CI
+          # Freeze the test runner by process name (never the CI
           # script's own process group) and verify it is really stopped
           # before and after the 8 s pause.
           echo "=== process table ==="
           ps -axo pid,ppid,state,comm,args | grep -iE 'xctest|WarawaraPet|swift test' | head -n 20
-          pkill -STOP -f 'xctest' || { echo "STOP failed"; exit 1; }
+          pkill -STOP -f "$PATTERN" || { echo "STOP failed"; exit 1; }
           sleep 1
-          RUNNER=$(pgrep -f 'xctest' | head -n 1)
+          RUNNER=$(pgrep -f "$PATTERN" | head -n 1)
           STATE=$(ps -o state= -p "$RUNNER" | tr -d ' ')
           if [ "$STATE" != "T" ]; then
             echo "runner not in stopped state (state=$STATE)"; exit 1
           fi
           sleep 8
-          pkill -CONT -f 'xctest' || { echo "CONT failed"; exit 1; }
+          pkill -CONT -f "$PATTERN" || { echo "CONT failed"; exit 1; }
           sleep 1
           STATE=$(ps -o state= -p "$RUNNER" | tr -d ' ')
           if [ "$STATE" = "T" ]; then
@@ -60,9 +63,9 @@ jobs:
           wait $PID
           STATUS=$?
           if [ $STATUS -ne 0 ]; then echo "HOST_FAILED status=$STATUS"; cat /tmp/stopcont.log; exit 1; fi
-          grep -q "SUSPENSION_HOST_BEGIN" /tmp/stopcont.log || { echo "no BEGIN"; cat /tmp/stopcont.log; exit 1; }
-          grep -q "SUSPENSION_HOST_END" /tmp/stopcont.log || { echo "no END (stuck?)"; cat /tmp/stopcont.log; exit 1; }
-          WALL=$(grep -o 'wallDelta=[0-9.]*' /tmp/stopcont.log | head -n 1 | cut -d= -f2)
+          grep -q "SUSPENSION_HOST_BEGIN" "$MARKER" || { echo "no BEGIN"; cat /tmp/stopcont.log; exit 1; }
+          grep -q "SUSPENSION_HOST_END" "$MARKER" || { echo "no END (stuck?)"; cat /tmp/stopcont.log; exit 1; }
+          WALL=$(grep -o 'wallDelta=[0-9.]*' "$MARKER" | head -n 1 | cut -d= -f2)
           echo "measured wallDelta=$WALL"
           # 45 s spin + 8 s stop: wallDelta > 50 proves the freeze really
           # hit the runner mid-spin (wall clock keeps running under
@@ -77,6 +80,7 @@ jobs:
           path: |
             /tmp/sonoma-sim.log
             /tmp/stopcont.log
+            /tmp/stopcont.marker
           if-no-files-found: ignore
 
   sonoma-check:
