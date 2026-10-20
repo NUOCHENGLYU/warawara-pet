@@ -19,6 +19,10 @@ final class PetMotionController {
     private var progressHandler: ((CGFloat) -> Void)?
     private var completionHandler: ((CGRect) -> Void)?
 
+    /// Injectable wall-clock source (test seam; default behavior is
+    /// unchanged: `Date()`). Enables virtual long-suspension tests.
+    var nowProvider: () -> Date = { Date() }
+
     private static let settleDuration: TimeInterval = 0.55
     private static let settleAmplitude: CGFloat = 18
 
@@ -84,10 +88,15 @@ final class PetMotionController {
     }
 
     private func startTimer() {
-        startTime = Date()
+        startTime = nowProvider()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             self?.tick()
         }
+    }
+
+    /// Test seam: runs one motion tick synchronously.
+    func performTickForTesting() {
+        tick()
     }
 
     private func tick() {
@@ -95,7 +104,7 @@ final class PetMotionController {
             cancelMotion()
             return
         }
-        let elapsed = Date().timeIntervalSince(startTime)
+        let elapsed = nowProvider().timeIntervalSince(startTime)
         switch mode {
         case .hop:
             let duration = hopParams.duration

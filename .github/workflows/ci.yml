@@ -7,6 +7,58 @@ on:
   workflow_dispatch:
 
 jobs:
+  sonoma-sleep-sim:
+    name: Sonoma 14 Sleep/Wake Simulation
+    runs-on: macos-14
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (debug)
+        run: swift build -c debug
+      - name: Suspension, recovery and lifecycle tests
+        run: |
+          swift test --filter 'Suspension|Recovery|Lifecycle' 2>&1 | tee /tmp/sonoma-sim.log
+          exit ${PIPESTATUS[0]}
+      - name: SIGSTOP/SIGCONT host freeze test
+        run: |
+          swift test --filter 'SuspensionHostTests' > /tmp/stopcont.log 2>&1 &
+          PID=$!
+          TARGET=""
+          for i in $(seq 1 360); do
+            if grep -q "SUSPENSION_HOST_BEGIN" /tmp/stopcont.log 2>/dev/null; then break; fi
+            if ! kill -0 $PID 2>/dev/null; then break; fi
+            sleep 1
+          done
+          # Freeze the actual test runner (child), falling back to the
+          # swift process when it execs the runner in place. Never stop
+          # the CI script's own process group.
+          TARGET=$(pgrep -P "$PID" | head -n 1)
+          if [ -z "$TARGET" ]; then TARGET=$PID; fi
+          trap 'kill -CONT "$TARGET" 2>/dev/null || true' EXIT
+          kill -STOP "$TARGET" 2>/dev/null || true
+          sleep 8
+          kill -CONT "$TARGET" 2>/dev/null || true
+          trap - EXIT
+          for i in $(seq 1 120); do
+            if ! kill -0 $PID 2>/dev/null; then break; fi
+            sleep 1
+          done
+          wait $PID
+          STATUS=$?
+          if [ $STATUS -ne 0 ]; then echo "HOST_FAILED status=$STATUS"; cat /tmp/stopcont.log; exit 1; fi
+          grep -q "SUSPENSION_HOST_BEGIN" /tmp/stopcont.log || { echo "no BEGIN"; cat /tmp/stopcont.log; exit 1; }
+          grep -q "SUSPENSION_HOST_END" /tmp/stopcont.log || { echo "no END (stuck?)"; cat /tmp/stopcont.log; exit 1; }
+          echo "STOPCONT_OK"
+      - name: Upload simulation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sonoma14-SleepWake-Simulation-Logs
+          path: |
+            /tmp/sonoma-sim.log
+            /tmp/stopcont.log
+          if-no-files-found: ignore
+
   sonoma-check:
     name: macOS 14 Sonoma build + tests
     runs-on: macos-14

@@ -52,10 +52,13 @@ final class WindowRecoveryTests: XCTestCase {
         monitor.restoreThrottle = 0
 
         windowController.injectOffscreenFrame()
-        XCTAssertTrue(WindowRecovery.isOffscreen(
-            windowController.currentFrame, screens: ScreenGeometry.screenVisibleFrames()
-        ) || !WindowRecovery.isOffscreen(windowController.currentFrame, screens: ScreenGeometry.screenVisibleFrames()),
-            "precondition guard") // injected far off-screen
+        XCTAssertTrue(
+            WindowRecovery.isOffscreen(
+                windowController.currentFrame,
+                screens: ScreenGeometry.screenVisibleFrames()
+            ),
+            "precondition: the injected frame must genuinely be off-screen"
+        )
 
         let restored = monitor.checkAndRestore(reason: "test")
         XCTAssertTrue(restored, "the off-screen panel must be recovered")
