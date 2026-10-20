@@ -35,6 +35,13 @@ final class PetWindowController: NSObject {
         guard let panel else { return false }
         let frame = panel.frame
         let screens = ScreenGeometry.screenVisibleFrames()
+        // Defense in depth (same guard as the monitor): a transiently
+        // empty screen list must never move a healthy panel into the
+        // hardcoded fallback box. Defer and let the next real check run.
+        guard !screens.isEmpty else {
+            LifecycleDiagnostics.log("RECOVERY_DEFERRED_NO_SCREENS", details: "reason=\(reason)")
+            return false
+        }
         let needs = WindowRecovery.needsRecovery(
             frame: frame, screens: screens, isVisible: panel.isVisible
         )

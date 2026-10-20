@@ -8,18 +8,26 @@ enum WindowRecovery {
 
     /// True when the frame's center is not inside ANY screen's visible
     /// frame (e.g. the display it lived on was unplugged during sleep).
+    /// Pure geometry: an EMPTY screen list still reports true (the
+    /// center is vacuously inside nothing) — callers that must not act
+    /// on a transient empty list guard on `screens.isEmpty` first.
     static func isOffscreen(_ frame: CGRect, screens: [CGRect]) -> Bool {
         let center = CGPoint(x: frame.midX, y: frame.midY)
         return !screens.contains { $0.contains(center) }
     }
 
     /// True when the panel needs recovery: hidden, or offscreen.
+    /// An EMPTY screen list is a wake-time race, not a real placement:
+    /// report healthy so no window move/reset/orderFront can be applied
+    /// while the display server is still settling (a later check with a
+    /// real screen list re-evaluates).
     static func needsRecovery(
         frame: CGRect,
         screens: [CGRect],
         isVisible: Bool
     ) -> Bool {
-        !isVisible || isOffscreen(frame, screens: screens)
+        guard !screens.isEmpty else { return false }
+        return !isVisible || isOffscreen(frame, screens: screens)
     }
 
     /// A safe frame: the current frame clamped into the visible frame of
@@ -45,9 +53,13 @@ enum WindowRecovery {
 final class WindowLifecycleMonitor {
     private weak var windowController: PetWindowController?
     private var settleTimers: [Timer] = []
+    private var deferredRetryTimer: Timer?
     private var lastRestore = Date.distantPast
     /// Throttle: never order the panel front more than once per interval.
     var restoreThrottle: TimeInterval = 2
+    /// Injectable screen source (tests inject an empty list to simulate
+    /// the wake-time race). Defaults to the real display union.
+    var screenProvider: () -> [CGRect] = { ScreenGeometry.screenVisibleFrames() }
     /// Dev-only: report each restore decision (tests observe via logs).
     var onRestoreDecision: ((Bool, String) -> Void)?
 
@@ -70,6 +82,8 @@ final class WindowLifecycleMonitor {
     func stop() {
         settleTimers.forEach { $0.invalidate() }
         settleTimers.removeAll()
+        deferredRetryTimer?.invalidate()
+        deferredRetryTimer = nil
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
@@ -105,13 +119,26 @@ final class WindowLifecycleMonitor {
 
     /// Runs one recovery check. Throttled: repeated calls inside
     /// `restoreThrottle` do nothing. Never focuses the app.
+    ///
+    /// EMPTY-SCREEN GUARD: while `NSScreen.screens` is transiently empty
+    /// during wake, NOTHING is moved, reset or ordered front. The check
+    /// is deferred (logged as RECOVERY_DEFERRED_NO_SCREENS) and a
+    /// one-shot retry is scheduled so a later tick re-evaluates once the
+    /// display list is real. Deferral never consumes the restore
+    /// throttle, so it can never cause a permanent missed recovery.
     @discardableResult
     func checkAndRestore(reason: String) -> Bool {
         guard let windowController, let panel = windowController.petPanel else {
             onRestoreDecision?(false, "no-panel")
             return false
         }
-        let screens = ScreenGeometry.screenVisibleFrames()
+        let screens = screenProvider()
+        guard !screens.isEmpty else {
+            LifecycleDiagnostics.log("RECOVERY_DEFERRED_NO_SCREENS", details: "reason=\(reason)")
+            onRestoreDecision?(false, "deferred-no-screens")
+            scheduleDeferredRetry()
+            return false
+        }
         let needs = WindowRecovery.needsRecovery(
             frame: panel.frame,
             screens: screens,
@@ -130,5 +157,17 @@ final class WindowLifecycleMonitor {
         let restored = windowController.restorePetWindow(reason: reason)
         onRestoreDecision?(restored, reason)
         return restored
+    }
+
+    /// One deferred re-check while the screen list was empty. Only one
+    /// pending retry is ever scheduled; a real screen change or the next
+    /// wake check re-runs the same path anyway.
+    private func scheduleDeferredRetry() {
+        guard deferredRetryTimer == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { [weak self] _ in
+            self?.deferredRetryTimer = nil
+            self?.checkAndRestore(reason: "no-screens-retry")
+        }
+        deferredRetryTimer = timer
     }
 }

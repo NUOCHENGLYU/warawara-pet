@@ -4,7 +4,7 @@ import XCTest
 
 /// Window-recovery fault matrix: two-screen → one-screen transitions,
 /// main-screen resize, screen-edge frames, healthy-panel no-ops,
-/// repeated wake storms, and the documented empty-screen-list weakness.
+/// repeated wake storms, and the fixed empty-screen-list deferral.
 final class WindowRecoveryFaultMatrixTests: XCTestCase {
     private let petSize = CGSize(width: 200, height: 226)
     private let primary = CGRect(x: 0, y: 0, width: 1440, height: 900)
@@ -57,27 +57,67 @@ final class WindowRecoveryFaultMatrixTests: XCTestCase {
         ))
     }
 
-    /// C (DOCUMENTED WEAKNESS): an empty screen list currently makes
-    /// `isOffscreen` return true (nothing contains the center), so the
-    /// recovery path would clamp a healthy window into the fallback
-    /// 1280x800 box. This test records the ACTUAL current behavior so
-    /// the limitation stays visible; the recommended minimal fix is to
-    /// no-op when the screen list is empty and retry later.
-    func testEmptyScreenListIsAKnownWeakness() {
-        XCTAssertTrue(WindowRecovery.isOffscreen(
-            CGRect(x: 400, y: 300, width: petSize.width, height: petSize.height),
-            screens: []
-        ), "KNOWN WEAKNESS: an empty screen list currently reports off-screen")
-        // The computed recovery frame falls back to the main screen (or
-        // the hardcoded 1280x800 box when even NSScreen.main is nil).
-        let recovered = WindowRecovery.recoveryFrame(
-            CGRect(x: 400, y: 300, width: petSize.width, height: petSize.height),
-            screens: [],
-            mainScreenVisible: primary,
-            margin: margin
-        )
-        XCTAssertTrue(primary.contains(recovered.insetBy(dx: -1, dy: -1)),
-                      "fallback lands on the main screen when provided")
+    /// C (FIXED): an empty screen list previously made `needsRecovery`
+    /// true via `isOffscreen`, so a wake-time race could clamp a healthy
+    /// window into the fallback box. The new contract: an empty screen
+    /// list means "defer, do not act" — nothing moves, resets or
+    /// orderFronts while the list is empty.
+    func testEmptyScreenListDefersRecoveryWithoutMovingThePanel() {
+        let frame = CGRect(x: 400, y: 300, width: petSize.width, height: petSize.height)
+        XCTAssertFalse(WindowRecovery.needsRecovery(frame: frame, screens: [], isVisible: true),
+                       "an empty screen list must NOT declare the panel unhealthy")
+        XCTAssertTrue(WindowRecovery.isOffscreen(frame, screens: []),
+                      "pure geometry still reports vacuously offscreen")
+
+        let windowController = PetWindowController()
+        windowController.configureForTesting(frame: frame)
+        let monitor = makeMonitor(windowController)
+        var empty: [CGRect] = []
+        monitor.screenProvider = { empty }
+        var decisions: [String] = []
+        monitor.onRestoreDecision = { restored, reason in
+            decisions.append(restored ? "restored" : reason)
+        }
+
+        // Two consecutive checks while the screen list is empty: deferred
+        // twice, the frame is untouched, the panel is untouched.
+        XCTAssertFalse(monitor.checkAndRestore(reason: "wake"))
+        XCTAssertFalse(monitor.checkAndRestore(reason: "settle"))
+        XCTAssertEqual(windowController.currentFrame.origin, frame.origin,
+                       "no move while the screen list is empty")
+        XCTAssertEqual(decisions, ["deferred-no-screens", "deferred-no-screens"])
+
+        // Screens reappear with a real list: the SAME path now performs
+        // the recovery for a genuinely offscreen panel.
+        windowController.injectOffscreenFrame()
+        monitor.screenProvider = { [self] in [primary] }
+        let restored = monitor.checkAndRestore(reason: "wake")
+        XCTAssertTrue(restored, "a later check with a real screen list recovers")
+        XCTAssertEqual(decisions.last, "restored")
+        XCTAssertTrue(primary.contains(CGPoint(
+            x: windowController.currentFrame.midX,
+            y: windowController.currentFrame.midY
+        )))
+    }
+
+    /// Deferral must not consume the restore throttle: a deferred check
+    /// followed by a real recovery inside the throttle window still
+    /// restores (no permanent missed recovery).
+    func testDeferredCheckDoesNotConsumeTheRestoreThrottle() {
+        let frame = CGRect(x: 400, y: 300, width: petSize.width, height: petSize.height)
+        let windowController = PetWindowController()
+        windowController.configureForTesting(frame: frame)
+        let monitor = makeMonitor(windowController)
+        monitor.restoreThrottle = 60
+
+        var empty: [CGRect] = []
+        monitor.screenProvider = { empty }
+        XCTAssertFalse(monitor.checkAndRestore(reason: "wake"))
+
+        windowController.injectOffscreenFrame()
+        monitor.screenProvider = { [self] in [primary] }
+        XCTAssertTrue(monitor.checkAndRestore(reason: "wake"),
+                      "deferral never consumes the throttle budget")
     }
 
     // MARK: - Real-panel matrix
