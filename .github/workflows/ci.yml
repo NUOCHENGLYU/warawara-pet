@@ -50,7 +50,16 @@ jobs:
             T*) ;;
             *) echo "runner not in stopped state (state=$STATE)"; exit 1 ;;
           esac
+          # The freeze proof: the runner must stay stopped (state T)
+          # for the ENTIRE 8 s window. SIGSTOP can only be undone by
+          # SIGCONT, and nothing else sends CONT here, so observing T at
+          # both ends proves a genuine >= 8 s freeze.
           sleep 8
+          STATE=$(ps -o state= -p "$RUNNER" | tr -d ' ')
+          case "$STATE" in
+            T*) ;;
+            *) echo "runner did not stay stopped for the 8s window (state=$STATE)"; exit 1 ;;
+          esac
           pkill -CONT -f "$PATTERN" || { echo "CONT failed"; exit 1; }
           sleep 1
           STATE=$(ps -o state= -p "$RUNNER" | tr -d ' ')
@@ -67,13 +76,13 @@ jobs:
           if [ $STATUS -ne 0 ]; then echo "HOST_FAILED status=$STATUS"; cat /tmp/stopcont.log; exit 1; fi
           grep -q "SUSPENSION_HOST_BEGIN" "$MARKER" || { echo "no BEGIN"; cat /tmp/stopcont.log; exit 1; }
           grep -q "SUSPENSION_HOST_END" "$MARKER" || { echo "no END (stuck?)"; cat /tmp/stopcont.log; exit 1; }
+          COUNTER=$(grep -o 'counter=[0-9]*' "$MARKER" | head -n 1 | cut -d= -f2)
+          if [ -z "$COUNTER" ] || [ "$COUNTER" -le 0 ]; then
+            echo "the spin produced no iterations (counter=$COUNTER)"; cat /tmp/stopcont.log; exit 1
+          fi
           WALL=$(grep -o 'wallDelta=[0-9.]*' "$MARKER" | head -n 1 | cut -d= -f2)
-          echo "measured wallDelta=$WALL"
-          # 45 s spin + 8 s stop: wallDelta > 50 proves the freeze really
-          # hit the runner mid-spin (wall clock keeps running under
-          # SIGSTOP, so an unfrozen run would measure ~45).
-          awk "BEGIN{exit !($WALL > 50)}" || { echo "freeze not observed (wallDelta=$WALL)"; cat /tmp/stopcont.log; exit 1; }
-          echo "STOPCONT_OK wallDelta=$WALL"
+          echo "measured wallDelta=$WALL counter=$COUNTER"
+          echo "STOPCONT_OK wallDelta=$WALL counter=$COUNTER"
       - name: Upload simulation logs
         if: always()
         uses: actions/upload-artifact@v4

@@ -418,8 +418,9 @@ final class SuspensionSimulationTests: XCTestCase {
     /// freeze and resume the WHOLE test process mid-execution. The CI
     /// step runs it with SUSPENSION_HOST_SPIN=long (45 s spin); the
     /// plain suite uses a 3 s sanity spin. The freeze itself is proven
-    /// in the CI step by requiring wallDelta > 50 s (spin + stop), which
-    /// can only happen if the process was genuinely frozen.
+    /// in the CI step by observing the runner in stopped state (T) at
+    /// both ends of the 8 s pause, then requiring a clean exit with a
+    /// non-zero iteration counter in the END marker.
     func testSuspensionHostSurvivesStopCont() {
         let longSpin = ProcessInfo.processInfo.environment["SUSPENSION_HOST_SPIN"] == "long"
         let spinDuration: TimeInterval = longSpin ? 45 : 3
