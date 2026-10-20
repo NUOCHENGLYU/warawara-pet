@@ -29,32 +29,37 @@ final class SleepMouthPreviewGeneratorTests: XCTestCase {
 
         let model = WarawaraExpressionDriverModel()
         let start = Date(timeIntervalSinceReferenceDate: 720_000_000)
+        var time: TimeInterval = 0
 
-        func tick(_ t: TimeInterval, _ state: PetState) {
-            model.tick(at: start.addingTimeInterval(t), inputs: WarawaraExpressionInputs(state: state))
+        func tick(_ dt: TimeInterval, _ state: PetState) {
+            time += dt
+            model.tick(at: start.addingTimeInterval(time), inputs: WarawaraExpressionInputs(state: state))
+        }
+        func tickSteps(_ steps: Int, _ state: PetState) {
+            for _ in 0..<steps { tick(1.0 / 60.0, state) }
         }
 
         // 1) idle baseline, then drift into sleepy.
-        for i in 0..<120 { tick(Double(i) / 60.0, .idle) }
+        tickSteps(120, .idle)
         // 2) sleepy entry + hold.
-        for i in 0..<240 { tick(2 + Double(i) / 60.0, .sleepy) }
+        tickSteps(240, .sleepy)
         let sleepyParams = model.animatorParameters
         try renderSheet(name: "200-enter-sleepy", params: sleepyParams, caption: "sleepy (drowsy \(String(format: "%.2f", sleepyParams.drowsiness)))",
                         rig: rig, rigLoader: rigLoader, size: mainSize, to: outputDir)
 
         // 3) sleeping entry.
-        for i in 0..<180 { tick(6 + Double(i) / 60.0, .sleeping) }
+        tickSteps(180, .sleeping)
         let sleepingEntry = model.animatorParameters
         try renderSheet(name: "201-enter-sleeping", params: sleepingEntry, caption: "sleeping entry (mouthOpen \(String(format: "%.2f", sleepingEntry.mouthOpenAmount)))",
                         rig: rig, rigLoader: rigLoader, size: mainSize, to: outputDir)
 
         // 4) Stable sleep: 30 s more, then sample ONE FULL breath cycle
-        //    (12 frames) for the continuity strip.
-        for i in 0..<(30 * 60) { tick(9 + Double(i) / 60.0, .sleeping) }
+        //    (12 frames at ~0.55 s spacing ≈ 6.6 s ≈ one 6.5 s breath).
+        tickSteps(30 * 60, .sleeping)
         var stripFrames: [(String, WarawaraPerformanceParameters)] = []
         var sampledOpenAmounts: [CGFloat] = []
         for step in 0..<12 {
-            for i in 0..<4 { tick(39 + Double(step * 4 + i) / 60.0, .sleeping) }
+            tickSteps(33, .sleeping)
             let params = model.animatorParameters
             sampledOpenAmounts.append(params.mouthOpenAmount)
             stripFrames.append((String(format: "phase %.2f", params.breathPhase), params))
@@ -69,11 +74,11 @@ final class SleepMouthPreviewGeneratorTests: XCTestCase {
             "the sleeping mouth must visibly breathe across a cycle (amplitude \(amplitude))")
 
         // 5) Wake: click interrupts sleep, then the pet returns to idle.
-        for i in 0..<60 { tick(45 + Double(i) / 60.0, .clicked) }
+        tickSteps(60, .clicked)
         let clickedParams = model.animatorParameters
         try renderSheet(name: "203-clicked-wake", params: clickedParams, caption: "clicked (waking)",
                         rig: rig, rigLoader: rigLoader, size: mainSize, to: outputDir)
-        for i in 0..<120 { tick(46 + Double(i) / 60.0, .idle) }
+        tickSteps(120, .idle)
         let awakeParams = model.animatorParameters
         try renderSheet(name: "204-awake-idle", params: awakeParams, caption: "idle after wake",
                         rig: rig, rigLoader: rigLoader, size: mainSize, to: outputDir)

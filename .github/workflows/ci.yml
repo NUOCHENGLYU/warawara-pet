@@ -116,6 +116,11 @@ jobs:
       - name: Run unit tests
         run: swift test
 
+      - name: Generate sleep/mouth continuity previews
+        run: swift test --filter SleepMouthPreviewGeneratorTests
+        env:
+          SLEEP_PREVIEW_OUT: dist/sleep-preview
+
       - name: Generate art previews
         run: swift test --filter ArtPreviewGeneratorTests
         env:
@@ -130,11 +135,6 @@ jobs:
         run: swift test --filter GiftPreviewGeneratorTests
         env:
           GIFT_PREVIEW_OUT: dist/gift-preview
-
-      - name: Generate sleep/mouth continuity previews
-        run: swift test --filter SleepMouthPreviewGeneratorTests
-        env:
-          SLEEP_PREVIEW_OUT: dist/sleep-preview
 
       - name: Package .app and zip
         run: bash Scripts/package-app.sh
