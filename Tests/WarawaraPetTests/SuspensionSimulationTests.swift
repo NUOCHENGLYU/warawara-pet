@@ -415,18 +415,26 @@ final class SuspensionSimulationTests: XCTestCase {
     // MARK: - SIGSTOP/SIGCONT host (wall-clock spin; used by CI)
 
     /// This test spins in real time so the CI SIGSTOP/SIGCONT step can
-    /// freeze and resume the WHOLE test process mid-execution. The
-    /// assertions verify the host survived the freeze and completed.
+    /// freeze and resume the WHOLE test process mid-execution. The CI
+    /// step runs it with SUSPENSION_HOST_SPIN=long (45 s spin); the
+    /// plain suite uses a 3 s sanity spin. The freeze itself is proven
+    /// in the CI step by requiring wallDelta > 50 s (spin + stop), which
+    /// can only happen if the process was genuinely frozen.
     func testSuspensionHostSurvivesStopCont() {
+        let longSpin = ProcessInfo.processInfo.environment["SUSPENSION_HOST_SPIN"] == "long"
+        let spinDuration: TimeInterval = longSpin ? 45 : 3
         let wallBefore = Date()
         print("SUSPENSION_HOST_BEGIN")
-        let deadline = Date().addingTimeInterval(3)
+        let deadline = Date().addingTimeInterval(spinDuration)
         var counter = 0
         while Date() < deadline {
             counter &+= 1
             if counter % 1_000_000 == 0 { Thread.sleep(forTimeInterval: 0.001) }
         }
-        print("SUSPENSION_HOST_END wallDelta=\(Date().timeIntervalSince(wallBefore)) counter=\(counter)")
+        let wallDelta = Date().timeIntervalSince(wallBefore)
+        print("SUSPENSION_HOST_END wallDelta=\(wallDelta) counter=\(counter)")
         XCTAssertGreaterThan(counter, 0, "the spin must actually run")
+        XCTAssertGreaterThanOrEqual(wallDelta, spinDuration - 0.5,
+                                    "the wall clock must advance at least the spin duration")
     }
 }

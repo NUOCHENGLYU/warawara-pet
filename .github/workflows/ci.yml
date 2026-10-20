@@ -21,9 +21,24 @@ jobs:
           exit ${PIPESTATUS[0]}
       - name: SIGSTOP/SIGCONT host freeze test
         run: |
-          swift test --filter 'testSuspensionHostSurvivesStopCont' > /tmp/stopcont.log 2>&1 &
+          SUSPENSION_HOST_SPIN=long swift test --filter 'testSuspensionHostSurvivesStopCont' > /tmp/stopcont.log 2>&1 &
           PID=$!
-          TARGET=""
+          # Freeze the swift test subtree (never the CI script's own
+          # process group): children first, then the parent.
+          freeze_tree() {
+            local parent=$1
+            local kids
+            kids=$(pgrep -P "$parent" 2>/dev/null || true)
+            for child in $kids; do freeze_tree "$child"; done
+            kill -STOP "$parent" 2>/dev/null || true
+          }
+          thaw_tree() {
+            local parent=$1
+            local kids
+            kids=$(pgrep -P "$parent" 2>/dev/null || true)
+            for child in $kids; do thaw_tree "$child"; done
+            kill -CONT "$parent" 2>/dev/null || true
+          }
           for i in $(seq 1 360); do
             if grep -q "SUSPENSION_HOST_BEGIN" /tmp/stopcont.log 2>/dev/null; then break; fi
             if ! kill -0 $PID 2>/dev/null; then break; fi
@@ -32,15 +47,10 @@ jobs:
           if ! grep -q "SUSPENSION_HOST_BEGIN" /tmp/stopcont.log 2>/dev/null; then
             echo "host test never reached the spin loop"; cat /tmp/stopcont.log; exit 1
           fi
-          # Freeze the actual test runner (child), falling back to the
-          # swift process when it execs the runner in place. Never stop
-          # the CI script's own process group.
-          TARGET=$(pgrep -P "$PID" | head -n 1)
-          if [ -z "$TARGET" ]; then TARGET=$PID; fi
-          trap 'kill -CONT "$TARGET" 2>/dev/null || true' EXIT
-          kill -STOP "$TARGET" 2>/dev/null || true
+          trap 'thaw_tree "$PID" 2>/dev/null || true' EXIT
+          freeze_tree "$PID"
           sleep 8
-          kill -CONT "$TARGET" 2>/dev/null || true
+          thaw_tree "$PID"
           trap - EXIT
           for i in $(seq 1 120); do
             if ! kill -0 $PID 2>/dev/null; then break; fi
@@ -51,7 +61,13 @@ jobs:
           if [ $STATUS -ne 0 ]; then echo "HOST_FAILED status=$STATUS"; cat /tmp/stopcont.log; exit 1; fi
           grep -q "SUSPENSION_HOST_BEGIN" /tmp/stopcont.log || { echo "no BEGIN"; cat /tmp/stopcont.log; exit 1; }
           grep -q "SUSPENSION_HOST_END" /tmp/stopcont.log || { echo "no END (stuck?)"; cat /tmp/stopcont.log; exit 1; }
-          echo "STOPCONT_OK"
+          WALL=$(grep -o 'wallDelta=[0-9.]*' /tmp/stopcont.log | head -n 1 | cut -d= -f2)
+          echo "measured wallDelta=$WALL"
+          # 45 s spin + 8 s stop: wallDelta > 50 proves the freeze really
+          # hit the runner mid-spin (wall clock keeps running under
+          # SIGSTOP, so an unfrozen run would measure ~45).
+          awk "BEGIN{exit !($WALL > 50)}" || { echo "freeze not observed (wallDelta=$WALL)"; cat /tmp/stopcont.log; exit 1; }
+          echo "STOPCONT_OK wallDelta=$WALL"
       - name: Upload simulation logs
         if: always()
         uses: actions/upload-artifact@v4
