@@ -143,7 +143,7 @@ enum WarawaraExpressionMapper {
             p.eyeOpenness = 0.5
             p.drowsiness = 0.5
             p.mouthStyle = .relaxed
-            p.mouthOpenAmount = 0.1
+            p.mouthOpenAmount = 0.08 + 0.07 * breathingMouthCycle(context.breathPhase)
             // Single responsibility: the sleep pose squash lives in the
             // OUTER state pipeline (PetView stateScaleX/Y). The inner
             // bodySquash stays neutral here so the two never stack.
@@ -153,7 +153,10 @@ enum WarawaraExpressionMapper {
             p.eyeOpenness = 0
             p.drowsiness = 1
             p.mouthStyle = .sleepy
-            p.mouthOpenAmount = 0.15
+            // Gentle continuous mouth breathing: the SAME unified breath
+            // phase swells and shrinks the mouth every cycle — never two
+            // discrete sizes.
+            p.mouthOpenAmount = 0.12 + 0.18 * breathingMouthCycle(context.breathPhase)
             p.bodySquashX = 1
             p.bodySquashY = 1
         }
@@ -183,6 +186,14 @@ enum WarawaraExpressionMapper {
         if x < 0.15 || x > 0.85 { return 0 }
         let t = (x - 0.15) / 0.7
         return sin(.pi * t) * 0.5
+    }
+
+    /// Smooth 0→1→0 per breathing cycle (0 at cycle start/end, 1 at the
+    /// cycle midpoint). Drives the gentle mouth open/close while
+    /// sleeping, using the same continuous breath phase as the body.
+    static func breathingMouthCycle(_ phase: CGFloat) -> CGFloat {
+        let x = phase - floor(phase)
+        return (1 - cos(2 * .pi * x)) / 2
     }
 
     /// Normalizes the drag anchor (grab point relative to center) to a

@@ -234,6 +234,20 @@ final class WarawaraExpressionMapperTests: XCTestCase {
         XCTAssertEqual(f(0.75, by: 1, period: 4), 0, accuracy: 0.001, "crosses the cycle boundary")
     }
 
+    func testBreathingMouthCycleIsSmoothAndBounded() {
+        let c = WarawaraExpressionMapper.breathingMouthCycle
+        XCTAssertEqual(c(0), 0, accuracy: 0.0001, "closed at the cycle start")
+        XCTAssertEqual(c(0.25), 0.5, accuracy: 0.0001)
+        XCTAssertEqual(c(0.5), 1, accuracy: 0.0001, "fully open at mid-cycle")
+        XCTAssertEqual(c(0.75), 0.5, accuracy: 0.0001)
+        XCTAssertEqual(c(1.0), 0, accuracy: 0.0001, "closed at the cycle end")
+        XCTAssertEqual(c(1.25), 0.5, accuracy: 0.0001, "wraps like the breath phase")
+        for index in 0..<100 {
+            let v = c(CGFloat(index) / 100 * 2.3)
+            XCTAssertTrue(v >= 0 && v <= 1, "the mouth cycle never leaves 0...1")
+        }
+    }
+
     func testBlinkIsBoundedAndMostlyZero() {
         var maxValue: CGFloat = 0
         var pulseCount = 0

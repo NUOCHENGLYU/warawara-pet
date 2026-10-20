@@ -10,9 +10,19 @@ struct WarawaraLayeredCharacterView: View {
     let parameters: WarawaraPerformanceParameters
     let renderSize: CGSize
 
-    /// Previous mouth style, crossfaded out on style changes.
-    @State private var previousMouthStyle: WarawaraMouthStyle?
-    @State private var previousMouthOpacity: Double = 0
+    /// Crossfade bookkeeping: the OUTGOING mouth style (captured at the
+    /// moment of the change) and the two layer opacities. The outgoing
+    /// layer fades 1 -> 0 while the incoming layer fades 0 -> 1 — a true
+    /// bidirectional crossfade, never an instant swap.
+    ///
+    /// Note: SwiftUI's single-parameter `.onChange` receives the NEW
+    /// value. The previous code wrote that new value into
+    /// `previousMouthStyle`, so the old layer could never render and the
+    /// intended fade never ran — the mouth snapped between styles.
+    @State private var outgoingMouthStyle: WarawaraMouthStyle?
+    @State private var outgoingMouthOpacity: Double = 0
+    @State private var incomingMouthOpacity: Double = 1
+    @State private var lastRenderedMouthStyle: WarawaraMouthStyle?
 
     var body: some View {
         // 2.5D head-turn hierarchy (single yaw/pitch source of truth):
@@ -52,11 +62,22 @@ struct WarawaraLayeredCharacterView: View {
             anchor: bodyCenterUnit
         )
         .rotationEffect(.radians(Double(parameters.bodyTilt)), anchor: bodyCenterUnit)
-        .onChange(of: parameters.mouthStyle) { oldStyle in
-            previousMouthStyle = oldStyle
-            previousMouthOpacity = 1
+        .onChange(of: parameters.mouthStyle) { newStyle in
+            let outgoing = lastRenderedMouthStyle ?? newStyle
+            lastRenderedMouthStyle = newStyle
+            guard outgoing != newStyle else { return }
+            outgoingMouthStyle = outgoing
+            outgoingMouthOpacity = 1
+            incomingMouthOpacity = 0
             withAnimation(.easeInOut(duration: 0.18)) {
-                previousMouthOpacity = 0
+                outgoingMouthOpacity = 0
+                incomingMouthOpacity = 1
+            }
+            let captured = outgoing
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                if outgoingMouthStyle == captured {
+                    outgoingMouthStyle = nil
+                }
             }
         }
     }
@@ -202,18 +223,23 @@ struct WarawaraLayeredCharacterView: View {
     private var mouthLayer: some View {
         if let layer = rig.mouthLayer {
             ZStack {
-                if let previous = previousMouthStyle,
-                   previous != parameters.mouthStyle,
-                   let image = rigLoader.image(forLayer: layer, role: previous.rawValue) {
+                // Outgoing style UNDER, incoming ON TOP, both with
+                // animated opacities: the crossfade is visible in both
+                // directions (no hidden-under fade, no instant swap).
+                if let outgoing = outgoingMouthStyle,
+                   outgoing != parameters.mouthStyle,
+                   let image = rigLoader.image(forLayer: layer, role: outgoing.rawValue) {
                     layerImage(image, layer: layer)
-                        .opacity(previousMouthOpacity)
+                        .opacity(outgoingMouthOpacity)
                 }
                 if let image = rigLoader.image(forLayer: layer, role: parameters.mouthStyle.rawValue) {
                     layerImage(image, layer: layer)
+                        .opacity(incomingMouthOpacity)
                 }
             }
             // Continuous open amount: controlled width/height scaling
-            // around the mouth's registered pivot.
+            // around the mouth's registered pivot — the sleeping mouth
+            // swells and shrinks with the unified breath phase.
             .scaleEffect(
                 x: 1 + 0.10 * parameters.mouthOpenAmount,
                 y: 1 + 0.22 * parameters.mouthOpenAmount,

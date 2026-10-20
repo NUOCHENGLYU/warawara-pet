@@ -184,6 +184,40 @@ final class BreathPhaseContinuityTests: XCTestCase {
 
     // MARK: - Sleeping mouth follows the unified continuous cycle
 
+    func testMouthStyleChangesOnlyAtStateBoundaries() {
+        // The mouth style must change exactly once per state transition
+        // and persist for the whole segment — no rapid style flapping
+        // (each change is crossfaded by the renderer).
+        let model = WarawaraExpressionDriverModel()
+        var transitions: [WarawaraMouthStyle] = []
+        var previous: WarawaraMouthStyle?
+        var styleTickCounts: [WarawaraMouthStyle: Int] = [:]
+
+        func run(_ state: PetState, ticks: Int, start: TimeInterval) -> TimeInterval {
+            for index in 0..<ticks {
+                model.tick(at: date(at: start + Double(index) / 60.0), inputs: inputs(state: state))
+                let style = model.animatorParameters.mouthStyle
+                if let previous, previous != style { transitions.append(style) }
+                previous = style
+                styleTickCounts[style, default: 0] += 1
+            }
+            return start + Double(ticks) / 60.0
+        }
+
+        var time: TimeInterval = 0
+        time = run(.idle, ticks: 120, start: time)
+        time = run(.sleepy, ticks: 240, start: time)
+        time = run(.sleeping, ticks: 60 * 300, start: time)
+        time = run(.clicked, ticks: 60, start: time)
+        _ = run(.idle, ticks: 120, start: time)
+
+        // soft(initial) -> neutral(idle) -> relaxed(sleepy) -> sleepy(sleeping)
+        // -> pressed(clicked) -> neutral(idle): exactly 5 transitions.
+        XCTAssertEqual(transitions, [.neutral, .relaxed, .sleepy, .pressed, .neutral])
+        XCTAssertGreaterThanOrEqual(styleTickCounts[.sleepy] ?? 0, 60 * 300 - 1,
+            "the sleeping mouth style persists for the whole sleep, never flapping")
+    }
+
     func testSleepingMouthFollowsTheContinuousBreathCycle() {
         // The sleeping mouth target oscillates smoothly with the unified
         // breath phase: gentle swell and shrink, never two discrete sizes.
