@@ -80,7 +80,11 @@ struct PetStateMachine {
             return true
         case (.sleepy, .sleeping), (.sleepy, .idle), (.sleepy, .clicked), (.sleepy, .dragged):
             return true
-        case (.sleeping, .clicked), (.sleeping, .dragged):
+        case (.sleeping, .clicked), (.sleeping, .dragged),
+             // A formal GENTLE wake (the daily 22:17 meteor): the pet
+             // returns to idle through the state machine, never by
+             // overwriting state.
+             (.sleeping, .idle):
             return true
         default:
             return false

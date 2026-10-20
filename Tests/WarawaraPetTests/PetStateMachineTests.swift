@@ -30,11 +30,14 @@ final class PetStateMachineTests: XCTestCase {
         XCTAssertTrue(PetStateMachine.canTransition(from: .sleepy, to: .dragged))
         XCTAssertTrue(PetStateMachine.canTransition(from: .sleeping, to: .clicked))
         XCTAssertTrue(PetStateMachine.canTransition(from: .sleeping, to: .dragged))
+        // The formal GENTLE wake for the daily 22:17 meteor: sleeping ->
+        // idle through the state machine, never a raw state overwrite.
+        XCTAssertTrue(PetStateMachine.canTransition(from: .sleeping, to: .idle))
     }
 
     func testRejectedTransitions() {
-        // Sleep never leads back to autonomy directly.
-        XCTAssertFalse(PetStateMachine.canTransition(from: .sleeping, to: .idle))
+        // Sleep never leads back to autonomy directly — except the formal
+        // gentle event wake (sleeping -> idle) asserted above.
         XCTAssertFalse(PetStateMachine.canTransition(from: .sleeping, to: .hop))
         XCTAssertFalse(PetStateMachine.canTransition(from: .sleeping, to: .float))
         XCTAssertFalse(PetStateMachine.canTransition(from: .sleeping, to: .sleepy))

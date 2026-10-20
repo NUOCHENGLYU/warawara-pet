@@ -110,6 +110,9 @@ final class MeteorEventPresenter: MeteorEventPresenting {
 
     func noticeScene() {
         cleanupDone = false
+        // The fixed 22:17 show may wake a sleeping pet gently (formal
+        // state-machine transition + sleep-suppression for the event).
+        windowController?.wakePetGentlyForEvent()
         guard let petFrame = windowController?.currentFrame, petFrame != .zero else { return }
         let body = BirthdayPropLayout.petBodyRect(petFrame: petFrame)
         let direction = EventAttentionMath.direction(
@@ -184,6 +187,9 @@ final class MeteorEventPresenter: MeteorEventPresenting {
         attentionDirection = nil
         windowController?.setEventAttention(nil)
         windowController?.setWishing(false)
+        // Release the event wake: the pet drifts back to sleep naturally
+        // if the user is still away.
+        windowController?.endEventWake()
     }
 
     private var petBodyCenter: CGPoint {

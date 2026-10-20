@@ -129,10 +129,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             store: .shared
         )
         controller.presenter = presenter
+        // Sleeping is NO LONGER busy-blocking: the fixed 22:17 meteor is
+        // allowed to gently wake the pet for this one special show (the
+        // presenter wakes it through the formal state machine). Dragging,
+        // the letter and the birthday still defer it.
         controller.isPetBusy = { [weak windowController] in
             guard let windowController else { return false }
             return windowController.isPetDragging
-                || windowController.isPetSleeping
                 || LetterWindowController.isOpen
         }
         controller.isBirthdayBlocking = { [weak self] in

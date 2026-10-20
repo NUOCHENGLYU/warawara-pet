@@ -53,6 +53,12 @@ final class PetController: ObservableObject {
 
     private var groupSequenceActive = false
 
+    /// While true the sleep evaluator pauses (see `wakeGentlyForEvent`):
+    /// an event that gently woke the pet — the daily 22:17 meteor —
+    /// keeps it awake for the duration of the performance. Cleared by
+    /// `endEventWake()`. Never writes state directly.
+    private(set) var sleepSuppressionActive = false
+
     var isInTransientMotion: Bool {
         stateMachine.state == .hop || stateMachine.state == .float || stateMachine.state == .dragged
     }
@@ -304,6 +310,32 @@ final class PetController: ObservableObject {
         wishing = on
     }
 
+    // MARK: - Event-driven gentle wake (the daily 22:17 meteor)
+
+    /// A special performance may gently wake a sleepy/sleeping pet: the
+    /// transition goes through the FORMAL state machine (sleepy/sleeping
+    /// -> idle, never a raw state overwrite), and the sleep evaluator is
+    /// suppressed for the event's duration so the pet stays awake for
+    /// the show. Normal system wake-ups never call this. Call
+    /// `endEventWake()` when the event cleans up.
+    func wakeGentlyForEvent() {
+        sleepSuppressionActive = true
+        switch stateMachine.state {
+        case .sleepy, .sleeping:
+            guard stateMachine.transition(to: .idle) else { return }
+            state = stateMachine.state
+        default:
+            break
+        }
+    }
+
+    /// Releases the event wake: the sleep evaluator resumes, so a pet
+    /// woken only for the meteor drifts back to sleep naturally when
+    /// the user is still away.
+    func endEventWake() {
+        sleepSuppressionActive = false
+    }
+
     // MARK: - Curiosity visual tracking (active only while curious)
     // State detection stays on the low-frequency awareness timer; this
     // separate loop samples the cursor at ~30 Hz only while engaged so the
@@ -376,6 +408,7 @@ final class PetController: ObservableObject {
     }
 
     private func evaluateSleepinessNow() {
+        guard !sleepSuppressionActive else { return }
         let idleSeconds = idleTimeProvider.secondsSinceLastUserActivity()
         switch SleepinessEvaluator.decision(
             state: stateMachine.state,

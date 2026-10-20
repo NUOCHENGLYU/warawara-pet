@@ -44,12 +44,6 @@ final class MeteorTests: XCTestCase {
         func now() -> Date { currentNow }
     }
 
-    /// Deterministic stub randomness for nightly decisions.
-    private struct FixedRandomSource: RandomSource {
-        let value: Double
-        mutating func nextUnit() -> Double { value }
-    }
-
     private let visible = CGRect(x: 0, y: 0, width: 1440, height: 900)
 
     private final class TestTime {
@@ -59,14 +53,12 @@ final class MeteorTests: XCTestCase {
         init(now: Date, zone: TimeZone) { self.now = now; self.zone = zone }
     }
 
-    private func makeController(now: Date, zone: TimeZone, uptime: TimeInterval = 1000,
-                                rng: (any RandomSource)? = nil) -> (MeteorEventController, TestTime) {
+    private func makeController(now: Date, zone: TimeZone, uptime: TimeInterval = 1000) -> (MeteorEventController, TestTime) {
         let time = TestTime(now: now, zone: zone)
         time.uptime = uptime
         let controller = MeteorEventController(
             clock: FixedClock(now: now, calendar: calendar(zone)),
-            persistence: MeteorPersistence(defaults: defaults),
-            seededRNG: rng
+            persistence: MeteorPersistence(defaults: defaults)
         )
         controller.monotonicNow = { time.uptime }
         controller.isPetBusy = { false }
@@ -233,141 +225,20 @@ final class MeteorTests: XCTestCase {
                        "progress clamps at exactly 1 after the flight")
     }
 
-    // MARK: - Nightly automatic scheduling
+    // MARK: - Nightly automatic scheduling (fixed local 22:17 — see
+    // MeteorDaily22_17Tests for the full boundary matrix)
 
     private func nightDate(_ hour: Int, minute: Int = 0, zone: TimeZone = TimeZone(identifier: "America/New_York")!) -> Date {
         date(2026, 10, 1, hour, zone: zone, minute: minute)
     }
 
-    func testOneDecisionPerNightAndNoReroll() {
-        let zone = TimeZone(identifier: "America/New_York")!
-        let cal = calendar(zone)
-        let persistence = MeteorPersistence(defaults: defaults)
-        var rng: any RandomSource = FixedRandomSource(value: 0.5) // above 0.15 -> not selected
-
-        var scheduler = MeteorNightlyScheduler()
-        let atWindowStart = nightDate(20, minute: 1, zone: zone)
-        XCTAssertFalse(scheduler.evaluate(
-            now: atWindowStart, calendar: cal, rng: &rng, persistence: persistence,
-            busy: false, birthdayBlocking: false
-        ))
-        let key = MeteorPersistence.nightKey(atWindowStart, calendar: cal)
-        XCTAssertEqual(persistence.nightDecision(forKey: key)?.selected, false)
-
-        // Later evaluations in the same night must NOT reroll.
-        for minute in 10...120 {
-            let t = atWindowStart.addingTimeInterval(TimeInterval(minute) * 60)
-            XCTAssertFalse(scheduler.evaluate(
-                now: t, calendar: cal, rng: &rng, persistence: persistence,
-                busy: false, birthdayBlocking: false
-            ))
-        }
-        XCTAssertEqual(persistence.nightDecision(forKey: key)?.selected, false,
-                       "the single nightly decision is never rerolled")
-    }
-
-    func testSelectedNightFiresOnceAtTheScheduledTime() {
-        let zone = TimeZone(identifier: "America/New_York")!
-        let cal = calendar(zone)
-        let persistence = MeteorPersistence(defaults: defaults)
-        var rng: any RandomSource = FixedRandomSource(value: 0.0) // below 0.15 -> selected
-
-        var scheduler = MeteorNightlyScheduler()
-        let start = nightDate(20, minute: 5, zone: zone)
-        XCTAssertFalse(scheduler.evaluate(
-            now: start, calendar: cal, rng: &rng, persistence: persistence,
-            busy: false, birthdayBlocking: false
-        ), "the decision is made but the scheduled time is in the future")
-        let key = MeteorPersistence.nightKey(start, calendar: cal)
-        XCTAssertEqual(persistence.nightDecision(forKey: key)?.selected, true)
-        let scheduled = persistence.scheduledTime(forKey: key, calendar: cal)
-        XCTAssertNotNil(scheduled)
-        XCTAssertGreaterThan(scheduled!, start)
-
-        // Before the scheduled time: still no fire.
-        XCTAssertFalse(scheduler.evaluate(
-            now: scheduled!.addingTimeInterval(-30), calendar: cal, rng: &rng,
-            persistence: persistence, busy: false, birthdayBlocking: false
-        ))
-        // At the scheduled time: fires exactly once.
-        XCTAssertTrue(scheduler.evaluate(
-            now: scheduled!, calendar: cal, rng: &rng,
-            persistence: persistence, busy: false, birthdayBlocking: false
-        ))
-        XCTAssertFalse(scheduler.evaluate(
-            now: scheduled!.addingTimeInterval(60), calendar: cal, rng: &rng,
-            persistence: persistence, busy: false, birthdayBlocking: false
-        ), "at most one automatic meteor per night")
-        XCTAssertEqual(persistence.nightDecision(forKey: key)?.fired, true)
-    }
-
-    func testRestartReusesThePersistedDecision() {
-        let zone = TimeZone(identifier: "America/New_York")!
-        let cal = calendar(zone)
-        let persistence = MeteorPersistence(defaults: defaults)
-        var rng: any RandomSource = FixedRandomSource(value: 0.0)
-        var scheduler = MeteorNightlyScheduler()
-        let start = nightDate(20, minute: 10, zone: zone)
-        _ = scheduler.evaluate(now: start, calendar: cal, rng: &rng, persistence: persistence,
-                               busy: false, birthdayBlocking: false)
-        let key = MeteorPersistence.nightKey(start, calendar: cal)
-        let scheduled = persistence.scheduledTime(forKey: key, calendar: cal)!
-
-        // "Restart": a NEW scheduler + NEW rng instance, same persisted
-        // store. The persisted decision/time is reused — no reroll.
-        var rng2: any RandomSource = FixedRandomSource(value: 0.99)
-        var scheduler2 = MeteorNightlyScheduler()
-        XCTAssertFalse(scheduler2.evaluate(now: start.addingTimeInterval(60), calendar: cal,
-                                           rng: &rng2, persistence: persistence,
-                                           busy: false, birthdayBlocking: false),
-                       "before the scheduled time")
-        XCTAssertTrue(scheduler2.evaluate(now: scheduled.addingTimeInterval(1), calendar: cal,
-                                          rng: &rng2, persistence: persistence,
-                                          busy: false, birthdayBlocking: false),
-                      "the restart honors the persisted scheduled time")
-    }
-
-    func testWindowBoundsAndBusyDeferral() {
-        let zone = TimeZone(identifier: "America/New_York")!
-        let cal = calendar(zone)
-        let persistence = MeteorPersistence(defaults: defaults)
-        var rng: any RandomSource = FixedRandomSource(value: 0.0)
-        var scheduler = MeteorNightlyScheduler()
-
-        // Before 20:00 and after 23:00: never fire, no decision made.
-        XCTAssertFalse(scheduler.evaluate(now: nightDate(19, minute: 59, zone: zone), calendar: cal,
-                                          rng: &rng, persistence: persistence,
-                                          busy: false, birthdayBlocking: false))
-        XCTAssertFalse(scheduler.evaluate(now: nightDate(23, minute: 0, zone: zone), calendar: cal,
-                                          rng: &rng, persistence: persistence,
-                                          busy: false, birthdayBlocking: false))
-        XCTAssertNil(persistence.nightDecision(forKey: MeteorPersistence.nightKey(nightDate(19, minute: 59, zone: zone), calendar: cal)))
-
-        // Busy at the scheduled time: defer within the night; the event
-        // does not carry into the next day.
-        let start = nightDate(20, minute: 15, zone: zone)
-        _ = scheduler.evaluate(now: start, calendar: cal, rng: &rng, persistence: persistence,
-                               busy: false, birthdayBlocking: false)
-        let key = MeteorPersistence.nightKey(start, calendar: cal)
-        let scheduled = persistence.scheduledTime(forKey: key, calendar: cal)!
-        XCTAssertFalse(scheduler.evaluate(now: scheduled, calendar: cal, rng: &rng,
-                                          persistence: persistence,
-                                          busy: true, birthdayBlocking: false),
-                       "busy defers the fire")
-        XCTAssertTrue(scheduler.evaluate(now: scheduled.addingTimeInterval(300), calendar: cal,
-                                         rng: &rng, persistence: persistence,
-                                         busy: false, birthdayBlocking: false),
-                      "deferred fire resumes within the same night")
-        // Next night: a fresh key and a fresh decision.
-        let nextNight = nightDate(20, minute: 5, zone: zone).addingTimeInterval(86400)
-        XCTAssertNotEqual(MeteorPersistence.nightKey(nextNight, calendar: cal), key)
-    }
-
-    func testManualReplayDoesNotTouchNightlyHistory() {
+    func testManualReplayDoesNotTouchDailyHistory() {
         let zone = TimeZone(identifier: "America/New_York")!
         let start = nightDate(21, zone: zone)
         let persistence = MeteorPersistence(defaults: defaults)
-        let before = persistence.nightDecision(forKey: MeteorPersistence.nightKey(start, calendar: calendar(zone)))
+        let key = MeteorPersistence.nightKey(start, calendar: calendar(zone))
+        let firedBefore = persistence.automaticFired(forKey: key)
+        let skippedBefore = persistence.automaticSkipped(forKey: key)
 
         let (controller, time) = makeController(now: start, zone: zone)
         controller.presenter = SpyPresenter()
@@ -387,8 +258,10 @@ final class MeteorTests: XCTestCase {
             if controller.phase == .idle { break }
         }
         XCTAssertEqual(controller.phase, .idle)
-        let after = persistence.nightDecision(forKey: MeteorPersistence.nightKey(start, calendar: calendar(zone)))
-        XCTAssertEqual(before, after, "manual replay must not mutate nightly history")
+        XCTAssertEqual(persistence.automaticFired(forKey: key), firedBefore,
+                       "manual replay must not consume the daily automatic qualification")
+        XCTAssertEqual(persistence.automaticSkipped(forKey: key), skippedBefore,
+                       "manual replay must not mark the day skipped")
     }
 
     // MARK: - Final head asset wiring (the user-replaced PNG)

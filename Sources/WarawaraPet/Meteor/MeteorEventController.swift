@@ -122,67 +122,63 @@ struct MeteorTrajectorySampler {
     }
 }
 
-/// Pure nightly meteor scheduling: one Bernoulli decision (15%) per
-/// local night inside the 20:00-23:00 window, at most one automatic
-/// meteor per night, persisted so restarts never reroll.
+/// Pure nightly meteor scheduling: EVERY day at the user's LOCAL 22:17,
+/// at most one automatic meteor per local date, with a 90-second grace
+/// window that absorbs scheduling jitter and short conflicts.
+///
+/// - No probability, no random showtime — the time is fixed at 22:17:00.
+/// - The local date is resolved with the given calendar (production uses
+///   `Calendar.autoupdatingCurrent`), so timezone changes, DST and
+///   midnight crossings follow the system's local calendar.
+/// - Lid-closed sleep is respected: the Mac is never woken for the show.
+///   If the machine is awake during the 90 s grace window the meteor can
+///   still run; past 22:18:30 the night is skipped (recorded once, so a
+///   later clock rollback can never re-fire the same local date).
+/// - Busy/birthday conflicts defer within the grace window only; they
+///   can never push the show to 23:00 or the next day.
 struct MeteorNightlyScheduler {
-    static let windowStartHour = 20
-    static let windowEndHour = 23
-    static let probability: Double = 0.15
-    /// Minimum lead time from the moment of the decision.
-    static let minimumLeadSeconds: TimeInterval = 120
+    static let fireHour = 22
+    static let fireMinute = 17
+    /// Grace window after 22:17:00 during which a late tick still fires.
+    static let graceSeconds: TimeInterval = 90
 
-    /// Returns true when an automatic trigger should fire NOW.
-    /// Never rolls more than once per local night: the decision and the
-    /// scheduled time are persisted under a date-based night key.
+    /// Returns true when the automatic meteor should begin RIGHT NOW.
     func evaluate(
         now: Date,
         calendar: Calendar,
-        rng: inout RandomSource,
         persistence: MeteorPersistence,
         busy: Bool,
         birthdayBlocking: Bool
     ) -> Bool {
-        let hour = calendar.component(.hour, from: now)
-        guard hour >= Self.windowStartHour, hour < Self.windowEndHour else {
+        let fire = Self.fireDate(forDayContaining: now, calendar: calendar)
+        guard now >= fire else { return false }
+        let dayKey = MeteorPersistence.nightKey(now, calendar: calendar)
+        guard !persistence.automaticFired(forKey: dayKey),
+              !persistence.automaticSkipped(forKey: dayKey) else { return false }
+        let deadline = fire.addingTimeInterval(Self.graceSeconds)
+        if now > deadline {
+            // The window is genuinely past (sleep, late launch, forward
+            // clock jump): record the skip once per local date so a
+            // backward clock adjustment can never re-fire tonight.
+            persistence.markAutomaticSkipped(forKey: dayKey)
             return false
         }
-        let nightKey = MeteorPersistence.nightKey(now, calendar: calendar)
+        guard !busy, !birthdayBlocking else { return false }
+        // Mark at the moment of firing: the caller begins the show in
+        // the same tick, so the record is never "fired without playing".
+        persistence.markAutomaticFired(forKey: dayKey)
+        return true
+    }
 
-        if let decision = persistence.nightDecision(forKey: nightKey) {
-            guard decision.selected, !decision.fired else { return false }
-            guard let scheduledTime = persistence.scheduledTime(forKey: nightKey, calendar: calendar),
-                  now >= scheduledTime else { return false }
-            guard !busy, !birthdayBlocking else { return false } // defer within the night
-            persistence.markNightFired(forKey: nightKey)
-            return true
-        }
-
-        // First evaluation of this night: make the one and only roll.
-        let selected = rng.nextUnit() < Self.probability
-        if !selected {
-            persistence.storeNightDecision(forKey: nightKey, selected: false, seconds: 0)
-            return false
-        }
-        // A random time within the remaining window, never in the past.
-        let startOfDay = calendar.startOfDay(for: now)
-        let windowStart = startOfDay.addingTimeInterval(
-            TimeInterval(Self.windowStartHour * 3600)
-        )
-        let windowEnd = startOfDay.addingTimeInterval(
-            TimeInterval(Self.windowEndHour * 3600)
-        )
-        let earliest = max(now.addingTimeInterval(Self.minimumLeadSeconds), windowStart)
-        guard earliest < windowEnd else {
-            // Not enough window left: skip this night.
-            persistence.storeNightDecision(forKey: nightKey, selected: false, seconds: 0)
-            return false
-        }
-        let span = windowEnd.timeIntervalSince(earliest)
-        let scheduled = earliest.addingTimeInterval(rng.nextUnit() * span)
-        let seconds = scheduled.timeIntervalSince(startOfDay)
-        persistence.storeNightDecision(forKey: nightKey, selected: true, seconds: seconds)
-        return false // fires later this night (or on restart after the time).
+    /// Today's local 22:17:00, built from calendar components so DST
+    /// transitions and timezone changes resolve through the local
+    /// calendar (never a fixed-seconds arithmetic).
+    static func fireDate(forDayContaining date: Date, calendar: Calendar) -> Date {
+        var components = calendar.dateComponents([.year, .month, .day], from: date)
+        components.hour = Self.fireHour
+        components.minute = Self.fireMinute
+        components.timeZone = calendar.timeZone
+        return calendar.date(from: components) ?? date
     }
 }
 
@@ -210,7 +206,6 @@ final class MeteorEventController {
     let clock: BirthdayClock
     let persistence: MeteorPersistence
     private let nightly: MeteorNightlyScheduler
-    private var rng: any RandomSource
 
     /// Injectable monotonic clock (host uptime in production); tests
     /// control this to verify the single-timebase contract.
@@ -235,18 +230,12 @@ final class MeteorEventController {
         clock: BirthdayClock = SystemBirthdayClock(),
         persistence: MeteorPersistence = MeteorPersistence(),
         timing: Timing = Timing(),
-        nightly: MeteorNightlyScheduler = MeteorNightlyScheduler(),
-        seededRNG: (any RandomSource)? = nil
+        nightly: MeteorNightlyScheduler = MeteorNightlyScheduler()
     ) {
         self.clock = clock
         self.persistence = persistence
         self.timing = timing
         self.nightly = nightly
-        if let seededRNG {
-            rng = seededRNG
-        } else {
-            rng = SystemRandomSource()
-        }
     }
 
     // MARK: - Single canonical flight progress (renderer authority)
@@ -388,7 +377,7 @@ final class MeteorEventController {
     }
 
     /// App tick (4 Hz): service pending replays, advance phases, and
-    /// evaluate the nightly automatic decision.
+    /// evaluate the fixed daily 22:17 automatic schedule.
     func tick() {
         let now = clock.now()
         servicePendingTrigger()
@@ -397,7 +386,6 @@ final class MeteorEventController {
         let shouldFire = nightly.evaluate(
             now: now,
             calendar: clock.calendar,
-            rng: &rng,
             persistence: persistence,
             busy: isPetBusy?() ?? false,
             birthdayBlocking: isBirthdayBlocking?() ?? false
@@ -423,63 +411,49 @@ protocol MeteorEventPresenting: AnyObject {
     func cleanup()
 }
 
-/// UserDefaults persistence for the nightly automatic meteor decision.
+/// UserDefaults persistence for the daily automatic meteor. The new
+/// fixed 22:17 schedule uses its OWN namespace (…daily22_17…) so legacy
+/// random-night records from older builds can never influence it.
 struct MeteorPersistence {
     private let defaults: UserDefaults
-
-    struct NightDecision: Equatable {
-        var selected: Bool
-        var fired: Bool
-        var secondsSinceMidnight: TimeInterval
-    }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
 
-    /// Night key: the LOCAL calendar date of the evening the 20:00
-    /// window starts on. The window never crosses midnight.
+    /// Local-date key ("YYYY-M-D") for the day a given instant belongs
+    /// to, resolved with the provided calendar (production passes the
+    /// autoupdating local calendar).
     static func nightKey(_ date: Date, calendar: Calendar) -> String {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
         return "\(components.year ?? 0)-\(components.month ?? 0)-\(components.day ?? 0)"
     }
 
-    private func key(_ suffix: String, nightKey: String) -> String {
-        "warawarapet.meteor.night.\(nightKey).\(suffix)"
+    private func dailyKey(_ suffix: String, dayKey: String) -> String {
+        "warawarapet.meteor.daily22_17.\(dayKey).\(suffix)"
     }
 
-    func nightDecision(forKey nightKey: String) -> NightDecision? {
-        let selectedKey = key("selected", nightKey: nightKey)
-        guard defaults.object(forKey: selectedKey) != nil else { return nil }
-        return NightDecision(
-            selected: defaults.bool(forKey: selectedKey),
-            fired: defaults.bool(forKey: key("fired", nightKey: nightKey)),
-            secondsSinceMidnight: defaults.double(forKey: key("seconds", nightKey: nightKey))
-        )
+    /// True once the automatic meteor fired for this local date.
+    func automaticFired(forKey dayKey: String) -> Bool {
+        defaults.bool(forKey: dailyKey("fired", dayKey: dayKey))
     }
 
-    func storeNightDecision(forKey nightKey: String, selected: Bool, seconds: TimeInterval) {
-        defaults.set(selected, forKey: key("selected", nightKey: nightKey))
-        defaults.set(false, forKey: key("fired", nightKey: nightKey))
-        defaults.set(seconds, forKey: key("seconds", nightKey: nightKey))
+    /// Records the automatic fire for this local date. Called ONLY at
+    /// the moment the show begins, so a record can never be "fired
+    /// without playing".
+    func markAutomaticFired(forKey dayKey: String) {
+        defaults.set(true, forKey: dailyKey("fired", dayKey: dayKey))
     }
 
-    func markNightFired(forKey nightKey: String) {
-        defaults.set(true, forKey: key("fired", nightKey: nightKey))
+    /// True once the local date's window was recorded as missed.
+    func automaticSkipped(forKey dayKey: String) -> Bool {
+        defaults.bool(forKey: dailyKey("skipped", dayKey: dayKey))
     }
 
-    /// Resolves the persisted scheduled time against a calendar.
-    func scheduledTime(forKey nightKey: String, calendar: Calendar) -> Date? {
-        guard let decision = nightDecision(forKey: nightKey),
-              decision.selected, decision.secondsSinceMidnight > 0 else { return nil }
-        let components = nightKey.split(separator: "-").compactMap { Int($0) }
-        guard components.count == 3 else { return nil }
-        var dateComponents = DateComponents()
-        dateComponents.year = components[0]
-        dateComponents.month = components[1]
-        dateComponents.day = components[2]
-        dateComponents.timeZone = calendar.timeZone
-        guard let startOfDay = calendar.date(from: dateComponents) else { return nil }
-        return startOfDay.addingTimeInterval(decision.secondsSinceMidnight)
+    /// Records that the grace window passed without a show (sleep, late
+    /// launch, forward clock jump). Guards against clock rollbacks
+    /// re-firing the same local date.
+    func markAutomaticSkipped(forKey dayKey: String) {
+        defaults.set(true, forKey: dailyKey("skipped", dayKey: dayKey))
     }
 }

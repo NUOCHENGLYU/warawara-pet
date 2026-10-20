@@ -131,6 +131,11 @@ jobs:
         env:
           GIFT_PREVIEW_OUT: dist/gift-preview
 
+      - name: Generate sleep/mouth continuity previews
+        run: swift test --filter SleepMouthPreviewGeneratorTests
+        env:
+          SLEEP_PREVIEW_OUT: dist/sleep-preview
+
       - name: Package .app and zip
         run: bash Scripts/package-app.sh
 
@@ -214,4 +219,11 @@ jobs:
         with:
           name: WarawaraPet-Gift-Preview
           path: dist/gift-preview
+          retention-days: 30
+
+      - name: Upload sleep/mouth preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WarawaraPet-Sleep-Mouth-Preview
+          path: dist/sleep-preview
           retention-days: 30

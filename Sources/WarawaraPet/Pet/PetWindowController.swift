@@ -130,6 +130,19 @@ final class PetWindowController: NSObject {
         controller?.setWishing(on)
     }
 
+    /// Gentle event wake for the daily 22:17 meteor: sleepy/sleeping ->
+    /// idle through the formal state machine with the sleep evaluator
+    /// suppressed for the event. Never called for normal system wakes.
+    func wakePetGentlyForEvent() {
+        controller?.wakeGentlyForEvent()
+    }
+
+    /// Releases the event wake (meteor cleanup): sleepiness evaluation
+    /// resumes.
+    func endEventWake() {
+        controller?.endEventWake()
+    }
+
     /// Companion center positions observer (birthday props ride along
     /// with carrier companions during delivery).
     func setCompanionCentersObserver(_ observer: @escaping ([Int: CGPoint]) -> Void) {
