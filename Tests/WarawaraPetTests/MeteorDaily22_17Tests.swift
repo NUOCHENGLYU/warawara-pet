@@ -138,7 +138,7 @@ final class MeteorDaily22_17Tests: XCTestCase {
 
     // MARK: - Timezones, DST, midnight
 
-    func testFireTimeIsTheUsersLocal2217AcrossTimezones() {
+    func testShanghaiLocal2217FiresAndOtherZonesDoNotAtThatInstant() {
         // 22:17 in Shanghai fires at its own local instant; the SAME
         // absolute instant is a different local hour elsewhere and must
         // not fire there.
@@ -147,7 +147,11 @@ final class MeteorDaily22_17Tests: XCTestCase {
                       "22:17 local in Shanghai fires")
         XCTAssertFalse(evaluate(shanghaiInstant, zone: newYork),
                        "the same instant (10:17 in New York) must not fire in New York")
+        XCTAssertFalse(evaluate(shanghaiInstant, zone: losAngeles),
+                       "the same instant (07:17 in Los Angeles) must not fire in Los Angeles")
+    }
 
+    func testNewYorkLocal2217FiresAtItsOwnWallClockTime() {
         let newYorkInstant = date(2026, 10, 1, 22, 17, 0, zone: newYork)
         XCTAssertTrue(evaluate(newYorkInstant, zone: newYork))
         XCTAssertFalse(evaluate(newYorkInstant, zone: losAngeles),

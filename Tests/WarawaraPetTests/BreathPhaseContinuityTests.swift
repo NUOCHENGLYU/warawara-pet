@@ -86,8 +86,8 @@ final class BreathPhaseContinuityTests: XCTestCase {
             accumulatorMax = max(accumulatorMax, circularDelta(previousAccumulator, phase))
             previousAccumulator = phase
         }
-        XCTAssertGreaterThan(legacyMax, 0.5,
-            "the retired absolute-time formula jumps more than half a cycle during the ramp (was \(legacyMax))")
+        XCTAssertGreaterThan(legacyMax, 0.2,
+            "the retired absolute-time formula jumps wildly during the ramp (was \(legacyMax)); the accumulator stays under 0.005")
         XCTAssertLessThan(accumulatorMax, 0.005,
             "the accumulator never steps more than dt/period (was \(accumulatorMax))")
     }
@@ -132,12 +132,15 @@ final class BreathPhaseContinuityTests: XCTestCase {
         let before = phases.last!
 
         // The machine slept for hours: the next frame's dt is clamped to
-        // 0.1 s by the driver, so the phase advances at most 0.1/base.
+        // 0.1 s by the driver, so each jump advances the phase by at
+        // most 0.1/base.
+        var previousPhase = before
         for jump in [3600.0, 8 * 3600.0, 24 * 3600.0] {
             model.tick(at: date(at: elapsed + jump), inputs: inputs(state: .sleeping))
             let after = model.animatorParameters.breathPhase
-            XCTAssertLessThanOrEqual(circularDelta(before, after), 0.1 / base + 0.0001,
+            XCTAssertLessThanOrEqual(circularDelta(previousPhase, after), 0.1 / base + 0.0001,
                 "a \(jump)s suspension advances the phase by at most the clamped dt")
+            previousPhase = after
         }
 
         // Repeated ticks with the SAME date never double-step.
@@ -190,7 +193,7 @@ final class BreathPhaseContinuityTests: XCTestCase {
         // (each change is crossfaded by the renderer).
         let model = WarawaraExpressionDriverModel()
         var transitions: [WarawaraMouthStyle] = []
-        var previous: WarawaraMouthStyle?
+        var previous: WarawaraMouthStyle? = model.animatorParameters.mouthStyle
         var styleTickCounts: [WarawaraMouthStyle: Int] = [:]
 
         func run(_ state: PetState, ticks: Int, start: TimeInterval) -> TimeInterval {

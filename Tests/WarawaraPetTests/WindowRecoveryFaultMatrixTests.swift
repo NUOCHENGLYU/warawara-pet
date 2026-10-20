@@ -88,16 +88,19 @@ final class WindowRecoveryFaultMatrixTests: XCTestCase {
         XCTAssertEqual(decisions, ["deferred-no-screens", "deferred-no-screens"])
 
         // Screens reappear with a real list: the SAME path now performs
-        // the recovery for a genuinely offscreen panel.
+        // the recovery for a genuinely offscreen panel. The restore uses
+        // the REAL displays, so assert against them.
         windowController.injectOffscreenFrame()
         monitor.screenProvider = { [self] in [primary] }
         let restored = monitor.checkAndRestore(reason: "wake")
         XCTAssertTrue(restored, "a later check with a real screen list recovers")
         XCTAssertEqual(decisions.last, "restored")
-        XCTAssertTrue(primary.contains(CGPoint(
-            x: windowController.currentFrame.midX,
-            y: windowController.currentFrame.midY
-        )))
+        XCTAssertTrue(ScreenGeometry.screenVisibleFrames().contains {
+            $0.contains(CGPoint(
+                x: windowController.currentFrame.midX,
+                y: windowController.currentFrame.midY
+            ))
+        }, "the recovered panel center lands on a real display")
     }
 
     /// Deferral must not consume the restore throttle: a deferred check
