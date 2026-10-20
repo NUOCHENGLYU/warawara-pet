@@ -4,7 +4,6 @@ struct PetView: View {
     @ObservedObject var controller: PetController
 
     @State private var bobbing = false
-    @State private var breathingPhase = false
 
     private let bobAnimation = Animation
         .easeInOut(duration: 2.2)
@@ -22,11 +21,6 @@ struct PetView: View {
             dampingFraction: DeformationTuning.default.releaseSpringDamping
         )
 
-    private var breathingAnimation: Animation {
-        .easeInOut(duration: PersonalityTuning.default.breathingPeriod)
-            .repeatForever(autoreverses: true)
-    }
-
     var body: some View {
         ZStack {
             petGroup
@@ -39,14 +33,6 @@ struct PetView: View {
         .animation(bobAnimation, value: bobbing)
         .onAppear {
             bobbing = true
-            breathingPhase = true
-        }
-        .onChange(of: controller.state) { newState in
-            if newState == .sleepy || newState == .sleeping {
-                // Re-trigger the breathing oscillation each sleep entry.
-                breathingPhase = false
-                DispatchQueue.main.async { self.breathingPhase = true }
-            }
         }
     }
 
@@ -73,8 +59,6 @@ struct PetView: View {
             releaseAnimation: poseAnimation
         ))
         .scaleEffect(x: stateScaleX, y: stateScaleY, anchor: .bottom)
-        .scaleEffect(breathingScale, anchor: .bottom)
-        .animation(breathingAnimation, value: breathingPhase)
         .animation(poseAnimation, value: controller.state)
         .animation(poseAnimation, value: controller.hopProgress)
         .animation(poseAnimation, value: controller.settleProgress)
@@ -99,11 +83,10 @@ struct PetView: View {
         )
     }
 
-    private var breathingScale: CGFloat {
-        guard controller.state == .sleepy || controller.state == .sleeping else { return 1 }
-        return breathingPhase ? 1.02 : 0.99
-    }
-
+    /// The layered character renderer owns ALL breathing (single
+    /// responsibility): its continuous breath-phase accumulator drives a
+    /// gentle, deeper-asleep body scale inside the character view. The
+    /// outer pipeline only applies the state pose squash below.
     private var stateScaleX: CGFloat {
         switch controller.state {
         case .idle, .dragged, .curious, .float:

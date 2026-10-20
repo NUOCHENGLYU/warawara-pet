@@ -144,15 +144,18 @@ enum WarawaraExpressionMapper {
             p.drowsiness = 0.5
             p.mouthStyle = .relaxed
             p.mouthOpenAmount = 0.1
-            p.bodySquashX = 1.02
-            p.bodySquashY = 0.98
+            // Single responsibility: the sleep pose squash lives in the
+            // OUTER state pipeline (PetView stateScaleX/Y). The inner
+            // bodySquash stays neutral here so the two never stack.
+            p.bodySquashX = 1
+            p.bodySquashY = 1
         case .sleeping:
             p.eyeOpenness = 0
             p.drowsiness = 1
             p.mouthStyle = .sleepy
             p.mouthOpenAmount = 0.15
-            p.bodySquashX = 1.03
-            p.bodySquashY = 0.97
+            p.bodySquashX = 1
+            p.bodySquashY = 1
         }
 
         // The meteor wish: a soft closed-eye look, applied AFTER the

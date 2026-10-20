@@ -105,8 +105,10 @@ final class WarawaraExpressionMapperTests: XCTestCase {
         XCTAssertEqual(p.eyeOpenness, 0.5, accuracy: 0.001)
         XCTAssertEqual(p.drowsiness, 0.5, accuracy: 0.001)
         XCTAssertEqual(p.mouthStyle, .relaxed)
-        XCTAssertEqual(p.bodySquashX, 1.02, accuracy: 0.001)
-        XCTAssertEqual(p.bodySquashY, 0.98, accuracy: 0.001)
+        // Single responsibility: the sleep pose squash lives in the outer
+        // state pipeline; the inner body squash stays neutral.
+        XCTAssertEqual(p.bodySquashX, 1, accuracy: 0.001)
+        XCTAssertEqual(p.bodySquashY, 1, accuracy: 0.001)
     }
 
     func testSleepingClosesEyesFully() {
@@ -218,11 +220,18 @@ final class WarawaraExpressionMapperTests: XCTestCase {
 
     // MARK: - Driver time helpers
 
-    func testBreathPhaseLoops() {
-        XCTAssertEqual(WarawaraExpressionDriver.breathPhase(at: 0), 0, accuracy: 0.001)
-        XCTAssertEqual(WarawaraExpressionDriver.breathPhase(at: 2), 0.5, accuracy: 0.001)
-        XCTAssertEqual(WarawaraExpressionDriver.breathPhase(at: 4), 0, accuracy: 0.001)
-        XCTAssertEqual(WarawaraExpressionDriver.breathPhase(at: 4.5), 0.125, accuracy: 0.001)
+    func testBreathPhaseAccumulatorLoopsAndIsNoOpForNonPositiveInputs() {
+        let f = WarawaraExpressionDriver.advanceBreathPhase
+        XCTAssertEqual(f(0, by: 0, period: 4), 0, accuracy: 0.001,
+                       "zero dt is a no-op (repeated ticks never double-step)")
+        XCTAssertEqual(f(0.5, by: -1, period: 4), 0.5, accuracy: 0.001,
+                       "negative dt is a no-op")
+        XCTAssertEqual(f(0.9, by: 0, period: 0), 0.9, accuracy: 0.001,
+                       "non-positive period is a no-op")
+        XCTAssertEqual(f(0, by: 2, period: 4), 0.5, accuracy: 0.001)
+        XCTAssertEqual(f(0.5, by: 2, period: 4), 0, accuracy: 0.001, "wraps to 0")
+        XCTAssertEqual(f(0.25, by: 0.5, period: 4), 0.375, accuracy: 0.001)
+        XCTAssertEqual(f(0.75, by: 1, period: 4), 0, accuracy: 0.001, "crosses the cycle boundary")
     }
 
     func testBlinkIsBoundedAndMostlyZero() {

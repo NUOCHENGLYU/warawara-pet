@@ -251,10 +251,12 @@ enum WarawaraLayeredGeometry {
         UnitPoint(x: bodyBounds.midX, y: bodyBounds.midY)
     }
 
-    /// Breathing scale: gentle awake, deeper as drowsiness rises.
+    /// Breathing scale: gentle awake, clearly visible (but still soft)
+    /// asleep. Consumed ONLY from the continuous phase accumulator —
+    /// this is the single breathing authority for the character.
     static func breathScale(breathPhase: CGFloat, drowsiness: CGFloat) -> CGFloat {
         let depth = min(max(drowsiness, 0), 1)
-        return 1 + 0.012 * sin(2 * .pi * breathPhase) * (0.4 + 0.6 * depth)
+        return 1 + 0.012 * sin(2 * .pi * breathPhase) * (0.4 + 0.9 * depth)
     }
 
     /// Screen-space conversion: gaze parameters use a canonical UP-
@@ -419,6 +421,12 @@ final class WarawaraExpressionDriverModel: ObservableObject {
 
     private var animator = WarawaraParameterAnimator()
     private var lastDate: Date?
+    /// The SINGLE continuous breathing-phase accumulator (0...<1). It is
+    /// never recomputed from absolute time: each tick advances it by
+    /// dt / currentPeriod and wraps. The period may vary smoothly with
+    /// drowsiness without ever jumping the phase, and sleep/wake
+    /// transitions never reset it.
+    private var breathPhase: CGFloat = 0
 
     func tick(at date: Date, inputs: WarawaraExpressionInputs) {
         let dt: TimeInterval
@@ -429,16 +437,18 @@ final class WarawaraExpressionDriverModel: ObservableObject {
         }
         lastDate = date
 
-        // Breathing slows as the character drifts toward sleep.
-        let breathPeriod = 4.0 + 2.5 * animator.parameters.drowsiness
-        let breath = WarawaraExpressionDriver.breathPhase(
-            at: date.timeIntervalSinceReferenceDate,
-            period: breathPeriod
+        // Breathing slows as the character drifts toward sleep. The
+        // period follows the SMOOTHED drowsiness, so the frequency
+        // changes continuously and the accumulator stays continuous.
+        let breathPeriod = WarawaraExpressionDriver.breathBasePeriod
+            + WarawaraExpressionDriver.breathSleepyExtraPerDrowsiness * animator.parameters.drowsiness
+        breathPhase = WarawaraExpressionDriver.advanceBreathPhase(
+            breathPhase, by: dt, period: breathPeriod
         )
         let blink = WarawaraExpressionDriver.blink(at: date.timeIntervalSinceReferenceDate)
         let context = WarawaraExpressionContext(
             inputs: inputs,
-            breathPhase: breath,
+            breathPhase: breathPhase,
             floatPhase: inputs.floatProgress,
             blink: blink
         )
@@ -453,10 +463,28 @@ final class WarawaraExpressionDriverModel: ObservableObject {
 
 /// Pure, testable time helpers for the expression driver.
 enum WarawaraExpressionDriver {
-    /// Looping breath phase 0...1.
-    static func breathPhase(at time: TimeInterval, period: TimeInterval = 4.0) -> CGFloat {
-        let phase = (time / period).truncatingRemainder(dividingBy: 1)
-        return CGFloat(phase < 0 ? phase + 1 : phase)
+    /// Awake breathing period in seconds (same value as the retired
+    /// `PersonalityTuning.breathingPeriod`).
+    static let breathBasePeriod: TimeInterval = 4.0
+    /// Extra breathing period per unit of (smoothed) drowsiness: a fully
+    /// asleep pet breathes with a 6.5 s period.
+    static let breathSleepyExtraPerDrowsiness: TimeInterval = 2.5
+
+    /// Advances a looping breathing phase by `dt` seconds at the given
+    /// period, wrapping into 0...<1. This is the ONLY phase math used by
+    /// the driver: an accumulator, never an absolute-time division, so
+    /// period changes can never jump the phase.
+    /// - dt is clamped to a positive value; a zero or negative dt is a
+    ///   no-op (repeated ticks with the same date never double-step).
+    /// - Non-positive periods are ignored (defensive).
+    static func advanceBreathPhase(
+        _ phase: CGFloat,
+        by dt: TimeInterval,
+        period: TimeInterval
+    ) -> CGFloat {
+        guard dt > 0, period > 0 else { return phase - floor(phase) }
+        let next = phase - floor(phase) + CGFloat(dt / period)
+        return next - floor(next)
     }
 
     /// Blink strength 0...1 with a natural asymmetric profile: quick

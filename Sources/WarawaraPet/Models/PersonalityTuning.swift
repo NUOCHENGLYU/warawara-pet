@@ -47,7 +47,6 @@ struct PersonalityTuning {
     // Sleep (quiet production defaults; use 15/30 for quick real-Mac tests)
     var sleepyTimeout: TimeInterval = 240
     var sleepTimeout: TimeInterval = 480
-    var breathingPeriod: TimeInterval = 4.0
     var wakeTransitionDuration: TimeInterval = 0.3
 
     // Awareness loop
