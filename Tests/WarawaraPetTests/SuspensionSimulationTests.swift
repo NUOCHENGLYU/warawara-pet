@@ -424,7 +424,13 @@ final class SuspensionSimulationTests: XCTestCase {
         let longSpin = ProcessInfo.processInfo.environment["SUSPENSION_HOST_SPIN"] == "long"
         let spinDuration: TimeInterval = longSpin ? 45 : 3
         let wallBefore = Date()
-        print("SUSPENSION_HOST_BEGIN")
+        // stderr is unbuffered: the markers appear in the CI log the
+        // moment they are written, so the freeze step can react while
+        // the spin is still running.
+        func marker(_ line: String) {
+            FileHandle.standardError.write(Data((line + "\n").utf8))
+        }
+        marker("SUSPENSION_HOST_BEGIN")
         let deadline = Date().addingTimeInterval(spinDuration)
         var counter = 0
         while Date() < deadline {
@@ -432,7 +438,7 @@ final class SuspensionSimulationTests: XCTestCase {
             if counter % 1_000_000 == 0 { Thread.sleep(forTimeInterval: 0.001) }
         }
         let wallDelta = Date().timeIntervalSince(wallBefore)
-        print("SUSPENSION_HOST_END wallDelta=\(wallDelta) counter=\(counter)")
+        marker("SUSPENSION_HOST_END wallDelta=\(wallDelta) counter=\(counter)")
         XCTAssertGreaterThan(counter, 0, "the spin must actually run")
         XCTAssertGreaterThanOrEqual(wallDelta, spinDuration - 0.5,
                                     "the wall clock must advance at least the spin duration")
