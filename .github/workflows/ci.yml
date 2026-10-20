@@ -21,7 +21,7 @@ jobs:
           exit ${PIPESTATUS[0]}
       - name: SIGSTOP/SIGCONT host freeze test
         run: |
-          swift test --filter 'SuspensionHostTests' > /tmp/stopcont.log 2>&1 &
+          swift test --filter 'testSuspensionHostSurvivesStopCont' > /tmp/stopcont.log 2>&1 &
           PID=$!
           TARGET=""
           for i in $(seq 1 360); do
@@ -29,6 +29,9 @@ jobs:
             if ! kill -0 $PID 2>/dev/null; then break; fi
             sleep 1
           done
+          if ! grep -q "SUSPENSION_HOST_BEGIN" /tmp/stopcont.log 2>/dev/null; then
+            echo "host test never reached the spin loop"; cat /tmp/stopcont.log; exit 1
+          fi
           # Freeze the actual test runner (child), falling back to the
           # swift process when it execs the runner in place. Never stop
           # the CI script's own process group.
