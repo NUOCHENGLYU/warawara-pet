@@ -46,16 +46,17 @@ jobs:
           sleep 1
           RUNNER=$(pgrep -f "$PATTERN" | head -n 1)
           STATE=$(ps -o state= -p "$RUNNER" | tr -d ' ')
-          if [ "$STATE" != "T" ]; then
-            echo "runner not in stopped state (state=$STATE)"; exit 1
-          fi
+          case "$STATE" in
+            T*) ;;
+            *) echo "runner not in stopped state (state=$STATE)"; exit 1 ;;
+          esac
           sleep 8
           pkill -CONT -f "$PATTERN" || { echo "CONT failed"; exit 1; }
           sleep 1
           STATE=$(ps -o state= -p "$RUNNER" | tr -d ' ')
-          if [ "$STATE" = "T" ]; then
-            echo "runner still stopped after CONT (state=$STATE)"; exit 1
-          fi
+          case "$STATE" in
+            T*) echo "runner still stopped after CONT (state=$STATE)"; exit 1 ;;
+          esac
           trap - EXIT
           for i in $(seq 1 120); do
             if ! kill -0 $PID 2>/dev/null; then break; fi
