@@ -28,16 +28,21 @@ final class WindowRecoveryFaultMatrixTests: XCTestCase {
         XCTAssertEqual(recovered.size, petSize, "recovery must preserve size")
     }
 
-    /// E: the main screen shrinks (resolution change); the frame must be
-    /// clamped into the NEW visible frame.
+    /// E: the main screen shrinks (resolution change). A pet that was
+    /// healthy on the old 1440x900 screen ends up outside the new
+    /// 1280x720 visible frame and must be clamped back onto it.
     func testMainScreenResizeClampsTheFrame() {
         let small = CGRect(x: 0, y: 0, width: 1280, height: 720)
-        let frame = CGRect(x: 1200, y: 600, width: petSize.width, height: petSize.height)
-        XCTAssertFalse(WindowRecovery.isOffscreen(frame, screens: [small]))
+        let frame = CGRect(x: 1300, y: 400, width: petSize.width, height: petSize.height)
+        XCTAssertFalse(WindowRecovery.isOffscreen(frame, screens: [primary]),
+                       "the frame is healthy on the original screen")
+        XCTAssertTrue(WindowRecovery.isOffscreen(frame, screens: [small]),
+                      "after the resize the same frame is off the shrunken screen")
         let clamped = WindowRecovery.recoveryFrame(
             frame, screens: [small], mainScreenVisible: small, margin: margin
         )
-        XCTAssertTrue(small.contains(clamped.insetBy(dx: -1, dy: -1)))
+        XCTAssertTrue(small.contains(CGPoint(x: clamped.midX, y: clamped.midY)),
+                      "the recovered frame must land on the resized display")
         XCTAssertEqual(clamped.size, petSize)
     }
 

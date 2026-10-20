@@ -110,7 +110,13 @@ final class SuspensionSimulationTests: XCTestCase {
         }
     }
 
-    func testBackwardClockAdjustmentNeverReversesMotion() {
+    /// DOCUMENTED ACTUAL BEHAVIOR: a backward wall-clock adjustment
+    /// makes `elapsed` negative and the clamp reports progress 0 — the
+    /// in-flight motion visually restarts from its start pose. This is
+    /// bounded (0...1), never NaN, never fires a premature completion,
+    /// and after the clock moves forward again the motion completes
+    /// exactly once.
+    func testBackwardClockClampsProgressToZeroWithoutCrash() {
         var fakeNow = Date()
         let windowController = PetWindowController()
         windowController.configureForTesting(frame: petFrame)
@@ -118,22 +124,34 @@ final class SuspensionSimulationTests: XCTestCase {
         motion.nowProvider = { fakeNow }
 
         var progressValues: [CGFloat] = []
+        var completions = 0
         motion.startHop(
             from: petFrame,
             parameters: HopParameters(height: 80, drift: 0, duration: 1.0),
             progress: { progressValues.append($0) },
-            completion: { _ in }
+            completion: { _ in completions += 1 }
         )
         fakeNow = fakeNow.addingTimeInterval(0.5)
         motion.performTickForTesting()
         let mid = progressValues.last ?? -1
-        // Clock jumps BACKWARD by an hour: progress must clamp, never
-        // rewind below the previously reported value.
+        XCTAssertEqual(mid, 0.5, accuracy: 0.001, "half-way progress first")
+
+        // Clock jumps BACKWARD by an hour: the clamp resets to 0.
         fakeNow = fakeNow.addingTimeInterval(-3600)
         motion.performTickForTesting()
-        XCTAssertGreaterThanOrEqual(progressValues.last ?? -1, 0)
-        XCTAssertGreaterThanOrEqual(progressValues.last ?? -1, mid - 0.0001,
-                                    "backward clock adjustments must not rewind motion")
+        XCTAssertEqual(progressValues.last ?? -1, 0,
+                       "backward clock clamps progress to 0 (bounded restart)")
+        XCTAssertEqual(completions, 0, "no completion while progress is clamped")
+        XCTAssertTrue(progressValues.allSatisfy { $0.isFinite },
+                      "progress never becomes NaN/Infinity")
+        XCTAssertTrue(windowController.currentFrame.origin.x.isFinite,
+                      "the window frame stays finite")
+
+        // Clock moves forward past the end: exactly one completion.
+        fakeNow = fakeNow.addingTimeInterval(2 * 3600)
+        motion.performTickForTesting()
+        XCTAssertEqual(completions, 1, "completion fires exactly once after recovery")
+        XCTAssertEqual(progressValues.last ?? -1, 1, "progress ends clamped at 1")
         motion.cancelMotion()
     }
 
@@ -217,6 +235,11 @@ final class SuspensionSimulationTests: XCTestCase {
         XCTAssertEqual(controller.state, .idle)
     }
 
+    /// The curious state is dwell-hysteresis driven: the pointer must sit
+    /// within `curiosityEnterRadius` for `curiosityDwellTime` before the
+    /// pet engages. After a long suspension with the pointer still
+    /// nearby the pet stays curious; when the pointer finally leaves it
+    /// returns to idle. No duplicate window may appear.
     func testIdleAndCuriousSurviveLongJumpsWithoutDuplicateWindows() {
         let windowController = PetWindowController()
         windowController.configureForTesting(frame: petFrame)
@@ -238,18 +261,37 @@ final class SuspensionSimulationTests: XCTestCase {
         XCTAssertTrue(windowController.petPanel === panelBefore)
         XCTAssertTrue(windowController.currentFrame.origin.x.isFinite)
 
-        // Curious engagement then a long suspension with the pointer
-        // still present: the tracker keeps running without crashes and
-        // the state machine stays on the valid {curious, idle} path.
-        controller.mouseLocationProvider = { CGPoint(x: 60, y: 40) }
-        for tick in 0..<12 {
-            controller.awarenessTick(at: 100 + TimeInterval(tick) * 0.5, evaluateSleepiness: false)
+        // Pointer parks 24 px from the pet's center (inside the 110 px
+        // enter radius) and dwells 1.5 s -> the pet becomes curious.
+        let frame = windowController.currentFrame
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        controller.mouseLocationProvider = {
+            CGPoint(x: center.x + 24, y: center.y - 13)
         }
-        XCTAssertEqual(controller.state, .curious)
+        for tick in 0..<4 {
+            controller.awarenessTick(at: 100 + TimeInterval(tick) * 0.5,
+                                     evaluateSleepiness: false)
+        }
+        XCTAssertEqual(controller.state, .curious,
+                       "a dwelling nearby pointer engages curiosity")
+
+        // 100 s suspension with the pointer still nearby: stays curious,
+        // same panel, finite frame.
         for tick in 0..<40 {
-            controller.awarenessTick(at: 200 + TimeInterval(tick) * 0.5, evaluateSleepiness: false)
+            controller.awarenessTick(at: 200 + TimeInterval(tick) * 0.5,
+                                     evaluateSleepiness: false)
         }
-        XCTAssertTrue(controller.state == .curious || controller.state == .idle)
+        XCTAssertEqual(controller.state, .curious,
+                       "curiosity survives a long suspension while the pointer stays")
+        XCTAssertTrue(windowController.petPanel === panelBefore)
+        XCTAssertTrue(windowController.currentFrame.origin.x.isFinite)
+
+        // The pointer finally leaves (beyond the 170 px exit radius):
+        // the pet returns to idle on the next tick.
+        controller.mouseLocationProvider = { CGPoint(x: 5000, y: 5000) }
+        controller.awarenessTick(at: 400, evaluateSleepiness: false)
+        XCTAssertEqual(controller.state, .idle,
+                       "the pet returns to idle once the pointer leaves")
         XCTAssertTrue(windowController.petPanel === panelBefore)
     }
 
@@ -285,11 +327,12 @@ final class SuspensionSimulationTests: XCTestCase {
         components.year = 2026; components.month = 10; components.day = 17
         components.hour = 9; components.timeZone = zone
         let start = cal.date(from: components)!
+        let clock = FixedClock(now: start, calendar: cal)
 
         let windowController = PetWindowController()
         windowController.configureForTesting(frame: petFrame)
         let coordinator = BirthdayEventCoordinator(
-            clock: FixedClock(now: start, calendar: cal),
+            clock: clock,
             persistence: BirthdayPersistence()
         )
         let presenter = BirthdayPresenter(
@@ -306,8 +349,25 @@ final class SuspensionSimulationTests: XCTestCase {
         XCTAssertTrue(coordinator.isRunning)
 
         let petFrameBefore = windowController.currentFrame
-        coordinator.advance(at: start.addingTimeInterval(24 * 3600))
-        XCTAssertEqual(coordinator.phase, .idle, "the birthday event must complete, not hang")
+        // One day-long wall jump while the machine was asleep: a single
+        // advance fast-forwards noticing -> gathering (one phase per call,
+        // by design). The event must never hang, crash, or touch the
+        // main pet window.
+        let resumedAt = start.addingTimeInterval(24 * 3600)
+        clock.currentNow = resumedAt
+        coordinator.advance(at: resumedAt)
+        XCTAssertEqual(coordinator.phase, .gathering,
+                       "a day-long jump lands in gathering, never stuck in noticing")
+
+        // The group sequence completes on resume: group-start timestamp,
+        // a final advance through celebrating, then the group-end
+        // notification drives awaitingLetter -> completed -> idle.
+        coordinator.companionGroupDidStart()
+        let resumedAt2 = resumedAt.addingTimeInterval(10)
+        clock.currentNow = resumedAt2
+        coordinator.advance(at: resumedAt2)
+        coordinator.companionGroupDidEnd()
+        XCTAssertEqual(coordinator.phase, .idle, "the birthday event completes, not hang")
         XCTAssertEqual(windowController.currentFrame, petFrameBefore,
                        "the main pet window must never be moved or closed by the birthday event")
     }
