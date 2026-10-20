@@ -36,15 +36,17 @@ jobs:
           # Freeze the xctest runner by process name (never the CI
           # script's own process group) and verify it is really stopped
           # before and after the 8 s pause.
-          pkill -STOP -f "$PATTERN" || { echo "STOP failed"; exit 1; }
+          echo "=== process table ==="
+          ps -axo pid,ppid,state,comm,args | grep -iE 'xctest|WarawaraPet|swift test' | head -n 20
+          pkill -STOP -f 'xctest' || { echo "STOP failed"; exit 1; }
           sleep 1
-          RUNNER=$(pgrep -f "$PATTERN" | head -n 1)
+          RUNNER=$(pgrep -f 'xctest' | head -n 1)
           STATE=$(ps -o state= -p "$RUNNER" | tr -d ' ')
           if [ "$STATE" != "T" ]; then
             echo "runner not in stopped state (state=$STATE)"; exit 1
           fi
           sleep 8
-          pkill -CONT -f "$PATTERN" || { echo "CONT failed"; exit 1; }
+          pkill -CONT -f 'xctest' || { echo "CONT failed"; exit 1; }
           sleep 1
           STATE=$(ps -o state= -p "$RUNNER" | tr -d ' ')
           if [ "$STATE" = "T" ]; then
