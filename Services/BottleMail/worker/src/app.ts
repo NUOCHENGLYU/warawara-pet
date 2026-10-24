@@ -5,7 +5,7 @@ import {
   senderUsername,
   type Env,
 } from "./env.js";
-import { RateLimiter } from "./ratelimit.js";
+import { createD1RateLimiter, MemoryRateLimiter } from "./ratelimit.js";
 import { createRepos } from "./repo/d1.js";
 import type { Repos } from "./repo/types.js";
 import {
@@ -29,9 +29,8 @@ import {
 
 const ACT_CODE_CHARSET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
-/// Production limiter: one per isolate (Workers are ephemeral). Tests
-/// inject a fresh instance via env.rateLimiter.
-const productionLimiter = new RateLimiter();
+/// Per-isolate memory limiter (fast first line for cheap routes).
+const productionMemoryLimiter = new MemoryRateLimiter();
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -40,9 +39,24 @@ function nowIso(): string {
 function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "no-referrer",
+      ...headers,
+    },
   });
 }
+
+/// Security headers for the sender page: only the single inline script
+/// and style are allowed; no external subresources, no embedding.
+const PAGE_SECURITY_HEADERS: Record<string, string> = {
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+  "Content-Security-Policy":
+    "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
+    "connect-src 'self'; img-src 'self' data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
+};
 
 function ipOf(request: Request): string {
   return request.headers.get("CF-Connecting-IP") ?? "local";
@@ -109,7 +123,11 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   const url = new URL(request.url);
   const method = request.method.toUpperCase();
   const repos: Repos = env.repos ?? createRepos(env.DB);
-  const limiter = env.rateLimiter ?? productionLimiter;
+  // Sensitive routes (login / activation / sending) are throttled by
+  // the DURABLE, cross-isolate D1 limiter; cheap read-only routes use
+  // the fast per-isolate memory limiter. Tests inject either seam.
+  const durableLimiter = env.durableRateLimiter ?? createD1RateLimiter(env.DB);
+  const memoryLimiter = env.rateLimiter ?? productionMemoryLimiter;
   const path = url.pathname;
 
   try {
@@ -124,13 +142,14 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         headers: {
           "Content-Type": "text/html; charset=utf-8",
           "Set-Cookie": csrfCookieHeader(csrf, url.protocol === "https:"),
+          ...PAGE_SECURITY_HEADERS,
         },
       });
     }
 
     // ---- Sender session -------------------------------------------------
     if (method === "POST" && path === "/api/session") {
-      if (!limiter.allow(`login:${ipOf(request)}`, 10, 15 * 60 * 1000)) {
+      if (!(await durableLimiter.allow(`login:${ipOf(request)}`, 10, 15 * 60 * 1000))) {
         return jsonResponse(429, { error: "too_many_attempts" });
       }
       if (!enforceCsrf(request, url)) {
@@ -178,7 +197,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     // ---- Device activation ----------------------------------------------
     if (method === "POST" && path === "/api/devices/activate") {
-      if (!limiter.allow(`activate:${ipOf(request)}`, 10, 10 * 60 * 1000)) {
+      if (!(await durableLimiter.allow(`activate:${ipOf(request)}`, 10, 10 * 60 * 1000))) {
         return jsonResponse(429, { error: "too_many_attempts" });
       }
       let payload: { code?: unknown; label?: unknown };
@@ -192,16 +211,25 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       }
       const label = validateDeviceLabel(payload.label);
       const codeHash = await sha256Hex(payload.code);
-      const redeemed = await repos.activations.redeemCode(codeHash, nowIso(), label);
-      if (!redeemed.ok) {
-        if (redeemed.reason === "expired") return jsonResponse(410, { error: "code_expired" });
-        if (redeemed.reason === "used") return jsonResponse(409, { error: "code_used" });
-        return jsonResponse(401, { error: "invalid_code" });
-      }
+      // The device id and token are generated FIRST so the atomic
+      // redeem+bind step records the REAL devices.id as
+      // activation_codes.device_id (never the label), and a failed
+      // device insert leaves the code unconsumed (transactional batch).
       const deviceId = crypto.randomUUID();
       const deviceToken = randomHex(32);
       const tokenHash = await sha256Hex(deviceToken);
-      await repos.devices.createDevice(deviceId, tokenHash, label, nowIso());
+      const activated = await repos.activateDevice({
+        codeHash,
+        at: nowIso(),
+        deviceId,
+        tokenHash,
+        label,
+      });
+      if (!activated.ok) {
+        if (activated.reason === "expired") return jsonResponse(410, { error: "code_expired" });
+        if (activated.reason === "used") return jsonResponse(409, { error: "code_used" });
+        return jsonResponse(401, { error: "invalid_code" });
+      }
       return jsonResponse(201, {
         device_id: deviceId,
         device_token: deviceToken,
@@ -216,7 +244,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       }
       if (method === "POST") {
         if (!enforceCsrf(request, url)) return jsonResponse(403, { error: "csrf" });
-        if (!limiter.allow(`codes:${ipOf(request)}`, 20, 10 * 60 * 1000)) {
+        if (!(await durableLimiter.allow(`codes:${ipOf(request)}`, 20, 10 * 60 * 1000))) {
           return jsonResponse(429, { error: "too_many_attempts" });
         }
         const code = makeActivationCode();
@@ -266,7 +294,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         return jsonResponse(401, { error: "unauthorized" });
       }
       if (!enforceCsrf(request, url)) return jsonResponse(403, { error: "csrf" });
-      if (!limiter.allow(`letter:${ipOf(request)}`, 30, 10 * 60 * 1000)) {
+      if (!(await durableLimiter.allow(`letter:${ipOf(request)}`, 30, 10 * 60 * 1000))) {
         return jsonResponse(429, { error: "too_many_attempts" });
       }
       let payload: { body?: unknown; client_request_id?: unknown };
@@ -297,7 +325,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     // ---- Device: poll letters --------------------------------------------
     if (method === "GET" && path === "/api/letters") {
-      if (!limiter.allow(`poll:${ipOf(request)}`, 120, 10 * 60 * 1000)) {
+      if (!(await memoryLimiter.allow(`poll:${ipOf(request)}`, 120, 10 * 60 * 1000))) {
         return jsonResponse(429, { error: "too_many_requests" });
       }
       const device = await deviceForRequest(request, repos);
@@ -321,7 +349,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     // ---- Device: open a letter (idempotent) ------------------------------
     const openMatch = method === "POST" && path.match(/^\/api\/letters\/([^/]+)\/open$/);
     if (openMatch) {
-      if (!limiter.allow(`open:${ipOf(request)}`, 120, 10 * 60 * 1000)) {
+      if (!(await memoryLimiter.allow(`open:${ipOf(request)}`, 120, 10 * 60 * 1000))) {
         return jsonResponse(429, { error: "too_many_requests" });
       }
       const device = await deviceForRequest(request, repos);

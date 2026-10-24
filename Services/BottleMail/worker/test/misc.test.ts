@@ -8,6 +8,8 @@ describe("service basics", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(response.headers.get("set-cookie")).toContain("bottlemail_csrf=");
+    expect(response.headers.get("content-security-policy")).toContain("default-src 'none'");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     const html = await response.text();
     expect(html).toContain("写一封信");
     expect(html).toContain("设备激活码");

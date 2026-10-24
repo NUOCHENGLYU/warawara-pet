@@ -1,4 +1,5 @@
 import type {
+  ActivateDeviceResult,
   ActivationRepository,
   DeviceRecord,
   DeviceRepository,
@@ -7,16 +8,17 @@ import type {
   Repos,
 } from "./types.js";
 
-/// Deterministic in-memory repositories for tests and local preview.
-/// Mirrors the D1 semantics (idempotent inserts, single-use codes,
-/// idempotent opened_at) without any SQL.
+/// Deterministic in-memory repositories for unit tests and local
+/// preview. Mirrors the D1 semantics (race-free idempotent inserts,
+/// single-use codes bound to their device, idempotent opened_at)
+/// without any SQL. Single-threaded: atomicity is trivially satisfied.
 export function createMemoryRepos(): Repos {
   const letters = new Map<string, LetterRecord>(); // by id
   const lettersByClientRequestId = new Map<string, LetterRecord>();
   const letterOrder: LetterRecord[] = [];
   const devices = new Map<string, DeviceRecord & { token_hash: string }>(); // by id
   const devicesByTokenHash = new Map<string, string>(); // token_hash -> id
-  const codes = new Map<string, { created_at: string; expires_at: string; used_at: string | null }>();
+  const codes = new Map<string, { created_at: string; expires_at: string; used_at: string | null; device_id: string | null }>();
 
   let nextSeq = 1;
 
@@ -59,16 +61,7 @@ export function createMemoryRepos(): Repos {
 
   const activationRepo: ActivationRepository = {
     async createCode(codeHash, createdAt, expiresAt) {
-      codes.set(codeHash, { created_at: createdAt, expires_at: expiresAt, used_at: null });
-    },
-
-    async redeemCode(codeHash, at, deviceId) {
-      const code = codes.get(codeHash);
-      if (!code) return { ok: false, reason: "invalid" };
-      if (code.used_at !== null) return { ok: false, reason: "used" };
-      if (code.expires_at < at) return { ok: false, reason: "expired" };
-      code.used_at = at;
-      return { ok: true };
+      codes.set(codeHash, { created_at: createdAt, expires_at: expiresAt, used_at: null, device_id: null });
     },
 
     async listCodes() {
@@ -82,12 +75,6 @@ export function createMemoryRepos(): Repos {
   };
 
   const deviceRepo: DeviceRepository = {
-    async createDevice(id, tokenHash, label, createdAt) {
-      const record = { id, token_hash: tokenHash, label, created_at: createdAt, revoked_at: null };
-      devices.set(id, record);
-      devicesByTokenHash.set(tokenHash, id);
-    },
-
     async findDeviceByTokenHash(tokenHash) {
       const id = devicesByTokenHash.get(tokenHash);
       if (!id) return null;
@@ -118,5 +105,32 @@ export function createMemoryRepos(): Repos {
     },
   };
 
-  return { letters: letterRepo, activations: activationRepo, devices: deviceRepo };
+  const activateDevice: Repos["activateDevice"] = async (input): Promise<ActivateDeviceResult> => {
+    const code = codes.get(input.codeHash);
+    if (!code) return { ok: false, reason: "invalid" };
+    if (code.used_at !== null) return { ok: false, reason: "used" };
+    if (code.expires_at < input.at) return { ok: false, reason: "expired" };
+    code.used_at = input.at;
+    code.device_id = input.deviceId;
+    const device: DeviceRecord & { token_hash: string } = {
+      id: input.deviceId,
+      token_hash: input.tokenHash,
+      label: input.label,
+      created_at: input.at,
+      revoked_at: null,
+    };
+    devices.set(device.id, device);
+    devicesByTokenHash.set(device.token_hash, device.id);
+    return {
+      ok: true,
+      device: {
+        id: device.id,
+        label: device.label,
+        created_at: device.created_at,
+        revoked_at: device.revoked_at,
+      },
+    };
+  };
+
+  return { letters: letterRepo, activations: activationRepo, devices: deviceRepo, activateDevice };
 }

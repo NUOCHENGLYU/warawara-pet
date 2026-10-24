@@ -13,9 +13,10 @@ export interface Env {
   ACTIVATION_TTL_MINUTES?: string;
   /// Test seam: injected repositories. Production builds them from DB.
   repos?: Repos;
-  /// Test seam: injected rate limiter (one per isolate in production;
-  /// tests get a fresh instance per environment).
+  /// Test seams: injected rate limiters (one per isolate in production
+  /// for the memory limiter; the durable limiter is D1-backed).
   rateLimiter?: RateLimiter;
+  durableRateLimiter?: RateLimiter;
 }
 
 export function senderUsername(env: Env): string {

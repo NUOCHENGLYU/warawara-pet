@@ -43,6 +43,20 @@ activation_codes:   code_hash(仅存 SHA-256) created_at expires_at used_at devi
 
 - 10 位、字符集 `ABCDEFGHJKMNPQRSTUVWXYZ23456789`（排除易混淆字符），
   由 CSPRNG 生成；仅存 SHA-256 哈希；30 分钟过期；兑换一次即作废。
+- 兑换是**原子事务**：`activation_codes.device_id` 永远等于真实创建的
+  `devices.id`；并发兑换同一码只有一个成功；设备创建失败时码不被消耗。
+
+## 限流（第 429 响应）
+
+- 敏感接口使用 **D1 持久化限流**（跨 Worker isolate 生效）：
+  登录 10/15min、设备激活 10/10min、发信 30/10min、激活码生成 20/10min。
+- 只读接口（轮询、打开确认）使用单 isolate 内存限流：120/10min。
+
+## 安全响应头
+
+- 所有 JSON：`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`。
+- 发信网页额外带 CSP（`default-src 'none'`，仅允许同源连接与内联脚本/
+  样式），且所有动态字段用 `textContent` 渲染（无 innerHTML 注入面）。
 
 ## 错误响应
 

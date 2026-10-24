@@ -25,9 +25,11 @@ Services/BottleMail/
 
 ```powershell
 cd Services/BottleMail/worker
-npm install
-npm test          # 39 个测试，覆盖登录/CSRF/激活码/去重/分页/已读幂等/限流
+npm ci
+npm test          # 52 个测试：登录/CSRF/XSS/激活码/去重/分页/已读幂等/限流
+                  # + Miniflare 真实 D1(SQLite) 集成测试（并发幂等、原子兑换）
 npm run typecheck
+npm run deploy -- --dry-run   # 不需要登录，验证打包与绑定配置
 ```
 
 ## 关键安全设计
@@ -36,7 +38,10 @@ npm run typecheck
   Secrets；登录后发 HMAC 签名的 HttpOnly SameSite=Strict Cookie。
 - 所有 Cookie 鉴权的 POST 接口都有 CSRF 双重防护（Origin 同源检查 +
   double-submit token）。
-- 设备激活码一次性、30 分钟过期、只存哈希；兑换后得到设备令牌，服务端
-  只存令牌的 SHA-256 哈希，可随时撤销。
+- 设备激活码一次性、30 分钟过期、只存哈希；兑换与建设备在**同一事务**
+  内完成，`device_id` 严格对应真实设备，失败自动回滚；设备令牌只存
+  SHA-256 哈希，可随时撤销。
 - 设备令牌只读：只能拉取与确认打开，不能发信。
+- 登录/激活/发信的限流用 **D1 持久化计数**（跨 isolate），不是单机内存。
+- 发信网页所有动态字段用 `textContent` 渲染（XSS 免疫）+ CSP/nosniff。
 - 日志不输出正文、密码、令牌、激活码。

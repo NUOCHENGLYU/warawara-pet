@@ -83,13 +83,43 @@ describe("activation codes", () => {
     const now = new Date().toISOString();
     const future = new Date(Date.now() + 3_600_000).toISOString();
     await env.repos!.activations.createCode(codeHash, now, future);
-    const redeem = await env.repos!.activations.redeemCode(codeHash, now, "device-1");
+    const redeem = await env.repos!.activateDevice({
+      codeHash,
+      at: now,
+      deviceId: crypto.randomUUID(),
+      tokenHash: await sha256Hex("first-token"),
+      label: "first-device",
+    });
     expect(redeem.ok).toBe(true);
     const response = await fetchSafe(
       env,
       buildRequest("POST", "/api/devices/activate", { body: { code } })
     );
     expect(response.status).toBe(409);
+  });
+
+  it("records the REAL device id on the activation code", async () => {
+    // Regression: the code used to store the device LABEL as
+    // activation_codes.device_id because the UUID was generated after
+    // the redeem call. Now the id exists before the atomic redeem+bind,
+    // and both rows refer to the same device.
+    const env = await makeEnv();
+    const code = await createCode(env);
+    const response = await fetchSafe(
+      env,
+      buildRequest("POST", "/api/devices/activate", { body: { code, label: "她的 MacBook" } })
+    );
+    expect(response.status).toBe(201);
+    const data = (await response.json()) as { device_id: string };
+    const codeHash = await sha256Hex(code);
+    const listed = await env.repos!.activations.listCodes();
+    const entry = listed.find((item) => item.code_hash === codeHash);
+    expect(entry).toBeDefined();
+    expect(entry!.used_at).not.toBeNull();
+    const devices = await env.repos!.devices.listDevices();
+    const device = devices.find((item) => item.id === data.device_id);
+    expect(device).toBeDefined();
+    expect(device!.label).toBe("她的 MacBook");
   });
 
   it("never returns the plaintext code again (list endpoint is hashes only)", async () => {

@@ -1,6 +1,12 @@
 /// The private sender page. Served at `/` by the same worker, so it is
 /// same-origin: sessions, the CSRF cookie and every call stay in one
 /// place. Plain HTML + vanilla JS — no framework, no secrets in code.
+///
+/// XSS policy: NO dynamic value is ever written through innerHTML.
+/// Every dynamic field (device label, letter body, activation code,
+/// code hashes, ids) is rendered with createElement + textContent, so
+/// `<img onerror=...>` and friends stay inert text. The only innerHTML
+/// assignments in the page script are constant markup templates.
 export function senderPageHtml(): string {
   return `<!doctype html>
 <html lang="zh-CN">
@@ -40,6 +46,7 @@ export function senderPageHtml(): string {
   .msg.ok { color:#2f6b4f; } .msg.err { color:#a33; }
   .hidden { display:none; }
   .pre { white-space:pre-wrap; word-break:break-word; }
+  .li-main { flex:1; }
 </style>
 </head>
 <body>
@@ -116,6 +123,97 @@ async function api(method, path, body) {
   return { status: response.status, data };
 }
 
+// ---- Safe renderers: every dynamic value goes through textContent ----
+function makeLi(className) {
+  const li = document.createElement("li");
+  if (className) li.className = className;
+  return li;
+}
+function makePill(text, read) {
+  const pill = document.createElement("span");
+  pill.className = "pill" + (read ? " read" : "");
+  pill.textContent = text;
+  return pill;
+}
+function makeMuted(text) {
+  const muted = document.createElement("span");
+  muted.className = "muted";
+  muted.textContent = text;
+  return muted;
+}
+
+function renderDeviceList(container, devices) {
+  container.textContent = "";
+  for (const device of devices || []) {
+    const li = makeLi();
+    const main = document.createElement("div");
+    main.className = "li-main";
+    const name = document.createElement("span");
+    name.textContent = device.label;
+    main.appendChild(name);
+    main.appendChild(document.createTextNode(" "));
+    main.appendChild(makeMuted("(" + (device.id || "").slice(0, 8) + ")"));
+    li.appendChild(main);
+    if (device.revoked_at) {
+      li.appendChild(makePill("已撤销", false));
+    } else {
+      const button = document.createElement("button");
+      button.textContent = "撤销";
+      button.addEventListener("click", async () => {
+        const { status } = await api("POST", "/api/admin/devices/" + encodeURIComponent(device.id) + "/revoke");
+        if (status === 200 || status === 404) refreshDevices();
+      });
+      li.appendChild(button);
+    }
+    container.appendChild(li);
+  }
+}
+
+function renderCodeList(container, codes) {
+  container.textContent = "";
+  for (const entry of codes || []) {
+    const li = makeLi();
+    li.appendChild(makeMuted((entry.code_hash || "").slice(0, 12) + "…"));
+    li.appendChild(makePill(entry.used_at ? "已使用" : "未使用", Boolean(entry.used_at)));
+    li.appendChild(makeMuted(new Date(entry.created_at).toLocaleString()));
+    container.appendChild(li);
+  }
+}
+
+function renderLetterList(container, letters) {
+  container.textContent = "";
+  for (const letter of letters || []) {
+    const li = makeLi();
+    const main = document.createElement("div");
+    main.className = "li-main";
+    const preview = document.createElement("div");
+    preview.className = "pre";
+    preview.textContent = (letter.body || "").slice(0, 160)
+      + ((letter.body || "").length > 160 ? "…" : "");
+    main.appendChild(preview);
+    main.appendChild(makeMuted(new Date(letter.created_at).toLocaleString()));
+    li.appendChild(main);
+    li.appendChild(makePill(letter.opened_at ? "已读" : "未读", Boolean(letter.opened_at)));
+    container.appendChild(li);
+  }
+}
+
+function renderCodeMessage(container, code, expiresAt) {
+  container.textContent = "";
+  container.className = "msg ok";
+  const label = document.createElement("div");
+  label.textContent = "请把下面这个码给她（只显示这一次，" + new Date(expiresAt).toLocaleTimeString() + " 前有效）：";
+  const codeBox = document.createElement("div");
+  codeBox.className = "code";
+  codeBox.style.marginTop = "6px";
+  codeBox.textContent = code;
+  container.appendChild(label);
+  container.appendChild(codeBox);
+}
+
+// Test/QA hooks (no secrets; pure renderers only).
+window.BottleMailPage = { renderDeviceList, renderCodeList, renderLetterList, renderCodeMessage };
+
 async function refreshAll() {
   refreshCodes();
   refreshDevices();
@@ -125,42 +223,19 @@ async function refreshAll() {
 async function refreshCodes() {
   const { status, data } = await api("GET", "/api/admin/activation-codes");
   if (status !== 200) return;
-  $("codeList").innerHTML = (data.codes || []).map((c) =>
-    \`<li><span>\${c.code_hash.slice(0, 12)}…</span>
-       <span class="pill \${c.used_at ? "read" : ""}">\${c.used_at ? "已使用" : "未使用"}</span>
-       <span class="muted">\${new Date(c.created_at).toLocaleString()}</span></li>\`
-  ).join("");
+  renderCodeList($("codeList"), data.codes);
 }
 
 async function refreshDevices() {
   const { status, data } = await api("GET", "/api/admin/devices");
   if (status !== 200) return;
-  $("deviceList").innerHTML = (data.devices || []).map((d) =>
-    \`<li><span>\${d.label} <span class="muted">(\${d.id.slice(0, 8)})</span></span>
-       <span>\${d.revoked_at
-         ? \`<span class="pill">已撤销</span>\`
-         : \`<button data-device="\${d.id}" class="revokeBtn">撤销</button>\`}</span></li>\`
-  ).join("");
-  document.querySelectorAll(".revokeBtn").forEach((btn) => {
-    btn.onclick = async () => {
-      const { status } = await api("POST", \`/api/admin/devices/\${encodeURIComponent(btn.dataset.device)}/revoke\`);
-      if (status === 200 || status === 404) refreshDevices();
-    };
-  });
+  renderDeviceList($("deviceList"), data.devices);
 }
 
 async function refreshLetters() {
   const { status, data } = await api("GET", "/api/admin/letters");
   if (status !== 200) return;
-  $("letterList").innerHTML = (data.letters || []).map((letter) =>
-    \`<li><div style="flex:1"><div class="pre">\${escapeHtml(letter.body.slice(0, 160))}\${letter.body.length > 160 ? "…" : ""}</div>
-      <span class="muted">\${new Date(letter.created_at).toLocaleString()}</span></div>
-      <span class="pill \${letter.opened_at ? "read" : ""}">\${letter.opened_at ? "已读" : "未读"}</span></li>\`
-  ).join("");
-}
-
-function escapeHtml(text) {
-  return text.replace(/[&<>"']/g, (ch) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;","'":"&#39;"}[ch]));
+  renderLetterList($("letterList"), data.letters);
 }
 
 async function tryLogin() {
@@ -175,7 +250,6 @@ async function tryLogin() {
 async function showApp() {
   $("loginView").classList.add("hidden");
   $("appView").classList.remove("hidden");
-  const { data } = await api("GET", "/api/admin/letters");
   $("whoami").textContent = "已登录 · 发送者";
   refreshAll();
 }
@@ -224,8 +298,7 @@ function backToLogin() {
 async function newCode() {
   const { status, data } = await api("POST", "/api/admin/activation-codes");
   if (status === 201) {
-    $("codeMsg").className = "msg ok";
-    $("codeMsg").innerHTML = \`请把下面这个码给她（只显示这一次，\${new Date(data.expires_at).toLocaleTimeString()} 前有效）：<div class="code" style="margin-top:6px">\${data.code}</div>\`;
+    renderCodeMessage($("codeMsg"), data.code, data.expires_at);
     refreshCodes();
   } else if (status === 401) { backToLogin(); }
   else { $("codeMsg").className = "msg err"; $("codeMsg").textContent = "生成失败，请重试。"; }

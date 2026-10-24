@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hmacSha256Hex } from "../src/crypto.js";
-import { RateLimiter } from "../src/ratelimit.js";
+import { MemoryRateLimiter } from "../src/ratelimit.js";
 import { createSessionToken, verifySessionToken } from "../src/session.js";
 
 describe("session token", () => {
@@ -37,27 +37,27 @@ describe("session token", () => {
 });
 
 describe("rate limiter", () => {
-  it("allows up to the limit then blocks", () => {
+  it("allows up to the limit then blocks", async () => {
     let now = 0;
-    const limiter = new RateLimiter(() => now);
-    for (let i = 0; i < 3; i += 1) expect(limiter.allow("k", 3, 10_000)).toBe(true);
-    expect(limiter.allow("k", 3, 10_000)).toBe(false);
+    const limiter = new MemoryRateLimiter(() => now);
+    for (let i = 0; i < 3; i += 1) expect(await limiter.allow("k", 3, 10_000)).toBe(true);
+    expect(await limiter.allow("k", 3, 10_000)).toBe(false);
   });
 
-  it("reopens after the window slides", () => {
+  it("reopens after the window slides", async () => {
     let now = 0;
-    const limiter = new RateLimiter(() => now);
-    limiter.allow("k", 1, 10_000);
-    expect(limiter.allow("k", 1, 10_000)).toBe(false);
+    const limiter = new MemoryRateLimiter(() => now);
+    await limiter.allow("k", 1, 10_000);
+    expect(await limiter.allow("k", 1, 10_000)).toBe(false);
     now = 10_001;
-    expect(limiter.allow("k", 1, 10_000)).toBe(true);
+    expect(await limiter.allow("k", 1, 10_000)).toBe(true);
   });
 
-  it("scopes limits per key", () => {
+  it("scopes limits per key", async () => {
     let now = 0;
-    const limiter = new RateLimiter(() => now);
-    expect(limiter.allow("a", 1, 10_000)).toBe(true);
-    expect(limiter.allow("b", 1, 10_000)).toBe(true);
-    expect(limiter.allow("a", 1, 10_000)).toBe(false);
+    const limiter = new MemoryRateLimiter(() => now);
+    expect(await limiter.allow("a", 1, 10_000)).toBe(true);
+    expect(await limiter.allow("b", 1, 10_000)).toBe(true);
+    expect(await limiter.allow("a", 1, 10_000)).toBe(false);
   });
 });

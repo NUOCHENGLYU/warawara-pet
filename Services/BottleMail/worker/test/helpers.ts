@@ -1,6 +1,6 @@
 import { pbkdf2Hex, randomHex } from "../src/crypto.js";
 import type { Env } from "../src/env.js";
-import { RateLimiter } from "../src/ratelimit.js";
+import { MemoryRateLimiter } from "../src/ratelimit.js";
 import { createMemoryRepos } from "../src/repo/memory.js";
 
 export const TEST_PASSWORD = "test-password-正确";
@@ -17,7 +17,8 @@ export async function makeEnv(): Promise<Env> {
     SENDER_PASSWORD_ITERATIONS: "1000",
     ACTIVATION_TTL_MINUTES: "30",
     repos: createMemoryRepos(),
-    rateLimiter: new RateLimiter(),
+    rateLimiter: new MemoryRateLimiter(),
+    durableRateLimiter: new MemoryRateLimiter(),
   };
 }
 
