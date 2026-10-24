@@ -89,6 +89,11 @@ function d1Letters(db: D1Database): LetterRepository {
       return row ? rowToLetter(row) : null;
     },
 
+    async deleteLetter(id) {
+      const result = await db.prepare(`DELETE FROM letters WHERE id = ?`).bind(id).run();
+      return (result.meta?.changes ?? 0) > 0;
+    },
+
     async markOpened(id, at) {
       const before = await db
         .prepare(`SELECT opened_at FROM letters WHERE id = ?`)

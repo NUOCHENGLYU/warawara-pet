@@ -12,12 +12,12 @@
     "dev": "wrangler dev --local"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20241106.0",
+    "@cloudflare/workers-types": "^5.20261019.1",
     "@types/jsdom": "^30.0.0",
     "jsdom": "^25.0.1",
     "miniflare": "^3.20241106.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8",
-    "wrangler": "^3.99.0"
+    "wrangler": "^4.152.0"
   }
 }

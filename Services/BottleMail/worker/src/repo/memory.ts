@@ -15,6 +15,7 @@ import type {
 export function createMemoryRepos(): Repos {
   const letters = new Map<string, LetterRecord>(); // by id
   const lettersByClientRequestId = new Map<string, LetterRecord>();
+  const clientRequestIdByLetterId = new Map<string, string>();
   const letterOrder: LetterRecord[] = [];
   const devices = new Map<string, DeviceRecord & { token_hash: string }>(); // by id
   const devicesByTokenHash = new Map<string, string>(); // token_hash -> id
@@ -38,7 +39,10 @@ export function createMemoryRepos(): Repos {
       nextSeq += 1;
       letters.set(record.id, record);
       letterOrder.push(record);
-      if (input.clientRequestId) lettersByClientRequestId.set(input.clientRequestId, record);
+      if (input.clientRequestId) {
+        lettersByClientRequestId.set(input.clientRequestId, record);
+        clientRequestIdByLetterId.set(record.id, input.clientRequestId);
+      }
       return { record, created: true };
     },
 
@@ -48,6 +52,20 @@ export function createMemoryRepos(): Repos {
 
     async findLetterById(id) {
       return letters.get(id) ?? null;
+    },
+
+    async deleteLetter(id) {
+      const record = letters.get(id);
+      if (!record) return false;
+      letters.delete(id);
+      const clientRequestId = clientRequestIdByLetterId.get(id);
+      if (clientRequestId && lettersByClientRequestId.get(clientRequestId) === record) {
+        lettersByClientRequestId.delete(clientRequestId);
+      }
+      clientRequestIdByLetterId.delete(id);
+      const index = letterOrder.findIndex((letter) => letter.id === id);
+      if (index >= 0) letterOrder.splice(index, 1);
+      return true;
     },
 
     async markOpened(id, at) {

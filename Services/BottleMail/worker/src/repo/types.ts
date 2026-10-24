@@ -39,6 +39,11 @@ export interface LetterRepository {
 
   findLetterById(id: string): Promise<LetterRecord | null>;
 
+  /** Sender-only removal (cleaning up development/test letters before
+   *  the real recipient ever activates). Returns true when a letter was
+   *  actually deleted. */
+  deleteLetter(id: string): Promise<boolean>;
+
   /** Idempotent: sets opened_at only when it is still null. */
   markOpened(
     id: string,

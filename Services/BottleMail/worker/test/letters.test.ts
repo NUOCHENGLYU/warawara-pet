@@ -290,4 +290,44 @@ describe("letters (device side)", () => {
       expect(response.status).toBe(400);
     }
   });
+
+  it("lets the SENDER delete a letter (test-data cleanup), devices cannot", async () => {
+    const env = await makeEnv();
+    const session = await login(env);
+    const { data } = await sendLetter(env, session, "将被删除的测试信");
+    const id = String(data.id);
+
+    // Devices cannot delete (read-only identity).
+    const codeResponse = await fetchSafe(
+      env,
+      buildRequest("POST", "/api/admin/activation-codes", { cookie: session.cookie, csrf: session.csrf })
+    );
+    const { code } = (await codeResponse.json()) as { code: string };
+    const activated = await activateDevice(env, code);
+    const deviceDelete = await fetchSafe(
+      env,
+      buildRequest("DELETE", `/api/letters/${id}`, { bearer: activated.data.device_token! })
+    );
+    expect(deviceDelete.status).toBe(401);
+
+    // Sender delete removes it; polling no longer returns it.
+    const removed = await fetchSafe(
+      env,
+      buildRequest("DELETE", `/api/letters/${id}`, { cookie: session.cookie, csrf: session.csrf })
+    );
+    expect(removed.status).toBe(200);
+    const polled = await fetchSafe(
+      env,
+      buildRequest("GET", "/api/letters?after=0&limit=50", { bearer: activated.data.device_token! })
+    );
+    const pollData = (await polled.json()) as { letters: Array<{ id: string }> };
+    expect(pollData.letters.some((letter) => letter.id === id)).toBe(false);
+
+    // Double delete is a 404.
+    const again = await fetchSafe(
+      env,
+      buildRequest("DELETE", `/api/letters/${id}`, { cookie: session.cookie, csrf: session.csrf })
+    );
+    expect(again.status).toBe(404);
+  });
 });

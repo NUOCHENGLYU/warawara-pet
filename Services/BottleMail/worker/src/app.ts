@@ -346,6 +346,18 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return jsonResponse(200, { letters, next_after: nextAfter });
     }
 
+    // ---- Sender: delete a letter (test-data cleanup only) --------------
+    const deleteMatch = method === "DELETE" && path.match(/^\/api\/letters\/([^/]+)$/);
+    if (deleteMatch) {
+      if (!(await isSenderSession(request, env))) {
+        return jsonResponse(401, { error: "unauthorized" });
+      }
+      if (!enforceCsrf(request, url)) return jsonResponse(403, { error: "csrf" });
+      const letterId = decodeURIComponent(deleteMatch[1] ?? "");
+      const removed = await repos.letters.deleteLetter(letterId);
+      return jsonResponse(removed ? 200 : 404, removed ? { ok: true } : { error: "not_found" });
+    }
+
     // ---- Device: open a letter (idempotent) ------------------------------
     const openMatch = method === "POST" && path.match(/^\/api\/letters\/([^/]+)\/open$/);
     if (openMatch) {

@@ -268,8 +268,8 @@ async function sendLetter() {
     if (status === 201 || status === 200) {
       $("sendMsg").className = "msg ok";
       $("sendMsg").textContent = status === 201
-        ? "已送达！她下次联网时 WarawaraPet 会收到这封信。"
-        : "已送达（重试成功，未重复发送）。";
+        ? "已寄出并保存至云端！她下次联网时 WarawaraPet 会收到这封信。"
+        : "已寄出并保存至云端（重试成功，未重复发送）。";
       $("body").value = "";
       pendingSend = null;
       refreshLetters();

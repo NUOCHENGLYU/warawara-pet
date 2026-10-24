@@ -91,7 +91,8 @@ async function readSecret(prompt) {
   });
 }
 
-const providedSalt = process.argv[2];
+const providedSalt = process.argv[2] === "--apply-secrets" ? undefined : process.argv[2];
+const applySecrets = process.argv.includes("--apply-secrets");
 const saltHex = providedSalt
   ? providedSalt.trim()
   : bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
@@ -104,6 +105,33 @@ if (password.length === 0) {
 }
 
 const hash = await pbkdf2Hex(password, saltHex, iterations);
+
+if (applySecrets) {
+  // Pipe the derived values straight into wrangler secret put (stdin,
+  // no echo, no files, no logs). The plaintext password never leaves
+  // this process.
+  const { spawnSync } = await import("node:child_process");
+  const put = (name, value) =>
+    spawnSync("npx.cmd", ["wrangler", "secret", "put", name], {
+      input: value,
+      stdio: ["pipe", "inherit", "inherit"],
+      shell: false,
+    });
+  const saltResult = put("SENDER_PASSWORD_SALT", saltHex);
+  if (saltResult.status !== 0) {
+    console.error("配置 SENDER_PASSWORD_SALT 失败。");
+    process.exit(1);
+  }
+  const hashResult = put("SENDER_PASSWORD_HASH", hash);
+  if (hashResult.status !== 0) {
+    console.error("配置 SENDER_PASSWORD_HASH 失败。");
+    process.exit(1);
+  }
+  console.log("");
+  console.log("两个 Secret 已配置完成（明文密码未出现在任何地方）。");
+  console.log("salt 与 hash 已写入 Cloudflare，请勿再手动输出。");
+  process.exit(0);
+}
 
 console.log("");
 console.log("将下面两个值通过 npx wrangler secret put 配置：");
