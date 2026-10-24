@@ -1,0 +1,19 @@
+{
+  "name": "bottlemail-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WarawaraPet Bottle Mail: private one-way letter service (Cloudflare Worker + D1)",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev --local"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241106.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

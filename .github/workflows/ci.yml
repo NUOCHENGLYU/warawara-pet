@@ -7,6 +7,26 @@ on:
   workflow_dispatch:
 
 jobs:
+  bottle-mail-tests:
+    name: Bottle Mail backend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Services/BottleMail/worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: Services/BottleMail/worker/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+
   sonoma-sleep-sim:
     name: Sonoma 14 Sleep/Wake Simulation
     runs-on: macos-14

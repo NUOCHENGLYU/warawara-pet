@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bottlemail",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "bottlemail-db",
+      // After "npx wrangler d1 create bottlemail-db" (SETUP.md step 3),
+      // replace the placeholder below with the real database_id.
+      "database_id": "REPLACE_WITH_DATABASE_ID"
+    }
+  ],
+  "vars": {
+    "SENDER_USERNAME": "sender",
+    "ACTIVATION_TTL_MINUTES": "30",
+    "SENDER_PASSWORD_ITERATIONS": "310000"
+  }
+}

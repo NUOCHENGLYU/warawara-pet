@@ -1,0 +1,122 @@
+import type {
+  ActivationRepository,
+  DeviceRecord,
+  DeviceRepository,
+  LetterRecord,
+  LetterRepository,
+  Repos,
+} from "./types.js";
+
+/// Deterministic in-memory repositories for tests and local preview.
+/// Mirrors the D1 semantics (idempotent inserts, single-use codes,
+/// idempotent opened_at) without any SQL.
+export function createMemoryRepos(): Repos {
+  const letters = new Map<string, LetterRecord>(); // by id
+  const lettersByClientRequestId = new Map<string, LetterRecord>();
+  const letterOrder: LetterRecord[] = [];
+  const devices = new Map<string, DeviceRecord & { token_hash: string }>(); // by id
+  const devicesByTokenHash = new Map<string, string>(); // token_hash -> id
+  const codes = new Map<string, { created_at: string; expires_at: string; used_at: string | null }>();
+
+  let nextSeq = 1;
+
+  const letterRepo: LetterRepository = {
+    async insertLetter(input) {
+      const existing =
+        letters.get(input.id) ??
+        (input.clientRequestId ? lettersByClientRequestId.get(input.clientRequestId) : undefined);
+      if (existing) return { record: existing, created: false };
+      const record: LetterRecord = {
+        seq: nextSeq,
+        id: input.id,
+        body: input.body,
+        created_at: input.createdAt,
+        opened_at: null,
+      };
+      nextSeq += 1;
+      letters.set(record.id, record);
+      letterOrder.push(record);
+      if (input.clientRequestId) lettersByClientRequestId.set(input.clientRequestId, record);
+      return { record, created: true };
+    },
+
+    async listLetters(afterSeq, limit) {
+      return letterOrder.filter((letter) => letter.seq > afterSeq).slice(0, limit);
+    },
+
+    async findLetterById(id) {
+      return letters.get(id) ?? null;
+    },
+
+    async markOpened(id, at) {
+      const record = letters.get(id);
+      if (!record) throw new Error("letter not found");
+      const alreadyOpened = record.opened_at !== null;
+      if (!alreadyOpened) record.opened_at = at;
+      return { record, alreadyOpened };
+    },
+  };
+
+  const activationRepo: ActivationRepository = {
+    async createCode(codeHash, createdAt, expiresAt) {
+      codes.set(codeHash, { created_at: createdAt, expires_at: expiresAt, used_at: null });
+    },
+
+    async redeemCode(codeHash, at, deviceId) {
+      const code = codes.get(codeHash);
+      if (!code) return { ok: false, reason: "invalid" };
+      if (code.used_at !== null) return { ok: false, reason: "used" };
+      if (code.expires_at < at) return { ok: false, reason: "expired" };
+      code.used_at = at;
+      return { ok: true };
+    },
+
+    async listCodes() {
+      return Array.from(codes.entries()).map(([code_hash, code]) => ({
+        code_hash,
+        created_at: code.created_at,
+        expires_at: code.expires_at,
+        used_at: code.used_at,
+      }));
+    },
+  };
+
+  const deviceRepo: DeviceRepository = {
+    async createDevice(id, tokenHash, label, createdAt) {
+      const record = { id, token_hash: tokenHash, label, created_at: createdAt, revoked_at: null };
+      devices.set(id, record);
+      devicesByTokenHash.set(tokenHash, id);
+    },
+
+    async findDeviceByTokenHash(tokenHash) {
+      const id = devicesByTokenHash.get(tokenHash);
+      if (!id) return null;
+      const record = devices.get(id);
+      if (!record) return null;
+      return {
+        id: record.id,
+        label: record.label,
+        created_at: record.created_at,
+        revoked_at: record.revoked_at,
+      };
+    },
+
+    async listDevices() {
+      return Array.from(devices.values()).map((record) => ({
+        id: record.id,
+        label: record.label,
+        created_at: record.created_at,
+        revoked_at: record.revoked_at,
+      }));
+    },
+
+    async revokeDevice(id, at) {
+      const record = devices.get(id);
+      if (!record || record.revoked_at !== null) return false;
+      record.revoked_at = at;
+      return true;
+    },
+  };
+
+  return { letters: letterRepo, activations: activationRepo, devices: deviceRepo };
+}
