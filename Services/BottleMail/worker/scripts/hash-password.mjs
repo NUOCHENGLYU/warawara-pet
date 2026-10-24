@@ -110,21 +110,59 @@ if (applySecrets) {
   // Pipe the derived values straight into wrangler secret put (stdin,
   // no echo, no files, no logs). The plaintext password never leaves
   // this process.
+  //
+  // Windows note: `spawnSync("npx.cmd", …)` with shell:false is broken
+  // (Node >= 20.12 refuses to spawn .cmd batch files directly). We
+  // instead run the LOCAL wrangler JavaScript CLI with process.execPath,
+  // so no batch wrapper is involved.
   const { spawnSync } = await import("node:child_process");
-  const put = (name, value) =>
-    spawnSync("npx.cmd", ["wrangler", "secret", "put", name], {
-      input: value,
+  const { existsSync } = await import("node:fs");
+  const path = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+  const wranglerJs = path.resolve(scriptDir, "..", "node_modules", "wrangler", "bin", "wrangler.js");
+
+  if (!existsSync(wranglerJs)) {
+    console.error("未找到本地安装的 wrangler（node_modules/wrangler/bin/wrangler.js）。请先运行 npm ci。");
+    process.exit(1);
+  }
+
+  const runWrangler = (args, options = {}) =>
+    spawnSync(process.execPath, [wranglerJs, ...args], {
       stdio: ["pipe", "inherit", "inherit"],
-      shell: false,
+      encoding: "utf8",
+      ...options,
     });
+
+  const describeFailure = (result) =>
+    `error.code=${result.error?.code ?? "-"} status=${result.status ?? "-"} signal=${result.signal ?? "-"}`;
+
+  // Preflight 1: must be logged in to Cloudflare.
+  const who = runWrangler(["whoami"], { stdio: ["ignore", "inherit", "inherit"] });
+  if (who.error || who.status !== 0) {
+    console.error(`Wrangler 尚未登录 Cloudflare（${describeFailure(who)}）。请先执行 npx wrangler login 后重试。`);
+    process.exit(1);
+  }
+
+  // Preflight 2: worker config (wrangler.jsonc + bindings) must be valid.
+  const dryRun = runWrangler(["deploy", "--dry-run"], { stdio: ["ignore", "inherit", "inherit"] });
+  if (dryRun.error || dryRun.status !== 0) {
+    console.error(`Worker 配置校验失败（${describeFailure(dryRun)}）。请检查 wrangler.jsonc 后再重试。`);
+    process.exit(1);
+  }
+
+  const put = (name, value) =>
+    runWrangler(["secret", "put", name], { input: value });
+
   const saltResult = put("SENDER_PASSWORD_SALT", saltHex);
-  if (saltResult.status !== 0) {
-    console.error("配置 SENDER_PASSWORD_SALT 失败。");
+  if (saltResult.error || saltResult.status !== 0) {
+    console.error(`配置 SENDER_PASSWORD_SALT 失败（${describeFailure(saltResult)}）。`);
     process.exit(1);
   }
   const hashResult = put("SENDER_PASSWORD_HASH", hash);
-  if (hashResult.status !== 0) {
-    console.error("配置 SENDER_PASSWORD_HASH 失败。");
+  if (hashResult.error || hashResult.status !== 0) {
+    console.error(`配置 SENDER_PASSWORD_HASH 失败（${describeFailure(hashResult)}）。`);
     process.exit(1);
   }
   console.log("");
