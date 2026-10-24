@@ -7,9 +7,7 @@
     {
       "binding": "DB",
       "database_name": "bottlemail-db",
-      // After "npx wrangler d1 create bottlemail-db" (SETUP.md step 3),
-      // replace the placeholder below with the real database_id.
-      "database_id": "REPLACE_WITH_DATABASE_ID"
+      "database_id": "7dd1b451-ad05-49a2-a3a3-fabaa5d8a606"
     }
   ],
   "vars": {
