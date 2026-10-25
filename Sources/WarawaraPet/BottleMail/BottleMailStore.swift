@@ -61,8 +61,8 @@ final class BottleMailFileStore: BottleMailStoring {
             // Failure atomicity: mutate a copy, persist the copy, and
             // only then swap it into `cached`.
             var next = cached
-            let existingIds = Set(next.letters.map(\.id))
-            let existingSeqs = Set(next.letters.map(\.seq))
+            var existingIds = Set(next.letters.map(\.id))
+            var existingSeqs = Set(next.letters.map(\.seq))
             var newLetters: [BottleMailLetter] = []
             var duplicateCount = 0
             for remoteLetter in remote.sorted(by: { $0.seq < $1.seq }) {
