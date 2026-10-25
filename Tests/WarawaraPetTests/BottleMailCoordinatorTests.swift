@@ -522,8 +522,9 @@ final class BottleMailCoordinatorTests: XCTestCase {
         }
         // First local persist fails once, then works.
         var failNextPersist = false
-        store.writeOverride = { _, _ in
+        store.persistOverride = { data, tempURL, fileURL in
             if failNextPersist { throw CocoaError(.fileWriteUnknown) }
+            try BottleMailFileStore.defaultPersist(data: data, tempURL: tempURL, fileURL: fileURL)
         }
 
         try await failingCoordinator.activate(code: "C", label: "Mac")
@@ -539,7 +540,8 @@ final class BottleMailCoordinatorTests: XCTestCase {
         failingCoordinator.handleNetworkRecovery()
         await waitUntil { failingCoordinator.snapshotForTesting().unread == 0 }
         XCTAssertEqual(failingCoordinator.snapshotForTesting().letters.first?.openedAt, "2026-10-17T01:00:00Z")
-        XCTAssertGreaterThanOrEqual(openCalls, 2, "the retry re-submits the idempotent /open")
+        XCTAssertEqual(openCalls, 1,
+                       "a server-confirmed open retries the LOCAL write, not the /open call")
     }
 
     // MARK: - Main-thread publishing

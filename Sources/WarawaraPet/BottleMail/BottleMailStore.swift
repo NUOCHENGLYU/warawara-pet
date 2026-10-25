@@ -32,8 +32,11 @@ final class BottleMailFileStore: BottleMailStoring {
     private let fileURL: URL
     private let queue = DispatchQueue(label: "warawarapet.bottlemail.store")
     private var cached: BottleMailMailbox
-    /// Test seam: replace the physical write to force failures.
-    var writeOverride: ((Data, URL) throws -> Void)?
+    /// Test seam: replaces the WHOLE physical write+swap. The closure
+    /// owns writing the encoded mailbox to `tempURL` and swapping it to
+    /// `fileURL` (use `defaultPersist` for the normal behavior) — so
+    /// tests can inject failures at any step.
+    var persistOverride: ((Data, URL, URL) throws -> Void)?
 
     /// Default location: ~/Library/Application Support/WarawaraPet/BottleMail/mailbox.json
     static func defaultFileURL() -> URL {
@@ -147,11 +150,17 @@ final class BottleMailFileStore: BottleMailStoring {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try JSONEncoder().encode(mailbox)
         let tempURL = fileURL.appendingPathExtension("tmp")
-        if let writeOverride {
-            try writeOverride(data, tempURL)
+        if let persistOverride {
+            try persistOverride(data, tempURL, fileURL)
         } else {
-            try data.write(to: tempURL, options: .atomic)
+            try Self.defaultPersist(data: data, tempURL: tempURL, fileURL: fileURL)
         }
+    }
+
+    /// The normal write path (also used by tests' success overrides):
+    /// atomic temp write + swap.
+    static func defaultPersist(data: Data, tempURL: URL, fileURL: URL) throws {
+        try data.write(to: tempURL, options: .atomic)
         if FileManager.default.fileExists(atPath: fileURL.path) {
             _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempURL)
         } else {

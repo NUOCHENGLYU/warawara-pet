@@ -113,8 +113,9 @@ final class BottleMailStoreTests: XCTestCase {
         let before = store.snapshot()
 
         var shouldFail = true
-        store.writeOverride = { _, _ in
+        store.persistOverride = { data, tempURL, fileURL in
             if shouldFail { throw CocoaError(.fileWriteUnknown) }
+            try BottleMailFileStore.defaultPersist(data: data, tempURL: tempURL, fileURL: fileURL)
         }
         XCTAssertThrowsError(try store.merge(remote: [remote(2)], advancingCursorTo: 2)) { error in
             XCTAssertTrue(error is CocoaError)
@@ -139,12 +140,12 @@ final class BottleMailStoreTests: XCTestCase {
         let id = UUID().uuidString
         _ = try store.merge(remote: [remote(1, id: id)], advancingCursorTo: 1)
 
-        store.writeOverride = { _, _ in throw CocoaError(.fileWriteUnknown) }
+        store.persistOverride = { _, _, _ in throw CocoaError(.fileWriteUnknown) }
         XCTAssertThrowsError(try store.markOpenedLocally(id: id, openedAt: "2026-10-17T01:00:00Z"))
         XCTAssertEqual(store.snapshot().letters.first?.isUnread, true,
                        "a failed local open write must not flip the unread state")
 
-        store.writeOverride = nil
+        store.persistOverride = nil
         try store.markOpenedLocally(id: id, openedAt: "2026-10-17T01:00:00Z")
         XCTAssertEqual(store.snapshot().letters.first?.openedAt, "2026-10-17T01:00:00Z")
     }
