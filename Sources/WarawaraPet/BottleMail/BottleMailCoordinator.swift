@@ -53,7 +53,7 @@ final class BottleMailCoordinator: ObservableObject {
     private var credential: BottleMailCredential?
     private var networkMonitor: NWPathMonitor?
     private var lastNetworkUp = true
-    private(set) var currentPollDelay: TimeInterval
+    private(set) var currentPollDelay: TimeInterval = 0
 
     init(
         transport: BottleMailAPITransport,
@@ -63,7 +63,6 @@ final class BottleMailCoordinator: ObservableObject {
         self.transport = transport
         self.credentials = credentials
         self.store = store
-        self.currentPollDelay = 20
     }
 
     // MARK: - Lifecycle
