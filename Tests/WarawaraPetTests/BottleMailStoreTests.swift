@@ -19,8 +19,14 @@ final class BottleMailStoreTests: XCTestCase {
         try? FileManager.default.removeItem(at: directory)
     }
 
-    private func remote(_ seq: Int, id: String = UUID().uuidString, body: String = "信 \(seq)") -> BottleMailRemoteLetter {
-        BottleMailRemoteLetter(id: id, seq: seq, body: body, createdAt: "2026-10-17T00:00:00Z", openedAt: nil)
+    private func remote(_ seq: Int, id: String = UUID().uuidString, body: String? = nil) -> BottleMailRemoteLetter {
+        BottleMailRemoteLetter(
+            id: id,
+            seq: seq,
+            body: body ?? "信 \(seq)",
+            createdAt: "2026-10-17T00:00:00Z",
+            openedAt: nil
+        )
     }
 
     func testMergeStoresNewLettersOrderedAndAdvancesCursor() throws {

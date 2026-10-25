@@ -46,8 +46,14 @@ final class BottleMailCoordinatorTests: XCTestCase {
         try? FileManager.default.removeItem(at: directory)
     }
 
-    private func remote(_ seq: Int, id: String = UUID().uuidString, body: String = "信 \(seq)") -> BottleMailRemoteLetter {
-        BottleMailRemoteLetter(id: id, seq: seq, body: body, createdAt: "2026-10-17T00:00:00Z", openedAt: nil)
+    private func remote(_ seq: Int, id: String = UUID().uuidString, body: String? = nil) -> BottleMailRemoteLetter {
+        BottleMailRemoteLetter(
+            id: id,
+            seq: seq,
+            body: body ?? "信 \(seq)",
+            createdAt: "2026-10-17T00:00:00Z",
+            openedAt: nil
+        )
     }
 
     private func makeHarness() -> (BottleMailCoordinator, MockTransport, InMemoryBottleMailCredentialStore) {
@@ -109,6 +115,8 @@ final class BottleMailCoordinatorTests: XCTestCase {
         } catch let error as BottleMailActivationError {
             XCTAssertEqual(error, .codeUsed)
             XCTAssertTrue(error.message.contains("已经"))
+        } catch {
+            XCTFail("unexpected error \(error)")
         }
 
         transport.onActivate = { _, _ in throw BottleMailAPIError.http(status: 410, code: "code_expired") }
@@ -117,6 +125,8 @@ final class BottleMailCoordinatorTests: XCTestCase {
             XCTFail("expected failure")
         } catch let error as BottleMailActivationError {
             XCTAssertEqual(error, .codeExpired)
+        } catch {
+            XCTFail("unexpected error \(error)")
         }
 
         transport.onActivate = { _, _ in throw BottleMailAPIError.network("offline") }
@@ -125,6 +135,8 @@ final class BottleMailCoordinatorTests: XCTestCase {
             XCTFail("expected failure")
         } catch let error as BottleMailActivationError {
             XCTAssertEqual(error, .network("offline"))
+        } catch {
+            XCTFail("unexpected error \(error)")
         }
     }
 
