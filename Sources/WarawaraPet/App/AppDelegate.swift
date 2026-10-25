@@ -14,6 +14,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingMeteorReplay = false
     private var firstLaunchHandler: FirstLaunchCelebration?
     private var pendingFaultInjection: String?
+    private var bottleMailCoordinator: BottleMailCoordinator?
+    private var bottleMailWindow: BottleMailWindowController?
+    private var pendingBottleActivationCode: String?
+    private var groupSequenceActive = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         LifecycleDiagnostics.launch()
@@ -38,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wireBirthdayEvent(windowController: controller)
         wireMeteor(windowController: controller)
         wireFirstLaunchCelebration(windowController: controller)
+        wireBottleMail(windowController: controller)
 
         if let fault = pendingFaultInjection {
             pendingFaultInjection = nil
@@ -75,6 +80,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         windowController.addGroupActiveObserver { [weak presenter] active in
             presenter?.groupActivityChanged(active)
+        }
+        windowController.addGroupActiveObserver { [weak self] active in
+            self?.groupSequenceActive = active
         }
         windowController.setCompanionCentersObserver { [weak presenter] centers in
             presenter?.companionCentersChanged(centers)
@@ -167,6 +175,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // point: the surprise is dispatched against a ready pipeline.
         EventDiagnostics.firstLaunch("PRESENTER_READY")
         handler.start()
+    }
+
+    /// Bottle Mail (Phase 8B): device binding, polling, offline storage
+    /// and the conflict-gated pending queue. The status/activation
+    /// window opens via a right-click on the pet.
+    private func wireBottleMail(windowController: PetWindowController) {
+        let coordinator = BottleMailCoordinator(
+            transport: BottleMailAPI(),
+            credentials: KeychainBottleMailCredentialStore(),
+            store: BottleMailFileStore()
+        )
+        coordinator.isPetBusy = { [weak self] in
+            guard let self else { return false }
+            return (self.petWindowController?.isPetDragging ?? false)
+                || (self.petWindowController?.isPetSleeping ?? false)
+                || (self.birthdayCoordinator?.isRunning ?? false)
+                || (self.meteorController?.isRunning ?? false)
+                || LetterWindowController.isOpen
+                || self.groupSequenceActive
+        }
+        coordinator.installLifecycleHooks()
+        coordinator.start()
+        bottleMailCoordinator = coordinator
+        bottleMailWindow = BottleMailWindowController(coordinator: coordinator)
+        windowController.onPetRightClick = { [weak self] in
+            self?.bottleMailWindow?.toggle()
+        }
+        if let code = pendingBottleActivationCode {
+            pendingBottleActivationCode = nil
+            bottleMailWindow?.toggle()
+            Task {
+                try? await coordinator.activate(code: code, label: "Warawara")
+            }
+        }
+        EventDiagnostics.bottleMail("WIRED")
+    }
+
+    /// Development flag --bottle-activate <code>: binds a device without
+    /// using the GUI (CI/dev convenience; the real user path is the
+    /// right-click window).
+    func requestBottleActivation(code: String) {
+        if let coordinator = bottleMailCoordinator {
+            Task { try? await coordinator.activate(code: code, label: "Warawara") }
+        } else {
+            pendingBottleActivationCode = code
+        }
+    }
+
+    /// Development flag --bottle-diagnose: prints the coordinator state
+    /// without tokens or letter bodies.
+    func requestBottleDiagnose() {
+        guard let coordinator = bottleMailCoordinator else {
+            print("BOTTLE_MAIL_DIAGNOSE not-wired")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            print(coordinator.debugDump())
+        }
     }
 
     private func birthdayTick() {

@@ -25,6 +25,12 @@ enum EventDiagnostics {
         emit("METEOR_\(event)")
     }
 
+    /// Bottle Mail diagnostics. NEVER pass letters' bodies or the device
+    /// token — only counts, ids and status transitions.
+    static func bottleMail(_ event: String, details: String = "") {
+        emit(details.isEmpty ? "BOTTLE_MAIL_\(event)" : "BOTTLE_MAIL_\(event) \(details)")
+    }
+
     static func firstLaunch(_ event: String) {
         emit("FIRST_LAUNCH_\(event)")
     }

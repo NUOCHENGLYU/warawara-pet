@@ -130,6 +130,15 @@ enum WarawaraPetMain {
         if arguments.contains("--show-letter") {
             appDelegate.requestShowLetter()
         }
+        if let activateIndex = arguments.firstIndex(of: "--bottle-activate") {
+            // Development only: bind a device from the CLI instead of
+            // the right-click activation window.
+            let code = activateIndex + 1 < arguments.count ? arguments[activateIndex + 1] : ""
+            appDelegate.requestBottleActivation(code: code)
+        }
+        if arguments.contains("--bottle-diagnose") {
+            appDelegate.requestBottleDiagnose()
+        }
         app.run()
     }
 

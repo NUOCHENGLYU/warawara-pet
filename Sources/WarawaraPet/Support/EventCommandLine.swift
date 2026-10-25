@@ -15,6 +15,8 @@ enum EventCommandLine {
           --debug-reset-first-launch     development: clear first-launch state
           --fault-inject <name>          development: window-recovery fault
             <name> = offscreen-frame | hidden-panel | screen-change | wake-recovery
+          --bottle-activate <code>       development: bind a Bottle Mail device
+          --bottle-diagnose              development: print Bottle Mail state
           --help-events                  show this usage
         """
     }

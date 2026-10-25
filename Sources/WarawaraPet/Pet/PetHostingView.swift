@@ -3,6 +3,9 @@ import SwiftUI
 
 final class PetHostingView: NSHostingView<PetView> {
     weak var interactionController: PetInteractionController?
+    /// Right-click on the pet opens the Bottle Mail window (the backup
+    /// entry point; the primary 8C bottle experience comes later).
+    var onRightClick: (() -> Void)?
 
     private var hitRegion: EllipseHitRegion?
 
@@ -45,6 +48,9 @@ final class PetHostingView: NSHostingView<PetView> {
         interactionController?.mouseUp(at: event)
     }
 
-    // Right-click intentionally does nothing; the app presents no NSMenu
-    // anywhere. Quit is a direct-click status item (StatusItemController).
+    // Right-click: Bottle Mail entry point. Previously inert; no NSMenu
+    // is presented (menus make macOS hide the nonactivating pet panel).
+    override func rightMouseDown(with event: NSEvent) {
+        onRightClick?()
+    }
 }

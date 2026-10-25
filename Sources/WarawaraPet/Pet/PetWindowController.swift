@@ -13,6 +13,8 @@ final class PetWindowController: NSObject {
     /// Invoked when the user double-clicks the main pet (birthday
     /// letter reopen path).
     var onPetDoubleClick: (() -> Void)?
+    /// Invoked on a right-click on the pet (Bottle Mail entry point).
+    var onPetRightClick: (() -> Void)?
     private var positionStore: PetPositionStore?
     private var screenObserver: NSObjectProtocol?
     private var groupSequenceController: GroupSequenceController?
@@ -208,6 +210,9 @@ final class PetWindowController: NSObject {
         let hostingView = PetHostingView(rootView: PetView(controller: petController))
         hostingView.frame = NSRect(origin: .zero, size: Self.petSize)
         hostingView.interactionController = interaction
+        hostingView.onRightClick = { [weak self] in
+            self?.onPetRightClick?()
+        }
         interaction.onDoubleClick = { [weak self] in
             self?.onPetDoubleClick?()
         }
