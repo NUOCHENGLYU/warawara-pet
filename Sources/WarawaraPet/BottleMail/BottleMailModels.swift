@@ -70,25 +70,45 @@ struct BottleMailMailbox: Codable, Equatable {
     /// distinguish "revoked (letters stay readable, no syncing)" from
     /// "never activated (show the activation form)".
     var isRevoked: Bool = false
+    /// Letter ids whose /open confirmation is still pending server-side.
+    /// Restored after a restart so confirmations are automatically
+    /// re-submitted (the server's /open is idempotent).
+    var pendingOpenIds: [String] = []
+    /// Letters the server ALREADY confirmed (id -> server opened_at)
+    /// whose local persist failed. Restored after a restart so only the
+    /// local write is retried — the server value is never overwritten.
+    var confirmedOpenBacklog: [String: String] = [:]
 
     enum CodingKeys: String, CodingKey {
-        case version, cursorSeq, letters, isRevoked
+        case version, cursorSeq, letters, isRevoked, pendingOpenIds, confirmedOpenBacklog
     }
 
-    /// Backward compatible: Phase 8B mailboxes have no `isRevoked` key.
+    /// Backward compatible: Phase 8B / 8B.1 mailboxes lack the pending
+    /// open fields.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
         cursorSeq = try container.decode(Int.self, forKey: .cursorSeq)
         letters = try container.decode([BottleMailLetter].self, forKey: .letters)
         isRevoked = try container.decodeIfPresent(Bool.self, forKey: .isRevoked) ?? false
+        pendingOpenIds = try container.decodeIfPresent([String].self, forKey: .pendingOpenIds) ?? []
+        confirmedOpenBacklog = try container.decodeIfPresent([String: String].self, forKey: .confirmedOpenBacklog) ?? [:]
     }
 
-    init(version: Int = 1, cursorSeq: Int = 0, letters: [BottleMailLetter] = [], isRevoked: Bool = false) {
+    init(
+        version: Int = 1,
+        cursorSeq: Int = 0,
+        letters: [BottleMailLetter] = [],
+        isRevoked: Bool = false,
+        pendingOpenIds: [String] = [],
+        confirmedOpenBacklog: [String: String] = [:]
+    ) {
         self.version = version
         self.cursorSeq = cursorSeq
         self.letters = letters
         self.isRevoked = isRevoked
+        self.pendingOpenIds = pendingOpenIds
+        self.confirmedOpenBacklog = confirmedOpenBacklog
     }
 
     func encode(to encoder: Encoder) throws {
@@ -97,6 +117,8 @@ struct BottleMailMailbox: Codable, Equatable {
         try container.encode(cursorSeq, forKey: .cursorSeq)
         try container.encode(letters, forKey: .letters)
         try container.encode(isRevoked, forKey: .isRevoked)
+        try container.encode(pendingOpenIds, forKey: .pendingOpenIds)
+        try container.encode(confirmedOpenBacklog, forKey: .confirmedOpenBacklog)
     }
 }
 

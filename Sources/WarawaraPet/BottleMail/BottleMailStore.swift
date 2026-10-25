@@ -26,6 +26,10 @@ protocol BottleMailStoring {
     /// Persists the revoked flag (set on revocation, cleared on a
     /// successful re-activation).
     func setRevokedFlag(_ revoked: Bool) throws
+    /// Persists the pending read-confirmation state (server-pending ids
+    /// and the server-confirmed-but-local-write-failed backlog) so a
+    /// restart can resume confirmations without losing them.
+    func setPendingOpenStates(pendingIds: [String], confirmedBacklog: [String: String]) throws
 }
 
 final class BottleMailFileStore: BottleMailStoring {
@@ -123,6 +127,18 @@ final class BottleMailFileStore: BottleMailStoring {
             guard cached.isRevoked != revoked else { return }
             var next = cached
             next.isRevoked = revoked
+            try persist(next)
+            cached = next
+        }
+    }
+
+    func setPendingOpenStates(pendingIds: [String], confirmedBacklog: [String: String]) throws {
+        try queue.sync {
+            guard cached.pendingOpenIds != pendingIds
+                    || cached.confirmedOpenBacklog != confirmedBacklog else { return }
+            var next = cached
+            next.pendingOpenIds = pendingIds
+            next.confirmedOpenBacklog = confirmedBacklog
             try persist(next)
             cached = next
         }

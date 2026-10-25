@@ -26,7 +26,9 @@ final class BottleMailCoordinator: ObservableObject {
     @Published private(set) var lastSyncError: String?
     @Published private(set) var lastSyncAt: Date?
     /// The consumable per-letter delivery queue (FIFO by seq). A letter
-    /// is removed ONLY via `acknowledgeDelivery(id:)`.
+    /// is removed ONLY via `acknowledgeDelivery(id:)`. This published
+    /// array holds an IMMUTABLE snapshot copy — the authoritative
+    /// queue lives on the orchestration queue.
     @Published private(set) var deliveryQueue: [PendingBottleDelivery] = []
 
     /// Convenience for UI state checks.
@@ -64,6 +66,9 @@ final class BottleMailCoordinator: ObservableObject {
     private var epoch = 0
     private var credential: BottleMailCredential?
     private var pendingLetters: [BottleMailLetter] = []
+    /// The AUTHORITATIVE delivery queue (orchestration queue only).
+    /// Main-thread consumers see immutable copies via `deliveryQueue`.
+    private var deliveryQueueSnapshot: [PendingBottleDelivery] = []
     /// Server-confirmed opens whose LOCAL persist failed (id -> openedAt).
     private var localConfirmBacklog: [String: String] = [:]
     /// /open calls that failed server-side; retried on the next
@@ -103,10 +108,16 @@ final class BottleMailCoordinator: ObservableObject {
                 .filter { $0.isUnread && !$0.delivered }
                 .sorted { $0.seq < $1.seq }
             self.pendingLetters = undelivered
+            // Restart rule for read confirmations: server-pending and
+            // confirmed-but-not-persisted states are restored so the
+            // retry machinery resumes them automatically.
+            self.serverOpenRetries = Set(mailbox.pendingOpenIds)
+            self.localConfirmBacklog = mailbox.confirmedOpenBacklog
             if let credential = self.credentials.loadCredential() {
                 self.credential = credential
                 self.publishActivation(.activated(label: credential.label))
                 self.scheduleNextPoll(delay: 0.5)
+                self.retryPendingOpens()
             } else if mailbox.isRevoked {
                 // Revoked before the restart: keep the letters readable,
                 // never sync, keep the revoked state (wake/network
@@ -167,6 +178,7 @@ final class BottleMailCoordinator: ObservableObject {
             self.credential = credential
             self.serverOpenRetries.removeAll()
             self.localConfirmBacklog.removeAll()
+            self.persistPendingOpenStates()
             try? self.store.setRevokedFlag(false)
             self.publishActivation(.activated(label: result.label))
             self.scheduleNextPoll(delay: 0.5)
@@ -338,6 +350,7 @@ final class BottleMailCoordinator: ObservableObject {
         credentials.clearCredential()
         serverOpenRetries.removeAll()
         localConfirmBacklog.removeAll()
+        persistPendingOpenStates()
         try? store.setRevokedFlag(true)
         cancelTimers()
         publishActivation(.revoked)
@@ -371,10 +384,10 @@ final class BottleMailCoordinator: ObservableObject {
                 } else {
                     self.pendingLetters.removeAll()
                     self.cancelPendingDeliveryTimer()
-                    self.publishDeliveryQueue(
-                        self.deliveryQueue
-                            + captured.map { PendingBottleDelivery(id: $0.id, letter: $0) }
+                    self.deliveryQueueSnapshot.append(
+                        contentsOf: captured.map { PendingBottleDelivery(id: $0.id, letter: $0) }
                     )
+                    self.publishDeliveryQueue(self.deliveryQueueSnapshot)
                     self.publishPendingCount(0)
                     self.publishLetters(self.store.snapshot())
                     EventDiagnostics.bottleMail("DELIVERED", details: "count=\(captured.count)")
@@ -400,17 +413,18 @@ final class BottleMailCoordinator: ObservableObject {
     /// The 8C consumption hook: removes one letter from the delivery
     /// queue AND persists the acknowledgement (exactly-once across
     /// restarts). Never throws to the UI; persistence failure keeps the
-    /// letter queued so it is retried on the next start.
+    /// letter queued so it is retried on the next start. All queue
+    /// mutation happens on the orchestration queue; the published
+    /// property only ever receives immutable copies.
     func acknowledgeDelivery(_ deliveryID: String) {
         queue.async { [weak self] in
             guard let self else { return }
-            guard let index = self.deliveryQueue.firstIndex(where: { $0.id == deliveryID }) else { return }
-            let delivery = self.deliveryQueue[index]
+            guard let index = self.deliveryQueueSnapshot.firstIndex(where: { $0.id == deliveryID }) else { return }
+            let delivery = self.deliveryQueueSnapshot[index]
             do {
                 try self.store.markDeliveredLocally(id: delivery.letter.id)
-                var queue = self.deliveryQueue
-                queue.remove(at: index)
-                self.publishDeliveryQueue(queue)
+                self.deliveryQueueSnapshot.remove(at: index)
+                self.publishDeliveryQueue(self.deliveryQueueSnapshot)
                 EventDiagnostics.bottleMail("DELIVERY_ACK", details: "id=\(delivery.letter.id)")
             } catch {
                 // Persist failed: keep it queued; it will be re-delivered
@@ -431,14 +445,25 @@ final class BottleMailCoordinator: ObservableObject {
         queue.async { [weak self] in
             guard let self, self.credential != nil else { return }
             self.serverOpenRetries.insert(letterID)
+            self.persistPendingOpenStates()
             self.retryPendingOpens()
         }
+    }
+
+    /// Best-effort persistence of the read-confirmation pending state
+    /// (restarts resume it). Failure keeps the previous persisted state;
+    /// the in-memory state still drives retries this session.
+    private func persistPendingOpenStates() {
+        let pending = serverOpenRetries.sorted()
+        let backlog = localConfirmBacklog
+        try? store.setPendingOpenStates(pendingIds: pending, confirmedBacklog: backlog)
     }
 
     private func retryPendingOpens() {
         guard !serverOpenRetries.isEmpty || !localConfirmBacklog.isEmpty else { return }
         let localBacklog = localConfirmBacklog
         localConfirmBacklog.removeAll()
+        var backlogChanged = !localBacklog.isEmpty
         for (id, openedAt) in localBacklog {
             do {
                 try store.markOpenedLocally(id: id, openedAt: openedAt)
@@ -448,6 +473,7 @@ final class BottleMailCoordinator: ObservableObject {
                 localConfirmBacklog[id] = openedAt
             }
         }
+        if backlogChanged { persistPendingOpenStates() }
         guard !serverOpenRetries.isEmpty else {
             scheduleOpenRetryTimerIfNeeded()
             return
@@ -459,18 +485,23 @@ final class BottleMailCoordinator: ObservableObject {
             guard let self else { return }
             for id in retries {
                 do {
+                    // The server is idempotent: it returns the EXISTING
+                    // opened_at, which we persist — repeated confirms
+                    // never change the server value.
                     let openedAt = try await self.transport.markOpened(id: id, token: token)
                         ?? ISO8601DateFormatter().string(from: Date())
                     self.queue.async {
                         self.serverOpenRetries.remove(id)
                         do {
                             try self.store.markOpenedLocally(id: id, openedAt: openedAt)
+                            self.persistPendingOpenStates()
                             self.publishLetters(self.store.snapshot())
                             EventDiagnostics.bottleMail("OPENED", details: "id=\(id)")
                         } catch {
                             // Server confirmed but the local write failed:
                             // keep it in the backlog and retry later.
                             self.localConfirmBacklog[id] = openedAt
+                            self.persistPendingOpenStates()
                             EventDiagnostics.bottleMail("OPEN_PERSIST_FAILED", details: "id=\(id)")
                         }
                         self.scheduleOpenRetryTimerIfNeeded()

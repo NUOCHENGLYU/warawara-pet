@@ -255,6 +255,35 @@ final class BottleMailCoordinatorTests: XCTestCase {
                        "restart re-delivers only unacknowledged letters")
     }
 
+    func testRapidAcksNeverLoseOrDuplicateDeliveries() async throws {
+        let (coordinator, transport, credentials) = makeHarness()
+        transport.onActivate = { _, _ in
+            BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
+        }
+        transport.onFetch = { after, _, _ in
+            after == 0
+                ? BottleMailPage(letters: [self.remote(1), self.remote(2), self.remote(3)], nextAfter: 3)
+                : BottleMailPage(letters: [], nextAfter: after)
+        }
+        try await coordinator.activate(code: "C", label: "Mac")
+        await waitUntil { coordinator.snapshotForTesting().deliveryQueue.count == 3 }
+
+        // Ack all three back-to-back without waiting between calls.
+        let ids = coordinator.snapshotForTesting().deliveryQueue.map(\.id)
+        for deliveryID in ids {
+            coordinator.acknowledgeDelivery(deliveryID)
+        }
+        await waitUntil { coordinator.snapshotForTesting().deliveryQueue.isEmpty }
+        XCTAssertEqual(coordinator.snapshotForTesting().letters.count, 3,
+                       "letters remain in the mailbox after acks")
+        // Exactly-once persistence: every letter carries delivered=true.
+        let mailbox = makeStore().snapshot()
+        XCTAssertEqual(mailbox.letters.count, 3)
+        XCTAssertTrue(mailbox.letters.allSatisfy(\.delivered))
+        // And nothing is lost or duplicated in the published snapshot.
+        XCTAssertEqual(coordinator.snapshotForTesting().pending, 0)
+    }
+
     // MARK: - Failure handling / revocation / backoff
 
     func testRevocationStopsPollingClearsTokenAndKeepsLetters() async throws {
@@ -351,6 +380,37 @@ final class BottleMailCoordinatorTests: XCTestCase {
         XCTAssertEqual(transport.openCalls.count, 0)
     }
 
+    func testRevokedMailboxKeepsFullLettersAndNeverSubmitsOpen() async throws {
+        let (coordinator, transport, _) = makeHarness()
+        transport.onActivate = { _, _ in
+            BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
+        }
+        let body = "完整正文内容，撤销后仍可阅读。"
+        let id = UUID().uuidString
+        var revoked = false
+        transport.onFetch = { after, _, _ in
+            if revoked { throw BottleMailAPIError.http(status: 401, code: "unauthorized") }
+            return BottleMailPage(
+                letters: after == 0 ? [self.remote(1, id: id, body: body)] : [],
+                nextAfter: after == 0 ? 1 : after
+            )
+        }
+        try await coordinator.activate(code: "C", label: "Mac")
+        await waitUntil { coordinator.snapshotForTesting().letters.count == 1 }
+        revoked = true
+        await waitUntil { coordinator.snapshotForTesting().activation == .revoked }
+
+        // Full offline reading: the complete body is still published.
+        XCTAssertEqual(coordinator.snapshotForTesting().letters.first?.body, body)
+        XCTAssertEqual(coordinator.snapshotForTesting().unread, 1)
+
+        // No token: open confirmations are never submitted.
+        coordinator.markOpened(letterID: id)
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(transport.openCalls.count, 0,
+                       "a revoked device must never submit open confirmations")
+    }
+
     func testNetworkFailureBacksOffThenRecovers() async throws {
         let (coordinator, transport, _) = makeHarness()
         transport.onActivate = { _, _ in
@@ -424,6 +484,134 @@ final class BottleMailCoordinatorTests: XCTestCase {
     }
 
     // MARK: - Read confirmation with automatic retry
+
+    func testServerPendingOpenSurvivesRestartAndResumesAutomatically() async throws {
+        let (first, transport, credentials) = makeHarness()
+        transport.onActivate = { _, _ in
+            BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
+        }
+        let id = UUID().uuidString
+        var openShouldFail = true
+        transport.onFetch = { after, _, _ in
+            after == 0
+                ? BottleMailPage(letters: [self.remote(1, id: id)], nextAfter: 1)
+                : BottleMailPage(letters: [], nextAfter: after)
+        }
+        transport.onOpen = { _, _ in
+            if openShouldFail { throw BottleMailAPIError.network("offline") }
+            return "2026-10-17T01:00:00Z"
+        }
+        try await first.activate(code: "C", label: "Mac")
+        await waitUntil { first.snapshotForTesting().letters.count == 1 }
+        first.markOpened(letterID: id)
+        await waitUntil { transport.openCalls.count >= 1 }
+        XCTAssertEqual(first.snapshotForTesting().unread, 1)
+        // The pending confirmation is persisted before the "restart".
+        await waitUntil {
+            self.makeStore().snapshot().pendingOpenIds.contains(id)
+        }
+        first.stop()
+
+        // Restart: the pending /open is restored and re-submitted
+        // automatically without any user action.
+        openShouldFail = false
+        let secondTransport = MockTransport()
+        secondTransport.onFetch = { after, _, _ in
+            BottleMailPage(letters: [], nextAfter: after)
+        }
+        secondTransport.onOpen = { _, _ in "2026-10-17T01:00:00Z" }
+        let second = BottleMailCoordinator(
+            transport: secondTransport,
+            credentials: credentials,
+            store: makeStore()
+        )
+        second.pollIntervalRange = 0.05...0.05
+        second.openRetryInterval = 0.05
+        second.delayProvider = { $0.lowerBound }
+        second.start()
+        await waitUntil { second.snapshotForTesting().unread == 0 }
+        XCTAssertEqual(second.snapshotForTesting().letters.first?.openedAt, "2026-10-17T01:00:00Z")
+        XCTAssertGreaterThanOrEqual(secondTransport.openCalls.count, 1,
+                                    "the restored pending /open is re-submitted after restart")
+    }
+
+    func testConfirmedBacklogSurvivesRestartWithoutReopeningServerSide() async throws {
+        let store = makeStore()
+        let credentials = InMemoryBottleMailCredentialStore()
+        let transport = MockTransport()
+        let first = BottleMailCoordinator(
+            transport: transport,
+            credentials: credentials,
+            store: store
+        )
+        first.pollIntervalRange = 0.05...0.05
+        first.openRetryInterval = 600 // keep the auto-retry out of the way
+        first.delayProvider = { $0.lowerBound }
+
+        transport.onActivate = { _, _ in
+            BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
+        }
+        let id = UUID().uuidString
+        transport.onFetch = { after, _, _ in
+            after == 0
+                ? BottleMailPage(letters: [self.remote(1, id: id)], nextAfter: 1)
+                : BottleMailPage(letters: [], nextAfter: after)
+        }
+        var openCalls = 0
+        transport.onOpen = { _, _ in
+            openCalls += 1
+            return "2026-10-17T01:00:00Z"
+        }
+        // Fail exactly ONE persist (the confirmed-open local write);
+        // the follow-up pending-state persist must succeed so the
+        // backlog is durably stored.
+        var failNextPersist = false
+        store.persistOverride = { data, tempURL, fileURL in
+            if failNextPersist {
+                failNextPersist = false
+                throw CocoaError(.fileWriteUnknown)
+            }
+            try BottleMailFileStore.defaultPersist(data: data, tempURL: tempURL, fileURL: fileURL)
+        }
+        try await first.activate(code: "C", label: "Mac")
+        await waitUntil { first.snapshotForTesting().letters.count == 1 }
+
+        // Server confirms; the local write fails -> backlog persisted.
+        failNextPersist = true
+        first.markOpened(letterID: id)
+        await waitUntil { openCalls == 1 }
+        await waitUntil {
+            self.makeStore().snapshot().confirmedOpenBacklog[id] == "2026-10-17T01:00:00Z"
+        }
+        XCTAssertEqual(first.snapshotForTesting().unread, 1,
+                       "the letter stays locally unread while the backlog is pending")
+        first.stop()
+
+        // Restart: the backlog is restored and flushed LOCALLY — the
+        // server is never called again, and the original opened_at is
+        // preserved exactly.
+        let secondTransport = MockTransport()
+        secondTransport.onFetch = { after, _, _ in
+            BottleMailPage(letters: [], nextAfter: after)
+        }
+        secondTransport.onOpen = { _, _ in
+            XCTFail("a restored confirmed backlog must not re-call /open")
+            return "should-not-happen"
+        }
+        let second = BottleMailCoordinator(
+            transport: secondTransport,
+            credentials: credentials,
+            store: makeStore()
+        )
+        second.pollIntervalRange = 0.05...0.05
+        second.openRetryInterval = 0.05
+        second.delayProvider = { $0.lowerBound }
+        second.start()
+        await waitUntil { second.snapshotForTesting().unread == 0 }
+        XCTAssertEqual(second.snapshotForTesting().letters.first?.openedAt, "2026-10-17T01:00:00Z",
+                       "the server's original opened_at is preserved")
+        XCTAssertEqual(secondTransport.openCalls.count, 0)
+    }
 
     func testOpenOnlyMarksReadAfterServerConfirmation() async throws {
         let (coordinator, transport, _) = makeHarness()

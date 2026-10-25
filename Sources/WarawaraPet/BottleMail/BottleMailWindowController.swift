@@ -90,12 +90,17 @@ struct BottleMailView: View {
                 letterList
             }
         case .revoked:
-            VStack(alignment: .leading, spacing: 8) {
+            // Revoked devices keep FULL offline access to the already
+            // received letters — only syncing and open confirmations
+            // stop (no token is ever sent to the server).
+            VStack(alignment: .leading, spacing: 6) {
                 Label("设备授权已被发送者撤销", systemImage: "exclamationmark.triangle.fill")
                     .foregroundColor(.orange)
-                Text("已收到的信件仍保留在本机。如需继续收信，请向发送者要一个新的激活码并重新绑定。")
+                Text("已收到的信件仍保留在本机，可继续阅读。如需继续收信，请向发送者要一个新的激活码并重新绑定。")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                letterList
+                Divider()
                 activationForm
             }
         }
@@ -173,7 +178,7 @@ struct BottleMailView: View {
                         selectedLetter = coordinator.letters[index]
                     }
                 }
-                .disabled(!letter.isUnread)
+                .disabled(!letter.isUnread || !coordinator.isActivated)
             }
         }
         if let error = coordinator.lastSyncError {

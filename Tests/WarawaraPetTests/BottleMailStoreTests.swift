@@ -103,6 +103,23 @@ final class BottleMailStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot().letters.first?.delivered, false,
                        "legacy letters are treated as not yet delivered")
         XCTAssertEqual(store.snapshot().isRevoked, false)
+        XCTAssertEqual(store.snapshot().pendingOpenIds, [],
+                       "legacy mailboxes have no pending open confirmations")
+        XCTAssertEqual(store.snapshot().confirmedOpenBacklog, [:])
+    }
+
+    func testPendingOpenStatesPersistAndAreFailureAtomic() throws {
+        let store = BottleMailFileStore(fileURL: fileURL)
+        try store.setPendingOpenStates(pendingIds: ["a", "b"], confirmedBacklog: ["c": "t1"])
+        let reopened = BottleMailFileStore(fileURL: fileURL)
+        XCTAssertEqual(reopened.snapshot().pendingOpenIds, ["a", "b"])
+        XCTAssertEqual(reopened.snapshot().confirmedOpenBacklog, ["c": "t1"])
+
+        // A failed persist leaves the previous state untouched.
+        store.persistOverride = { _, _, _ in throw CocoaError(.fileWriteUnknown) }
+        XCTAssertThrowsError(try store.setPendingOpenStates(pendingIds: [], confirmedBacklog: [:]))
+        XCTAssertEqual(store.snapshot().pendingOpenIds, ["a", "b"])
+        XCTAssertEqual(store.snapshot().confirmedOpenBacklog, ["c": "t1"])
     }
 
     // MARK: - Failure atomicity
