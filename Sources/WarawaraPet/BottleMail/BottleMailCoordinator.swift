@@ -481,6 +481,7 @@ final class BottleMailCoordinator: ObservableObject {
         let retries = serverOpenRetries
         guard let credential else { return }
         let token = credential.token
+        let openEpoch = epoch
         Task { [weak self] in
             guard let self else { return }
             for id in retries {
@@ -491,6 +492,7 @@ final class BottleMailCoordinator: ObservableObject {
                     let openedAt = try await self.transport.markOpened(id: id, token: token)
                         ?? ISO8601DateFormatter().string(from: Date())
                     self.queue.async {
+                        guard openEpoch == self.epoch else { return }
                         self.serverOpenRetries.remove(id)
                         do {
                             try self.store.markOpenedLocally(id: id, openedAt: openedAt)
@@ -512,7 +514,10 @@ final class BottleMailCoordinator: ObservableObject {
                     EventDiagnostics.bottleMail("OPEN_FAILED", details: "id=\(id)")
                 }
             }
-            self.scheduleOpenRetryTimerIfNeeded()
+            self.queue.async {
+                guard openEpoch == self.epoch else { return }
+                self.scheduleOpenRetryTimerIfNeeded()
+            }
         }
     }
 

@@ -83,8 +83,13 @@ final class BottleMailCoordinatorTests: XCTestCase {
 
     /// Pumps the MAIN runloop so queued `@Published` updates execute —
     /// every published mutation in the coordinator happens on main.
+    /// A silent timeout hides races (the condition may be satisfied
+    /// vacuously by the initial published state), so timeouts fail the
+    /// test loudly at the call site.
     private func waitUntil(
         timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line,
         _ condition: @escaping () -> Bool
     ) async {
         let deadline = Date().addingTimeInterval(timeout)
@@ -92,6 +97,7 @@ final class BottleMailCoordinatorTests: XCTestCase {
             await MainActor.run {}
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
+        XCTAssertTrue(condition(), "waitUntil condition never became true", file: file, line: line)
     }
 
     // MARK: - Activation
@@ -487,6 +493,10 @@ final class BottleMailCoordinatorTests: XCTestCase {
 
     func testServerPendingOpenSurvivesRestartAndResumesAutomatically() async throws {
         let (first, transport, credentials) = makeHarness()
+        // Keep the retry timer out of the first session: the single
+        // direct /open attempt from markOpened must fail, nothing else
+        // may race the "restart".
+        first.openRetryInterval = 600
         transport.onActivate = { _, _ in
             BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
         }
@@ -529,6 +539,10 @@ final class BottleMailCoordinatorTests: XCTestCase {
         second.openRetryInterval = 0.05
         second.delayProvider = { $0.lowerBound }
         second.start()
+        // The initial published state is empty until start()'s queue
+        // block publishes the restored mailbox — wait for that first,
+        // otherwise `unread == 0` is satisfied vacuously.
+        await waitUntil { second.snapshotForTesting().letters.count == 1 }
         await waitUntil { second.snapshotForTesting().unread == 0 }
         XCTAssertEqual(second.snapshotForTesting().letters.first?.openedAt, "2026-10-17T01:00:00Z")
         XCTAssertGreaterThanOrEqual(secondTransport.openCalls.count, 1,
@@ -562,13 +576,14 @@ final class BottleMailCoordinatorTests: XCTestCase {
             openCalls += 1
             return "2026-10-17T01:00:00Z"
         }
-        // Fail exactly ONE persist (the confirmed-open local write);
-        // the follow-up pending-state persist must succeed so the
-        // backlog is durably stored.
-        var failNextPersist = false
+        // Fail ONLY the confirmed-open local write (the letter with
+        // openedAt set); the pending-state persist that runs before the
+        // /open must succeed so the backlog is durably stored.
+        var failLetterPersist = false
         store.persistOverride = { data, tempURL, fileURL in
-            if failNextPersist {
-                failNextPersist = false
+            if failLetterPersist,
+               let mailbox = try? JSONDecoder().decode(BottleMailMailbox.self, from: data),
+               mailbox.letters.first?.openedAt != nil {
                 throw CocoaError(.fileWriteUnknown)
             }
             try BottleMailFileStore.defaultPersist(data: data, tempURL: tempURL, fileURL: fileURL)
@@ -577,7 +592,7 @@ final class BottleMailCoordinatorTests: XCTestCase {
         await waitUntil { first.snapshotForTesting().letters.count == 1 }
 
         // Server confirms; the local write fails -> backlog persisted.
-        failNextPersist = true
+        failLetterPersist = true
         first.markOpened(letterID: id)
         await waitUntil { openCalls == 1 }
         await waitUntil {
@@ -607,6 +622,9 @@ final class BottleMailCoordinatorTests: XCTestCase {
         second.openRetryInterval = 0.05
         second.delayProvider = { $0.lowerBound }
         second.start()
+        // Same ordering guard as the pending-open test: the restored
+        // mailbox must be published before unread can be observed.
+        await waitUntil { second.snapshotForTesting().letters.count == 1 }
         await waitUntil { second.snapshotForTesting().unread == 0 }
         XCTAssertEqual(second.snapshotForTesting().letters.first?.openedAt, "2026-10-17T01:00:00Z",
                        "the server's original opened_at is preserved")
