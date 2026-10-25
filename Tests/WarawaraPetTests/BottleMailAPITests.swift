@@ -121,13 +121,14 @@ final class BottleMailAPITests: XCTestCase {
         XCTAssertNil(page.letters[0].openedAt)
     }
 
-    func testMarkOpenedPostsAndSucceeds() async throws {
+    func testMarkOpenedPostsAndDecodesOpenedAt() async throws {
         MockURLProtocol.handler = { request in
             XCTAssertEqual(request.url?.path, "/api/letters/l-1/open")
             XCTAssertEqual(request.httpMethod, "POST")
-            return (200, ["Content-Type": "application/json"], Data(#"{"ok":true}"#.utf8))
+            return (200, ["Content-Type": "application/json"], Data(#"{"id":"l-1","opened_at":"2026-10-17T01:00:00Z","already_opened":false}"#.utf8))
         }
-        try await makeAPI().markOpened(id: "l-1", token: "tok")
+        let openedAt = try await makeAPI().markOpened(id: "l-1", token: "tok")
+        XCTAssertEqual(openedAt, "2026-10-17T01:00:00Z")
     }
 
     func testServerErrorMapsToHTTPStatus() async {

@@ -36,7 +36,9 @@ struct BottleMailPage: Equatable {
 protocol BottleMailAPITransport {
     func activate(code: String, label: String) async throws -> BottleMailActivation
     func fetchLetters(after: Int, limit: Int, token: String) async throws -> BottleMailPage
-    func markOpened(id: String, token: String) async throws
+    /// Returns the server-confirmed `opened_at` (nil if the server did
+    /// not include it).
+    func markOpened(id: String, token: String) async throws -> String?
 }
 
 /// URLSession + async/await implementation. Short per-request timeout;
@@ -107,12 +109,22 @@ final class BottleMailAPI: BottleMailAPITransport {
         return BottleMailPage(letters: decoded.letters, nextAfter: decoded.nextAfter)
     }
 
-    func markOpened(id: String, token: String) async throws {
-        _ = try await request(
+    /// Confirm-open (idempotent server-side). Returns the server's
+    /// `opened_at` timestamp so the client can persist the exact value.
+    func markOpened(id: String, token: String) async throws -> String? {
+        let data = try await request(
             path: "/api/letters/\(id)/open",
             method: "POST",
             bearerToken: token
         )
+        struct Response: Decodable {
+            let openedAt: String?
+            enum CodingKeys: String, CodingKey {
+                case openedAt = "opened_at"
+            }
+        }
+        let decoded: Response = try decode(data)
+        return decoded.openedAt
     }
 
     // MARK: - Plumbing
