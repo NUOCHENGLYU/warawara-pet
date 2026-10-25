@@ -40,7 +40,14 @@ function Invoke-Api {
             $params.Body = $bytes
         }
         $response = Invoke-WebRequest @params -TimeoutSec 30
-        return @{ Status = [int]$response.StatusCode; Content = $response.Content }
+        # PS 5.1 decodes .Content with ISO-8859-1 unless the response
+        # carries a charset — read the raw stream as UTF-8 instead so
+        # Chinese / Emoji display correctly.
+        $stream = $response.RawContentStream
+        $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8)
+        $content = $reader.ReadToEnd()
+        $reader.Close()
+        return @{ Status = [int]$response.StatusCode; Content = $content }
     } catch {
         $resp = $_.Exception.Response
         $status = 0
