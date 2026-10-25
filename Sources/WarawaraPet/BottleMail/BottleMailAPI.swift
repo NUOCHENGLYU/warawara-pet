@@ -125,7 +125,7 @@ final class BottleMailAPI: BottleMailAPITransport {
         path: String,
         method: String,
         body: Body?,
-        bearerToken: String?
+        bearerToken: String? = nil
     ) async throws -> Data {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = method

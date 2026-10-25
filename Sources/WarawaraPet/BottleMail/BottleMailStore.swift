@@ -50,8 +50,8 @@ final class BottleMailFileStore: BottleMailStoring {
     @discardableResult
     func merge(remote: [BottleMailRemoteLetter], advancingCursorTo cursor: Int) throws -> BottleMailMergeResult {
         try queue.sync {
-            let existingIds = Set(cached.letters.map(\.id))
-            let existingSeqs = Set(cached.letters.map(\.seq))
+            var existingIds = Set(cached.letters.map(\.id))
+            var existingSeqs = Set(cached.letters.map(\.seq))
             var newLetters: [BottleMailLetter] = []
             var duplicateCount = 0
             for remoteLetter in remote.sorted(by: { $0.seq < $1.seq }) {
