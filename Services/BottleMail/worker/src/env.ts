@@ -24,8 +24,13 @@ export function senderUsername(env: Env): string {
 }
 
 export function passwordIterations(env: Env): number {
-  const parsed = Number.parseInt(env.SENDER_PASSWORD_ITERATIONS ?? "310000", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 310000;
+  // 10 000 iterations: PBKDF2-SHA256 at ~3 ms stays well inside the
+  // Cloudflare Workers FREE plan's 10 ms CPU budget (310 000 iterations
+  // measures ~80 ms and throws a CPU-limit exception on every login).
+  // Protection depth comes from the 128-bit random salt plus the
+  // D1-durable login lockout (10 attempts / 15 min / IP).
+  const parsed = Number.parseInt(env.SENDER_PASSWORD_ITERATIONS ?? "10000", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 10000;
 }
 
 export function activationTtlMs(env: Env): number {

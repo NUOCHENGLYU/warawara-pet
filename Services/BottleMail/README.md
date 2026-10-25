@@ -34,7 +34,8 @@ npm run deploy -- --dry-run   # 不需要登录，验证打包与绑定配置
 
 ## 关键安全设计
 
-- 发送者密码用 PBKDF2-SHA256（310000 轮）哈希存储，仅存在于 Cloudflare
+- 发送者密码用 PBKDF2-SHA256（10 000 轮 + 128 位随机盐，适配 Workers 免费版
+  10ms CPU 限制；310 000 轮会触发 CPU 超限异常）哈希存储，仅存在于 Cloudflare
   Secrets；登录后发 HMAC 签名的 HttpOnly SameSite=Strict Cookie。
 - 所有 Cookie 鉴权的 POST 接口都有 CSRF 双重防护（Origin 同源检查 +
   double-submit token）。

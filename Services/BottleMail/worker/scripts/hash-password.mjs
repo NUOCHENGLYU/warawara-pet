@@ -9,7 +9,12 @@
 // line is read — nothing is echoed in that case either.
 import { createInterface } from "node:readline";
 
-const iterations = 310000;
+// PBKDF2-SHA256 iteration count. MUST stay in sync with
+// wrangler.jsonc `SENDER_PASSWORD_ITERATIONS`. 10 000 keeps the
+// derivation inside the Cloudflare Workers FREE plan's 10 ms CPU budget
+// (~3 ms measured); depth comes from the random 128-bit salt plus the
+// durable login lockout (10 attempts / 15 min / IP).
+const iterations = 10000;
 
 function bytesToHex(bytes) {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
