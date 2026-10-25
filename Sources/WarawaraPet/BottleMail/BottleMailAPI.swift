@@ -87,7 +87,11 @@ final class BottleMailAPI: BottleMailAPITransport {
 
     func fetchLetters(after: Int, limit: Int, token: String) async throws -> BottleMailPage {
         let data = try await request(
-            path: "/api/letters?after=\(after)&limit=\(limit)",
+            path: "/api/letters",
+            queryItems: [
+                URLQueryItem(name: "after", value: String(after)),
+                URLQueryItem(name: "limit", value: String(limit)),
+            ],
             method: "GET",
             bearerToken: token
         )
@@ -115,19 +119,39 @@ final class BottleMailAPI: BottleMailAPITransport {
 
     private func request(
         path: String,
+        queryItems: [URLQueryItem] = [],
         method: String,
         bearerToken: String? = nil
     ) async throws -> Data {
-        try await request(path: path, method: method, body: Optional<Data>.none, bearerToken: bearerToken)
+        try await request(
+            path: path,
+            queryItems: queryItems,
+            method: method,
+            body: Optional<Data>.none,
+            bearerToken: bearerToken
+        )
     }
 
     private func request<Body: Encodable>(
         path: String,
+        queryItems: [URLQueryItem] = [],
         method: String,
         body: Body?,
         bearerToken: String? = nil
     ) async throws -> Data {
-        var request = URLRequest(url: baseURL.appendingPathComponent(path))
+        guard var components = URLComponents(
+            url: baseURL.appendingPathComponent(path),
+            resolvingAgainstBaseURL: false
+        ) else {
+            throw BottleMailAPIError.invalidResponse
+        }
+        if !queryItems.isEmpty {
+            components.queryItems = queryItems
+        }
+        guard let url = components.url else {
+            throw BottleMailAPIError.invalidResponse
+        }
+        var request = URLRequest(url: url)
         request.httpMethod = method
         if let bearerToken {
             request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")

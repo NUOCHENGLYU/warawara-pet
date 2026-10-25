@@ -55,8 +55,29 @@ final class BottleMailAPITests: XCTestCase {
         MockURLProtocol.handler = { request in
             XCTAssertEqual(request.url?.path, "/api/devices/activate")
             XCTAssertEqual(request.httpMethod, "POST")
-            let body = try XCTUnwrap(request.httpBody).flatMap { String(data: $0, encoding: .utf8) } ?? ""
-            XCTAssertTrue(body.contains("\"code\":\"CODE12345\""))
+            // URLSession may hand the protocol the body as a stream —
+            // read whichever form is present.
+            let bodyData: Data?
+            if let body = request.httpBody {
+                bodyData = body
+            } else if let stream = request.httpBodyStream {
+                stream.open()
+                defer { stream.close() }
+                var data = Data()
+                let bufferSize = 1024
+                let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+                defer { buffer.deallocate() }
+                while stream.hasBytesAvailable {
+                    let read = stream.read(buffer, maxLength: bufferSize)
+                    if read <= 0 { break }
+                    data.append(buffer, count: read)
+                }
+                bodyData = data
+            } else {
+                bodyData = nil
+            }
+            let body = bodyData.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            XCTAssertTrue(body.contains("\"code\":\"CODE12345\""), "unexpected body: \(body)")
             let data = Data("""
             {"device_id":"dev-1","device_token":"tok-1","label":"Mac"}
             """.utf8)

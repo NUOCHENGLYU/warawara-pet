@@ -141,7 +141,7 @@ final class BottleMailCoordinator: ObservableObject {
             case (401, _), (400, _): return .invalidCode
             default: return .server("http-\(status)")
             }
-        case .network: return .network("network")
+        case .network(let reason): return .network(reason)
         case .decoding, .invalidResponse: return .server("bad-response")
         }
     }
@@ -267,10 +267,17 @@ final class BottleMailCoordinator: ObservableObject {
             if self.currentPollDelay <= self.backoffBase {
                 self.currentPollDelay = self.backoffBase
             }
-            self.lastSyncError = Self.describe(error)
-            EventDiagnostics.bottleMail("POLL_FAILED", details: "retry=\(Int(self.currentPollDelay))s")
-            self.scheduleNextPoll(delay: self.currentPollDelay)
+            let message = Self.describe(error)
+            let delay = self.currentPollDelay
+            self.lastSyncError = message
+            EventDiagnostics.bottleMail("POLL_FAILED", details: "retry=\(Int(delay))s")
+            self.scheduleNextPoll(delay: delay)
         }
+    }
+
+    /// Thread-safe delay read for tests/diagnostics.
+    func currentDelayForTesting() -> TimeInterval {
+        queue.sync { currentPollDelay }
     }
 
     private func handleRevocation() {
@@ -326,7 +333,7 @@ final class BottleMailCoordinator: ObservableObject {
 
     private func publishPendingCount() {
         let count = pendingLetters.count
-        DispatchQueue.main.async { [weak self] in
+        queue.async { [weak self] in
             self?.pendingDeliveryCount = count
         }
     }
@@ -357,12 +364,32 @@ final class BottleMailCoordinator: ObservableObject {
         }
     }
 
+    /// Thread-safe state read for tests and diagnostics (all published
+    /// state is written on the coordinator queue).
+    func snapshotForTesting() -> (
+        letters: [BottleMailLetter],
+        unread: Int,
+        pending: Int,
+        activation: BottleMailActivationState,
+        lastSyncError: String?
+    ) {
+        queue.sync {
+            (letters: letters, unread: unreadCount, pending: pendingDeliveryCount,
+             activation: activationState, lastSyncError: lastSyncError)
+        }
+    }
+
+    /// Thread-safe delay read for tests/diagnostics.
+    func currentDelayForTesting() -> TimeInterval {
+        queue.sync { currentPollDelay }
+    }
+
     // MARK: - UI plumbing
 
     private func publishLetters(_ mailbox: BottleMailMailbox) {
         let letters = mailbox.letters
         let unread = letters.filter(\.isUnread).count
-        DispatchQueue.main.async { [weak self] in
+        queue.async { [weak self] in
             guard let self else { return }
             self.letters = letters
             self.unreadCount = unread
@@ -370,7 +397,7 @@ final class BottleMailCoordinator: ObservableObject {
     }
 
     private func updateActivation(_ state: BottleMailActivationState) {
-        DispatchQueue.main.async { [weak self] in
+        queue.async { [weak self] in
             self?.activationState = state
         }
     }

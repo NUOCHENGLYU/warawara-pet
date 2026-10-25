@@ -98,8 +98,11 @@ final class BottleMailCoordinatorTests: XCTestCase {
         await waitUntil { credentials.credential != nil }
         XCTAssertEqual(credentials.credential?.token, "tok-1")
         await waitUntil { transport.fetchCalls.count >= 1 }
-        await waitUntil { coordinator.isActivated }
-        if case .activated(let label) = coordinator.activationState {
+        await waitUntil {
+            if case .activated = coordinator.snapshotForTesting().activation { return true }
+            return false
+        }
+        if case .activated(let label) = coordinator.snapshotForTesting().activation {
             XCTAssertEqual(label, "她的Mac")
         } else {
             XCTFail("expected activated")
@@ -149,8 +152,6 @@ final class BottleMailCoordinatorTests: XCTestCase {
         }
         let id1 = UUID().uuidString
         let id2 = UUID().uuidString
-        // First poll: one new letter; second poll returns the SAME
-        // letter plus a new one (repoll dedupe).
         var callCount = 0
         transport.onFetch = { after, _, _ in
             callCount += 1
@@ -163,13 +164,11 @@ final class BottleMailCoordinatorTests: XCTestCase {
             )
         }
         try await coordinator.activate(code: "C", label: "Mac")
-        await waitUntil { coordinator.letters.count == 2 }
-        XCTAssertEqual(coordinator.letters.map(\.seq), [1, 2])
-        XCTAssertEqual(coordinator.unreadCount, 2)
-        // No duplicates after many more poll rounds.
+        await waitUntil { coordinator.snapshotForTesting().letters.count == 2 }
+        XCTAssertEqual(coordinator.snapshotForTesting().letters.map(\.seq), [1, 2])
+        XCTAssertEqual(coordinator.snapshotForTesting().unread, 2)
         await waitUntil { transport.fetchCalls.count >= 4 }
-        XCTAssertEqual(coordinator.letters.count, 2)
-        // The cursor advanced (subsequent fetches ask after 2).
+        XCTAssertEqual(coordinator.snapshotForTesting().letters.count, 2)
         XCTAssertGreaterThanOrEqual(transport.fetchCalls.last?.after ?? 0, 1)
     }
 
@@ -184,10 +183,8 @@ final class BottleMailCoordinatorTests: XCTestCase {
                 : BottleMailPage(letters: [], nextAfter: after)
         }
         try await first.activate(code: "C", label: "Mac")
-        await waitUntil { first.letters.count == 1 }
+        await waitUntil { first.snapshotForTesting().letters.count == 1 }
 
-        // "Restart": fresh coordinator over the same file + same keychain
-        // stand-in. The mailbox is restored from disk immediately.
         let secondTransport = MockTransport()
         secondTransport.onFetch = { after, _, _ in
             BottleMailPage(letters: [], nextAfter: after)
@@ -200,8 +197,8 @@ final class BottleMailCoordinatorTests: XCTestCase {
         second.pollIntervalRange = 0.05...0.05
         second.delayProvider = { $0.lowerBound }
         second.start()
-        await waitUntil { second.letters.count == 1 }
-        XCTAssertEqual(second.unreadCount, 1)
+        await waitUntil { second.snapshotForTesting().letters.count == 1 }
+        XCTAssertEqual(second.snapshotForTesting().unread, 1)
         await waitUntil { secondTransport.fetchCalls.count >= 1 }
         XCTAssertEqual(secondTransport.fetchCalls.first?.after, 1, "restart resumes from the persisted cursor")
     }
@@ -219,14 +216,12 @@ final class BottleMailCoordinatorTests: XCTestCase {
             BottleMailPage(letters: [self.remote(1), self.remote(2)], nextAfter: 2)
         }
         try await coordinator.activate(code: "C", label: "Mac")
-        await waitUntil { coordinator.pendingDeliveryCount == 2 }
-        // Persisted already, but NOT delivered to the UI while busy.
-        XCTAssertEqual(coordinator.letters.count, 0)
-        // The pet becomes free: the pending queue drains in order.
+        await waitUntil { coordinator.snapshotForTesting().pending == 2 }
+        XCTAssertEqual(coordinator.snapshotForTesting().letters.count, 0)
         busy = false
-        await waitUntil { coordinator.letters.count == 2 }
-        XCTAssertEqual(coordinator.letters.map(\.seq), [1, 2])
-        XCTAssertEqual(coordinator.pendingDeliveryCount, 0)
+        await waitUntil { coordinator.snapshotForTesting().letters.count == 2 }
+        XCTAssertEqual(coordinator.snapshotForTesting().letters.map(\.seq), [1, 2])
+        XCTAssertEqual(coordinator.snapshotForTesting().pending, 0)
     }
 
     // MARK: - Failure handling / revocation / backoff
@@ -245,13 +240,12 @@ final class BottleMailCoordinatorTests: XCTestCase {
             )
         }
         try await coordinator.activate(code: "C", label: "Mac")
-        await waitUntil { coordinator.letters.count == 1 }
+        await waitUntil { coordinator.snapshotForTesting().letters.count == 1 }
         let callsBefore = transport.fetchCalls.count
         revoked = true
-        await waitUntil { coordinator.activationState == .revoked }
+        await waitUntil { coordinator.snapshotForTesting().activation == .revoked }
         XCTAssertNil(credentials.credential, "the revoked token must be discarded")
-        XCTAssertEqual(coordinator.letters.count, 1, "received letters survive revocation")
-        // Polling stops: no further fetch calls after revocation.
+        XCTAssertEqual(coordinator.snapshotForTesting().letters.count, 1, "received letters survive revocation")
         let callsAfter = transport.fetchCalls.count
         try? await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(transport.fetchCalls.count, callsAfter)
@@ -269,15 +263,13 @@ final class BottleMailCoordinatorTests: XCTestCase {
             return BottleMailPage(letters: [self.remote(1)], nextAfter: 1)
         }
         try await coordinator.activate(code: "C", label: "Mac")
-        // Backoff grows from the base and caps at backoffMax.
         await waitUntil {
-            let delay = coordinator.currentPollDelay
-            return delay > coordinator.backoffBase
+            coordinator.currentDelayForTesting() > coordinator.backoffBase
         }
-        XCTAssertEqual(coordinator.lastSyncError, "网络不可用")
+        XCTAssertEqual(coordinator.snapshotForTesting().lastSyncError, "网络不可用")
         fail = false
-        await waitUntil { coordinator.letters.count == 1 }
-        await waitUntil { coordinator.lastSyncError == nil }
+        await waitUntil { coordinator.snapshotForTesting().letters.count == 1 }
+        await waitUntil { coordinator.snapshotForTesting().lastSyncError == nil }
     }
 
     func testWakeAndNetworkRecoveryTriggerImmediatePolls() async throws {
@@ -314,18 +306,16 @@ final class BottleMailCoordinatorTests: XCTestCase {
             if openShouldFail { throw BottleMailAPIError.http(status: 500, code: "internal_error") }
         }
         try await coordinator.activate(code: "C", label: "Mac")
-        await waitUntil { coordinator.letters.count == 1 }
+        await waitUntil { coordinator.snapshotForTesting().letters.count == 1 }
 
-        // Failure: stays unread, no local change.
         coordinator.markOpened(letterID: id)
         await waitUntil { transport.openCalls.count >= 1 }
-        XCTAssertEqual(coordinator.letters.first?.isUnread, true)
+        XCTAssertEqual(coordinator.snapshotForTesting().letters.first?.isUnread, true)
 
-        // Success: local unread flag flips only after confirmation.
         openShouldFail = false
         coordinator.markOpened(letterID: id)
-        await waitUntil { coordinator.unreadCount == 0 }
-        XCTAssertEqual(coordinator.letters.first?.isUnread, false)
+        await waitUntil { coordinator.snapshotForTesting().unread == 0 }
+        XCTAssertEqual(coordinator.snapshotForTesting().letters.first?.isUnread, false)
         XCTAssertEqual(transport.openCalls.count, 2)
     }
 }
