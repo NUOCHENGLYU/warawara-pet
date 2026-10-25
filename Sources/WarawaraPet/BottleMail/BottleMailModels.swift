@@ -16,6 +16,24 @@ struct BottleMailLetter: Codable, Equatable, Hashable, Identifiable {
 
     var isUnread: Bool { openedAt == nil }
 
+    init(
+        seq: Int,
+        id: String,
+        body: String,
+        createdAt: String,
+        openedAt: String?,
+        receivedAt: Date,
+        delivered: Bool
+    ) {
+        self.seq = seq
+        self.id = id
+        self.body = body
+        self.createdAt = createdAt
+        self.openedAt = openedAt
+        self.receivedAt = receivedAt
+        self.delivered = delivered
+    }
+
     enum CodingKeys: String, CodingKey {
         case seq, id, body, createdAt, openedAt, receivedAt, delivered
     }
