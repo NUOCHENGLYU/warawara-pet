@@ -375,6 +375,8 @@ final class BottleMailCoordinator: ObservableObject {
                         self.deliveryQueue
                             + captured.map { PendingBottleDelivery(id: $0.id, letter: $0) }
                     )
+                    self.publishPendingCount(0)
+                    self.publishLetters(self.store.snapshot())
                     EventDiagnostics.bottleMail("DELIVERED", details: "count=\(captured.count)")
                 }
             }
@@ -543,9 +545,7 @@ final class BottleMailCoordinator: ObservableObject {
 
     private func publishDeliveryQueue(_ queueContents: [PendingBottleDelivery]) {
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.deliveryQueue = queueContents
-            self.pendingDeliveryCount = queueContents.count
+            self?.deliveryQueue = queueContents
         }
     }
 
