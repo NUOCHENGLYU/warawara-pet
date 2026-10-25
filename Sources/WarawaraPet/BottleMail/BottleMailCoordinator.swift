@@ -275,11 +275,6 @@ final class BottleMailCoordinator: ObservableObject {
         }
     }
 
-    /// Thread-safe delay read for tests/diagnostics.
-    func currentDelayForTesting() -> TimeInterval {
-        queue.sync { currentPollDelay }
-    }
-
     private func handleRevocation() {
         // The sender revoked this device: stop using the old token and
         // stop polling, but KEEP the mailbox — received letters remain
