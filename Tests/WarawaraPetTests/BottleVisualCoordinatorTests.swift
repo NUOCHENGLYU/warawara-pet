@@ -135,7 +135,10 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         // Explicit put-away: local read + server reconcile + revert.
         visual.letterPutAway(id: id)
         await waitUntil { coordinator.snapshotForTesting().unread == 0 }
-        XCTAssertEqual(coordinator.snapshotForTesting().letters.first?.openedAt, "LOCAL_STAMP")
+        // The read completed locally (the server confirm may already
+        // have overwritten the stamp — the OFFLINE test pins the exact
+        // local value).
+        XCTAssertNotNil(coordinator.snapshotForTesting().letters.first?.openedAt)
         await waitUntil { visual.snapshotForTesting().state == .transformingBack }
         XCTAssertEqual(readingFinishedCount, 1)
         advanceTime(0.5, visual: visual)

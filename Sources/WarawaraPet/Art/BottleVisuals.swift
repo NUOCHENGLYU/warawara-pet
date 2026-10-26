@@ -17,17 +17,17 @@ enum BottleMetrics {
     /// squash (1.06).
     static let glassHeight: CGFloat = 118 * 1.06
     static let neckWidth: CGFloat = 26
-    static let neckHeight: CGFloat = 22
+    static let neckHeight: CGFloat = 20
     static let rimWidth: CGFloat = 30
     static let rimHeight: CGFloat = 4
     static let corkWidth: CGFloat = 20
     static let corkHeight: CGFloat = 9
-    static let corkLift: CGFloat = 10
+    static let corkLift: CGFloat = 8
     static let paperWidth: CGFloat = 36
     static let paperHeight: CGFloat = 52
     /// Sway and bob slack kept inside the window top.
-    static let swayExtra: CGFloat = 6
-    static let bobExtra: CGFloat = 6
+    static let swayExtra: CGFloat = 3
+    static let bobExtra: CGFloat = 3
     /// Total height of the front layer (rim + neck + cork + lift),
     /// bottom-anchored at the glass top.
     static var extrasContainerHeight: CGFloat {
