@@ -129,8 +129,10 @@ struct WarawaraLayeredCharacterView: View {
                         x: renderSize.width / 2 - layer.anchor.x * renderSize.width,
                         y: renderSize.height / 2 - layer.anchor.y * renderSize.height
                     )
+                    .opacity(parameters.bodyOpacity)
             } else {
                 layerImage(image, layer: layer)
+                    .opacity(parameters.bodyOpacity)
             }
         }
     }

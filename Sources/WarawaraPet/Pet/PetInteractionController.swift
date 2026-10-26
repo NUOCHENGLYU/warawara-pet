@@ -16,6 +16,11 @@ final class PetInteractionController {
     /// Fired on a genuine double-click (clickCount == 2) on the pet.
     /// Used by the birthday letter reopen path.
     var onDoubleClick: (() -> Void)?
+    /// Set by the app layer (Phase 8C): returns true when the click was
+    /// consumed by the bottle form — the letter opens instead of the
+    /// click squash, and the birthday double-click must not stack on
+    /// top of it.
+    var clickInterceptor: (() -> Bool)?
 
     init(windowController: PetWindowController, controller: PetController) {
         self.windowController = windowController
@@ -29,10 +34,13 @@ final class PetInteractionController {
         if event.clickCount == 2 {
             // The first click already produced the normal squash; the
             // double-click opens the birthday letter instead of a
-            // second squash.
+            // second squash. In bottle form the first click opened the
+            // reading window — consume the double-click too.
+            if clickInterceptor?() == true { return }
             onDoubleClick?()
             return
         }
+        if clickInterceptor?() == true { return }
         controller?.handleClick()
     }
 

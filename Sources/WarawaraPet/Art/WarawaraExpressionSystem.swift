@@ -14,6 +14,10 @@ struct WarawaraExpressionInputs: Equatable {
     var floatProgress: CGFloat = 0
     /// The meteor wish: eyes softly closed while true.
     var wishingEyes: Bool = false
+    /// Phase 8C bottle morph: 0 = Warawara, 1 = bottle (already eased by
+    /// the visual coordinator). The mapper blends the bottle pose in —
+    /// the body silhouette hands over to the glass, the face stays.
+    var bottleMorphProgress: CGFloat = 0
 
     static let neutral = WarawaraExpressionInputs()
 }
@@ -169,6 +173,14 @@ enum WarawaraExpressionMapper {
             p.mouthOpenAmount = 0.12
         }
 
+        // Phase 8C bottle morph: blend the bottle pose over the state
+        // targets. Sleepy eyes are NOT overridden — a dozing pet keeps
+        // its eyes even if the bottle form is active.
+        let morph = clamp(inputs.bottleMorphProgress, 0, 1)
+        if morph > 0 {
+            p = bottleBlendParameters(base: p, progress: morph)
+        }
+
         // Blink ownership: blink is a FAST, unsmoothed channel passed
         // straight through to the renderer (blinkAmount). It is NOT
         // multiplied into eyeOpenness, which belongs to the slow
@@ -177,6 +189,38 @@ enum WarawaraExpressionMapper {
 
         p.breathPhase = context.breathPhase
         return p.clamped()
+    }
+
+    /// Blends the bottle-form pose over any base parameters. The body
+    /// silhouette hands over to the glass (`bodyOpacity` -> 0) while
+    /// the face settles into a soft "noticed the letter" look.
+    static func bottleBlendParameters(
+        base: WarawaraPerformanceParameters,
+        progress: CGFloat
+    ) -> WarawaraPerformanceParameters {
+        let p = clamp(progress, 0, 1)
+        var r = base
+        let eyeBlend = p * (1 - base.drowsiness)
+        r.eyeOpenness = mix(base.eyeOpenness, 0.85, eyeBlend)
+        if p > 0.5 {
+            r.mouthStyle = .soft
+        }
+        r.mouthOpenAmount = mix(base.mouthOpenAmount, 0.12, p)
+        r.drowsiness = mix(base.drowsiness, 0.2, p)
+        // Taller, slightly narrower silhouette — the glass inherits the
+        // same reading so body and bottle stay one silhouette.
+        r.bodySquashX = mix(base.bodySquashX, 0.92, p)
+        r.bodySquashY = mix(base.bodySquashY, 1.06, p)
+        r.bodyTilt = mix(base.bodyTilt, 0, p)
+        // A gentle upward glance toward the cork.
+        r.gazeY = mix(base.gazeY, 0.12, p)
+        // The warm white body fades out; the glass fades in behind it.
+        r.bodyOpacity = 1 - p
+        return r
+    }
+
+    private static func mix(_ a: CGFloat, _ b: CGFloat, _ p: CGFloat) -> CGFloat {
+        a + (b - a) * clamp(p, 0, 1)
     }
 
     /// Mouth openness across a hop: closed at takeoff/landing, open mid-flight.
@@ -273,6 +317,9 @@ struct WarawaraParameterAnimator {
         )
         parameters.bodySquashY = Self.approach(
             parameters.bodySquashY, t.bodySquashY, dt: dtF, tau: tuning.bodyResponse
+        )
+        parameters.bodyOpacity = Self.approach(
+            parameters.bodyOpacity, t.bodyOpacity, dt: dtF, tau: tuning.bodyResponse
         )
         parameters.bodyTilt = Self.approach(parameters.bodyTilt, t.bodyTilt, dt: dtF, tau: tuning.bodyResponse)
 

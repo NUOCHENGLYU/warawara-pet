@@ -489,7 +489,7 @@ final class BottleMailCoordinatorTests: XCTestCase {
         await waitUntil { transport.fetchCalls.contains { $0.token == "tok-B" } }
     }
 
-    // MARK: - Read confirmation with automatic retry
+    // MARK: - Read completion (local-first + async server reconciliation)
 
     func testServerPendingOpenSurvivesRestartAndResumesAutomatically() async throws {
         let (first, transport, credentials) = makeHarness()
@@ -497,6 +497,7 @@ final class BottleMailCoordinatorTests: XCTestCase {
         // direct /open attempt from markOpened must fail, nothing else
         // may race the "restart".
         first.openRetryInterval = 600
+        first.localOpenedAtProvider = { "LOCAL_STAMP" }
         transport.onActivate = { _, _ in
             BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
         }
@@ -515,7 +516,10 @@ final class BottleMailCoordinatorTests: XCTestCase {
         await waitUntil { first.snapshotForTesting().letters.count == 1 }
         first.markOpened(letterID: id)
         await waitUntil { transport.openCalls.count >= 1 }
-        XCTAssertEqual(first.snapshotForTesting().unread, 1)
+        // Local-first: the read completed even though the server was
+        // unreachable; only the server reconciliation stays pending.
+        XCTAssertEqual(first.snapshotForTesting().unread, 0)
+        XCTAssertEqual(first.snapshotForTesting().letters.first?.openedAt, "LOCAL_STAMP")
         // The pending confirmation is persisted before the "restart".
         await waitUntil {
             self.makeStore().snapshot().pendingOpenIds.contains(id)
@@ -540,13 +544,14 @@ final class BottleMailCoordinatorTests: XCTestCase {
         second.delayProvider = { $0.lowerBound }
         second.start()
         // The initial published state is empty until start()'s queue
-        // block publishes the restored mailbox — wait for that first,
-        // otherwise `unread == 0` is satisfied vacuously.
+        // block publishes the restored mailbox — wait for that first.
         await waitUntil { second.snapshotForTesting().letters.count == 1 }
-        await waitUntil { second.snapshotForTesting().unread == 0 }
-        XCTAssertEqual(second.snapshotForTesting().letters.first?.openedAt, "2026-10-17T01:00:00Z")
-        XCTAssertGreaterThanOrEqual(secondTransport.openCalls.count, 1,
-                                    "the restored pending /open is re-submitted after restart")
+        await waitUntil { secondTransport.openCalls.count >= 1 }
+        await waitUntil {
+            second.snapshotForTesting().letters.first?.openedAt == "2026-10-17T01:00:00Z"
+        }
+        XCTAssertEqual(second.snapshotForTesting().letters.first?.openedAt, "2026-10-17T01:00:00Z",
+                       "the server's opened_at replaces the local stamp on reconciliation")
     }
 
     func testConfirmedBacklogSurvivesRestartWithoutReopeningServerSide() async throws {
@@ -631,8 +636,9 @@ final class BottleMailCoordinatorTests: XCTestCase {
         XCTAssertEqual(secondTransport.openCalls.count, 0)
     }
 
-    func testOpenOnlyMarksReadAfterServerConfirmation() async throws {
+    func testOpenCompletesLocallyThenReconcilesWithServer() async throws {
         let (coordinator, transport, _) = makeHarness()
+        coordinator.localOpenedAtProvider = { "LOCAL_STAMP" }
         transport.onActivate = { _, _ in
             BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
         }
@@ -650,22 +656,28 @@ final class BottleMailCoordinatorTests: XCTestCase {
         try await coordinator.activate(code: "C", label: "Mac")
         await waitUntil { coordinator.snapshotForTesting().letters.count == 1 }
 
-        coordinator.markOpened(letterID: id)
-        await waitUntil { transport.openCalls.count >= 1 }
-        XCTAssertEqual(coordinator.snapshotForTesting().letters.first?.isUnread, true,
-                       "server failure keeps the letter unread locally")
-
-        openShouldFail = false
+        // Local-first: the read completes immediately even though the
+        // server fails — the pet never waits on the network.
         coordinator.markOpened(letterID: id)
         await waitUntil { coordinator.snapshotForTesting().unread == 0 }
         XCTAssertEqual(coordinator.snapshotForTesting().letters.first?.isUnread, false)
-        XCTAssertEqual(coordinator.snapshotForTesting().letters.first?.openedAt, "2026-10-17T01:00:00Z")
+        XCTAssertEqual(coordinator.snapshotForTesting().letters.first?.openedAt, "LOCAL_STAMP")
+        await waitUntil { transport.openCalls.count >= 1 }
+
+        // Network recovers: the pending /open reconciles and the server
+        // timestamp replaces the local one.
+        openShouldFail = false
+        coordinator.handleNetworkRecovery()
+        await waitUntil {
+            coordinator.snapshotForTesting().letters.first?.openedAt == "2026-10-17T01:00:00Z"
+        }
         XCTAssertGreaterThanOrEqual(transport.openCalls.count, 2,
                                     "the idempotent /open may be retried several times")
     }
 
     func testOpenRetriesAutomaticallyOnNetworkRecovery() async throws {
         let (coordinator, transport, _) = makeHarness()
+        coordinator.localOpenedAtProvider = { "LOCAL_STAMP" }
         transport.onActivate = { _, _ in
             BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
         }
@@ -685,13 +697,17 @@ final class BottleMailCoordinatorTests: XCTestCase {
 
         coordinator.markOpened(letterID: id)
         await waitUntil { transport.openCalls.count >= 1 }
-        XCTAssertEqual(coordinator.snapshotForTesting().unread, 1)
+        XCTAssertEqual(coordinator.snapshotForTesting().unread, 0,
+                       "local-first: the read completes while offline")
+        XCTAssertEqual(coordinator.snapshotForTesting().letters.first?.openedAt, "LOCAL_STAMP")
 
         // Network comes back: the failed confirmation is re-submitted
         // WITHOUT the user pressing the button again.
         openShouldFail = false
         coordinator.handleNetworkRecovery()
-        await waitUntil { coordinator.snapshotForTesting().unread == 0 }
+        await waitUntil {
+            coordinator.snapshotForTesting().letters.first?.openedAt == "2026-10-17T01:00:00Z"
+        }
         XCTAssertGreaterThanOrEqual(transport.openCalls.count, 2,
                                     "the failed /open is automatically re-submitted")
     }

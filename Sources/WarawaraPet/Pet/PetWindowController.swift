@@ -15,6 +15,13 @@ final class PetWindowController: NSObject {
     var onPetDoubleClick: (() -> Void)?
     /// Invoked on a right-click on the pet (Bottle Mail entry point).
     var onPetRightClick: (() -> Void)?
+    /// Phase 8C bridge: PetView observes this provider; AppDelegate
+    /// attaches the real BottleVisualCoordinator once Bottle Mail is
+    /// wired (showPet runs first).
+    let bottleVisualProvider = BottleVisualProvider()
+    /// Returns true when the click was consumed by the bottle form
+    /// (open the letter instead of the click squash).
+    var bottleClickHandler: (() -> Bool)?
     private var positionStore: PetPositionStore?
     private var screenObserver: NSObjectProtocol?
     private var groupSequenceController: GroupSequenceController?
@@ -207,7 +214,9 @@ final class PetWindowController: NSObject {
 
         let panel = PetPanel(size: Self.petSize)
 
-        let hostingView = PetHostingView(rootView: PetView(controller: petController))
+        let hostingView = PetHostingView(
+            rootView: PetView(controller: petController, bottleVisualProvider: bottleVisualProvider)
+        )
         hostingView.frame = NSRect(origin: .zero, size: Self.petSize)
         hostingView.interactionController = interaction
         hostingView.onRightClick = { [weak self] in
@@ -215,6 +224,9 @@ final class PetWindowController: NSObject {
         }
         interaction.onDoubleClick = { [weak self] in
             self?.onPetDoubleClick?()
+        }
+        interaction.clickInterceptor = { [weak self] in
+            self?.bottleClickHandler?() ?? false
         }
 
         panel.contentView = hostingView

@@ -1,10 +1,12 @@
 import Foundation
 
-/// A letter as the macOS app stores it locally. `openedAt` is nil until
-/// the server CONFIRMS the open (the `/open` call succeeds) — receiving a
-/// letter is never treated as reading it. `delivered` records that the
-/// delivery event was ACKNOWLEDGED by the UI (Phase 8C) — it is what
-/// guarantees exactly-once delivery across restarts.
+/// A letter as the macOS app stores it locally. `openedAt` is nil while
+/// unread. Phase 8C marks reads LOCAL-FIRST: the timestamp is written
+/// the moment the user puts the letter away (offline included) and the
+/// server /open confirmation reconciles the server value afterwards —
+/// receiving a letter is still never treated as reading it. `delivered`
+/// records that the delivery event was ACKNOWLEDGED by the UI (Phase
+/// 8C) — it is what guarantees exactly-once delivery across restarts.
 struct BottleMailLetter: Codable, Equatable, Hashable, Identifiable {
     let seq: Int
     let id: String

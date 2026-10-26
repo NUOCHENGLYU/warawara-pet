@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingFaultInjection: String?
     private var bottleMailCoordinator: BottleMailCoordinator?
     private var bottleMailWindow: BottleMailWindowController?
+    private var bottleVisualCoordinator: BottleVisualCoordinator?
+    private var bottleReadingWindow: BottleReadingWindowController?
     private var pendingBottleActivationCode: String?
     private var groupSequenceActive = false
 
@@ -177,9 +179,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handler.start()
     }
 
-    /// Bottle Mail (Phase 8B): device binding, polling, offline storage
-    /// and the conflict-gated pending queue. The status/activation
-    /// window opens via a right-click on the pet.
+    /// Bottle Mail (Phase 8B + 8C): device binding, polling, offline
+    /// storage, the conflict-gated pending queue, the bottle morph and
+    /// the reading window. The status/activation window opens via a
+    /// right-click on the pet.
     private func wireBottleMail(windowController: PetWindowController) {
         let coordinator = BottleMailCoordinator(
             transport: BottleMailAPI(),
@@ -187,13 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             store: BottleMailFileStore()
         )
         coordinator.isPetBusy = { [weak self] in
-            guard let self else { return false }
-            return (self.petWindowController?.isPetDragging ?? false)
-                || (self.petWindowController?.isPetSleeping ?? false)
-                || (self.birthdayCoordinator?.isRunning ?? false)
-                || (self.meteorController?.isRunning ?? false)
-                || LetterWindowController.isOpen
-                || self.groupSequenceActive
+            self?.isPetOrEventBusy() ?? false
         }
         coordinator.installLifecycleHooks()
         coordinator.start()
@@ -202,6 +199,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController.onPetRightClick = { [weak self] in
             self?.bottleMailWindow?.toggle()
         }
+
+        // Phase 8C: the pet's bottle form + reading window.
+        let visual = BottleVisualCoordinator(mailbox: coordinator)
+        visual.isPetBusy = { [weak self] in
+            self?.isPetOrEventBusy() ?? false
+        }
+        let readingWindow = BottleReadingWindowController(coordinator: coordinator, visual: visual)
+        visual.onPresented = { [weak coordinator] ids in
+            // The presentation animation completed: acknowledge exactly
+            // once (persisted; a restart never re-delivers).
+            ids.forEach { coordinator?.acknowledgeDelivery($0) }
+        }
+        visual.onOpenReadingRequested = { [weak readingWindow] _ in
+            readingWindow?.show()
+        }
+        visual.onReadingFinished = { [weak readingWindow] in
+            readingWindow?.closeReadingWindow()
+        }
+        windowController.bottleClickHandler = { [weak visual] in
+            visual?.handleBottleTap() ?? false
+        }
+        windowController.bottleVisualProvider.attach(visual)
+        visual.start()
+        bottleVisualCoordinator = visual
+        bottleReadingWindow = readingWindow
+
         if let code = pendingBottleActivationCode {
             pendingBottleActivationCode = nil
             bottleMailWindow?.toggle()
@@ -210,6 +233,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         EventDiagnostics.bottleMail("WIRED")
+    }
+
+    /// Shared conflict gate (main thread): the bottle morph and mail
+    /// delivery defer while the user drags, the pet sleeps, a seasonal
+    /// event runs, the birthday letter is open, or companions gather.
+    private func isPetOrEventBusy() -> Bool {
+        (petWindowController?.isPetDragging ?? false)
+            || (petWindowController?.isPetSleeping ?? false)
+            || (birthdayCoordinator?.isRunning ?? false)
+            || (meteorController?.isRunning ?? false)
+            || LetterWindowController.isOpen
+            || groupSequenceActive
     }
 
     /// Development flag --bottle-activate <code>: binds a device without

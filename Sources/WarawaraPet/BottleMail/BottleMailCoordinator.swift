@@ -434,20 +434,47 @@ final class BottleMailCoordinator: ObservableObject {
         }
     }
 
-    // MARK: - Opening (read confirmation with automatic retry)
+    // MARK: - Opening (read completion: local-first + async server reconciliation)
 
-    /// Marks a letter opened: the LOCAL state changes only after the
-    /// server confirms. Server failures are retried automatically on the
-    /// next suitable moment (network recovery, successful poll, retry
-    /// timer); a server-confirmed open whose local persist failed is
-    /// also retried locally (server /open is idempotent).
+    /// Timestamp written when a read completes LOCALLY (before the
+    /// server confirms). The server's opened_at replaces it when the
+    /// idempotent /open succeeds — injectable so tests are deterministic.
+    var localOpenedAtProvider: () -> String = {
+        ISO8601DateFormatter().string(from: Date())
+    }
+
+    /// Marks a letter read LOCAL-FIRST (Phase 8C): the local write
+    /// happens immediately and durably, so an offline read never stalls
+    /// the pet's visual state. The /open confirmation keeps the 8B
+    /// async/idempotent/retryable machinery and reconciles the server
+    /// opened_at afterwards. Without a credential (revoked/never
+    /// activated) the read completes locally only — no server call.
     func markOpened(letterID: String) {
         queue.async { [weak self] in
-            guard let self, self.credential != nil else { return }
+            guard let self else { return }
+            guard self.isLetterUnreadLocally(letterID) else { return }
+            do {
+                try self.store.markOpenedLocally(
+                    id: letterID,
+                    openedAt: self.localOpenedAtProvider()
+                )
+                self.publishLetters(self.store.snapshot())
+                EventDiagnostics.bottleMail("OPENED_LOCALLY", details: "id=\(letterID)")
+            } catch {
+                // Local persist failed: the letter stays unread; the
+                // retry machinery below still drives the write when the
+                // server confirms (backlog path).
+                EventDiagnostics.bottleMail("OPEN_LOCAL_PERSIST_FAILED", details: "id=\(letterID)")
+            }
+            guard self.credential != nil else { return }
             self.serverOpenRetries.insert(letterID)
             self.persistPendingOpenStates()
             self.retryPendingOpens()
         }
+    }
+
+    private func isLetterUnreadLocally(_ letterID: String) -> Bool {
+        store.snapshot().letters.first(where: { $0.id == letterID })?.isUnread == true
     }
 
     /// Best-effort persistence of the read-confirmation pending state

@@ -2,11 +2,17 @@ import SwiftUI
 
 struct PetView: View {
     @ObservedObject var controller: PetController
+    @ObservedObject var bottleVisualProvider: BottleVisualProvider
 
     @State private var bobbing = false
+    @State private var bottleSwaying = false
 
     private let bobAnimation = Animation
         .easeInOut(duration: 2.2)
+        .repeatForever(autoreverses: true)
+
+    private let bottleSwayAnimation = Animation
+        .easeInOut(duration: 4.2)
         .repeatForever(autoreverses: true)
 
     private let poseAnimation = Animation
@@ -21,10 +27,43 @@ struct PetView: View {
             dampingFraction: DeformationTuning.default.releaseSpringDamping
         )
 
+    private var visual: BottleVisualCoordinator? {
+        bottleVisualProvider.coordinator
+    }
+
     var body: some View {
         ZStack {
-            petGroup
-                .offset(y: bobOffset)
+            // The whole bottle reads as ONE body: glass, character and
+            // neck share the bob and the gentle floating tilt.
+            ZStack {
+                // The glass silhouette sits BEHIND the character so the
+                // eyes/mouth stay on the bottle surface.
+                if let visual, visual.isBottleForm {
+                    BottleGlassBodyView(progress: visual.morphProgress)
+                        .position(x: PetMetrics.visualCenter.x, y: PetMetrics.visualCenter.y)
+                        .scaleEffect(x: stateScaleX, y: stateScaleY, anchor: .bottom)
+                }
+                petGroup
+                // Neck + cork + paper render IN FRONT of the character,
+                // bottom-anchored on the glass top.
+                if let visual, visual.isBottleForm {
+                    BottleExtrasView(
+                        progress: visual.morphProgress,
+                        openingProgress: visual.openingProgress
+                    )
+                    .position(
+                        x: PetMetrics.visualCenter.x,
+                        y: PetMetrics.visualCenter.y
+                            - BottleMetrics.glassHeight / 2
+                            - BottleMetrics.extrasContainerHeight / 2
+                    )
+                    .scaleEffect(x: stateScaleX, y: stateScaleY, anchor: .bottom)
+                }
+            }
+            .offset(y: bobOffset)
+            .rotationEffect(.radians(bottleSwayAngle), anchor: .bottom)
+            .animation(bottleSwayAnimation, value: bottleSwaying)
+
             if controller.state == .sleeping {
                 SleepIndicatorView()
             }
@@ -33,7 +72,15 @@ struct PetView: View {
         .animation(bobAnimation, value: bobbing)
         .onAppear {
             bobbing = true
+            bottleSwaying = true
         }
+    }
+
+    /// Gentle floating tilt while the bottle waits (disabled under
+    /// Reduce Motion — the morph itself still plays).
+    private var bottleSwayAngle: Double {
+        guard visual?.swayEnabled == true else { return 0 }
+        return bottleSwaying ? 0.021 : -0.021
     }
 
     private var petGroup: some View {
@@ -73,13 +120,20 @@ struct PetView: View {
     /// event attention (birthday) overrides the mouse-driven gaze when
     /// active, so the pet can visibly "look at" something specific.
     private var expressionInputs: WarawaraExpressionInputs {
-        WarawaraExpressionInputs(
+        let morph: CGFloat
+        if let visual, visual.isBottleForm {
+            morph = CGFloat(visual.morphProgress)
+        } else {
+            morph = 0
+        }
+        return WarawaraExpressionInputs(
             state: controller.state,
             gaze: controller.eventAttentionDirection ?? controller.curiosityDirection,
             dragDeformation: controller.dragDeformation,
             hopProgress: controller.hopProgress,
             floatProgress: controller.floatProgress,
-            wishingEyes: controller.wishing
+            wishingEyes: controller.wishing,
+            bottleMorphProgress: morph
         )
     }
 

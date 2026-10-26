@@ -156,6 +156,11 @@ jobs:
         env:
           GIFT_PREVIEW_OUT: dist/gift-preview
 
+      - name: Generate bottle morph previews
+        run: swift test --filter BottlePreviewGeneratorTests
+        env:
+          BOTTLE_PREVIEW_OUT: dist/bottle-preview
+
       - name: Package .app and zip
         run: bash Scripts/package-app.sh
 
@@ -246,4 +251,11 @@ jobs:
         with:
           name: WarawaraPet-Sleep-Mouth-Preview
           path: dist/sleep-preview
+          retention-days: 30
+
+      - name: Upload bottle morph preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WarawaraPet-Bottle-Preview
+          path: dist/bottle-preview
           retention-days: 30
