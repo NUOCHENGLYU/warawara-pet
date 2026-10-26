@@ -53,6 +53,14 @@ final class PetController: ObservableObject {
 
     private var groupSequenceActive = false
 
+    /// Phase 8C: while the pet is a bottle it is NOT a pet anymore —
+    /// autonomous hop/float, curiosity, sleepiness, click squash and
+    /// drag deformation are all suspended. Only dragging (position) and
+    /// the bottle tap (open the letter) remain. Entered/left via
+    /// `setBottleModeActive(_:)` from the visual coordinator.
+    private var bottleModeActive = false
+    var isBottleModeActive: Bool { bottleModeActive }
+
     /// While true the sleep evaluator pauses (see `wakeGentlyForEvent`):
     /// an event that gently woke the pet — the daily 22:17 meteor —
     /// keeps it awake for the duration of the performance. Cleared by
@@ -132,9 +140,42 @@ final class PetController: ObservableObject {
         }
     }
 
+    // MARK: - Bottle mode (Phase 8C: the bottle is NOT a pet)
+
+    /// While active, the pet's autonomous machinery is fully suspended
+    /// and guarded against rescheduling. Entering cancels every driver
+    /// (autonomous hop/float, awareness/curiosity/sleepiness, click
+    /// revert, drag decay); leaving restarts the single scheduler pair
+    /// exactly once when the pet is idle.
+    func setBottleModeActive(_ active: Bool) {
+        guard active != bottleModeActive else { return }
+        bottleModeActive = active
+        if active {
+            cancelAutonomousTimer()
+            stopAwarenessTimer()
+            stopCuriosityTracker()
+            clickRevertItem?.cancel()
+            clickRevertItem = nil
+            dragDecayTimer?.invalidate()
+            dragDecayTimer = nil
+            curiosityPose = .neutral
+            curiosityDirection = .zero
+            // An in-flight motion (hop/float) is never hard-cancelled —
+            // the visual coordinator defers the morph until transient
+            // motion ends; by the time this runs the pet is grounded.
+        } else {
+            guard stateMachine.state == .idle else { return }
+            // scheduleNextAutonomousAction cancels any previous timer
+            // first, so resuming can never register a duplicate.
+            scheduleNextAutonomousAction()
+            startAwarenessTimer()
+        }
+    }
+
     // MARK: - Autonomous scheduler (one cancellable one-shot timer)
 
     private func scheduleNextAutonomousAction() {
+        guard !bottleModeActive else { return }
         cancelAutonomousTimer()
         let delay = AutonomousScheduler.nextDelay(using: &rng, tuning: personalityTuning)
         autonomousTimer = Timer.scheduledTimer(
@@ -152,6 +193,7 @@ final class PetController: ObservableObject {
 
     private func performAutonomousAction() {
         guard stateMachine.state == .idle else { return }
+        guard !bottleModeActive else { return }
         let action = AutonomousScheduler.nextAction(
             now: ProcessInfo.processInfo.systemUptime,
             floatEligibleSince: nextFloatEligibleAt,
@@ -170,6 +212,7 @@ final class PetController: ObservableObject {
 
     private func startAwarenessTimer() {
         guard awarenessTimer == nil else { return }
+        guard !bottleModeActive else { return }
         awarenessTickCount = 0
         awarenessTimer = Timer.scheduledTimer(
             withTimeInterval: personalityTuning.awarenessTickInterval,
@@ -195,8 +238,9 @@ final class PetController: ObservableObject {
 
     /// Deterministic tick entry point: evaluates curiosity (and, when
     /// asked, sleepiness) for the current state. Inert outside
-    /// idle/curious/sleepy.
+    /// idle/curious/sleepy — and entirely inert in bottle mode.
     func awarenessTick(at timestamp: TimeInterval, evaluateSleepiness: Bool = true) {
+        guard !bottleModeActive else { return }
         switch stateMachine.state {
         case .idle:
             evaluateCuriosity(at: timestamp)
@@ -266,6 +310,8 @@ final class PetController: ObservableObject {
             releaseEventAttention()
             return
         }
+        // The bottle never turns or looks at anything.
+        guard !bottleModeActive else { return }
         guard stateMachine.state == .idle || stateMachine.state == .curious else { return }
         if stateMachine.state == .idle {
             guard stateMachine.transition(to: .curious) else { return }
@@ -319,6 +365,8 @@ final class PetController: ObservableObject {
     /// the show. Normal system wake-ups never call this. Call
     /// `endEventWake()` when the event cleans up.
     func wakeGentlyForEvent() {
+        // The bottle is not a pet — events never wake it.
+        guard !bottleModeActive else { return }
         sleepSuppressionActive = true
         switch stateMachine.state {
         case .sleepy, .sleeping:
@@ -343,6 +391,7 @@ final class PetController: ObservableObject {
 
     private func startCuriosityTracker() {
         guard curiosityTrackerTimer == nil else { return }
+        guard !bottleModeActive else { return }
         curiosityTrackerTimer = Timer.scheduledTimer(
             withTimeInterval: personalityTuning.curiosityTrackingInterval,
             repeats: true
@@ -361,9 +410,10 @@ final class PetController: ObservableObject {
     }
 
     /// Deterministic entry point for the visual tracker; inert outside the
-    /// curious state.
+    /// curious state — and entirely inert in bottle mode.
     func curiosityTrackingTick(at timestamp: TimeInterval) {
         guard stateMachine.state == .curious else { return }
+        guard !bottleModeActive else { return }
         updateCuriosityPose(at: timestamp)
     }
 
@@ -409,6 +459,7 @@ final class PetController: ObservableObject {
 
     private func evaluateSleepinessNow() {
         guard !sleepSuppressionActive else { return }
+        guard !bottleModeActive else { return }
         let idleSeconds = idleTimeProvider.secondsSinceLastUserActivity()
         switch SleepinessEvaluator.decision(
             state: stateMachine.state,
@@ -433,9 +484,10 @@ final class PetController: ObservableObject {
 
     /// Public birthday hook: a small celebratory hop of the main pet.
     /// Inert unless the pet is idle (the event never fights the state
-    /// machine).
+    /// machine) — and never in bottle mode.
     func performBirthdayHop() {
         guard stateMachine.state == .idle else { return }
+        guard !bottleModeActive else { return }
         beginHop()
     }
 
@@ -444,10 +496,12 @@ final class PetController: ObservableObject {
     /// choreography releases attention before calling this.
     func performCelebrationHop() {
         guard stateMachine.state == .idle else { return }
+        guard !bottleModeActive else { return }
         beginHop(parameters: HopParameters(height: 46, drift: 0, duration: 0.75))
     }
 
     private func beginHop(parameters: HopParameters? = nil) {
+        guard !bottleModeActive else { return }
         guard stateMachine.transition(to: .hop) else { return }
         state = stateMachine.state
         startHopMotion(parameters: parameters)
@@ -477,6 +531,7 @@ final class PetController: ObservableObject {
     // descends to it; drag interruption discards it.
 
     func beginFloat() {
+        guard !bottleModeActive else { return }
         guard stateMachine.transition(to: .float) else { return }
         state = stateMachine.state
         startFloatMotion()
@@ -522,6 +577,9 @@ final class PetController: ObservableObject {
 
     func handleClick() {
         onUserInteraction?()
+        // The bottle has no click squash — the interaction layer routes
+        // bottle taps to the letter instead.
+        guard !bottleModeActive else { return }
         guard stateMachine.state != .hop else { return }
         if stateMachine.state == .float {
             // Click interrupts the float: squash in place (no snap back to
@@ -585,23 +643,35 @@ final class PetController: ObservableObject {
         curiosityDirection = .zero
         guard stateMachine.transition(to: .dragged) else { return }
         state = stateMachine.state
+        guard !bottleModeActive else {
+            // Dragging a bottle moves its position only — no soft-body
+            // deformation, no decay driver.
+            return
+        }
         dragEstimator.beginDrag(grabVector: grabVector)
         startDragDecayTimer()
     }
 
     func handleDragMoved(deltaX: CGFloat, deltaY: CGFloat, at timestamp: TimeInterval) {
         guard stateMachine.state == .dragged else { return }
+        guard !bottleModeActive else { return }
         dragEstimator.update(deltaX: deltaX, deltaY: deltaY, at: timestamp)
         publishDragDeformationIfChanged()
     }
 
     func handleDragEnded() {
-        guard stateMachine.state == .dragged,
-              stateMachine.transition(to: .settling) else { return }
-        state = stateMachine.state
+        guard stateMachine.state == .dragged else { return }
         dragDeformation = .neutral
         dragDecayTimer?.invalidate()
         dragDecayTimer = nil
+        if bottleModeActive {
+            // The bottle simply rests where it was dropped.
+            guard stateMachine.transition(to: .idle) else { return }
+            state = stateMachine.state
+            return
+        }
+        guard stateMachine.transition(to: .settling) else { return }
+        state = stateMachine.state
         guard let windowController else { return }
         startSettleMotion(from: windowController.currentFrame, to: windowController.currentFrame)
     }
@@ -629,6 +699,7 @@ final class PetController: ObservableObject {
     // timer exists only during dragging and is cancelled on drag end.
 
     private func startDragDecayTimer() {
+        guard !bottleModeActive else { return }
         dragDecayTimer?.invalidate()
         dragDecayTimer = Timer.scheduledTimer(
             withTimeInterval: Self.dragTickInterval,
@@ -647,6 +718,7 @@ final class PetController: ObservableObject {
     /// the pet is still being dragged. Inert in any other state.
     func dragTick(at timestamp: TimeInterval) {
         guard stateMachine.state == .dragged else { return }
+        guard !bottleModeActive else { return }
         dragEstimator.decay(at: timestamp)
         publishDragDeformationIfChanged()
     }

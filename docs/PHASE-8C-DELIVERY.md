@@ -1,4 +1,38 @@
-# Phase 8C — 本体变身漂流瓶（跳跃烟雾变身 · 正式版）
+# Phase 8C — 本体变身漂流瓶（真机验收问题修复）
+
+Branch `phase8/bottle-mail` · 基于真机（M1 MacBook Air）验收反馈修复：关闭信纸崩溃、瓶子仍执行宠物动作、阅读界面为邮箱分栏。
+
+## P0：关闭信纸导致进程退出（已修复）
+
+- 根因（源码调用链）：`BottleVisualCoordinator.evaluate()` 在 `.reading` 且 `unread == 0` 时调用 `onReadingFinished` → AppDelegate 回调 `readingWindow.closeReadingWindow()` → `window.close()` 触发 `windowWillClose()` → 又调用 `visual.readingWindowClosed()` → 若此时仍为 `.reading` 且 `lastUnread == 0` 再次 `evaluate()` → 无限递归、栈溢出、进程崩溃。
+- 修复（新设计）：
+  - 删除 `.reading` 状态下因 `unread == 0` 自动关闭窗口的路径与 `onReadingFinished` 回调；**窗口关闭事件是唯一的阅读完成入口**（`windowWillClose` → `visual.readingWindowClosed()`）。
+  - `readingWindowClosed()` 先离开 `.reading`（阻断一切重入），再提交本地优先已读（`markOpened`，异步服务器对账不变），然后由 mailbox 发布驱动：`unread > 0` 保持瓶子；`unread == 0` 走 `.bottleIdle` 规则开始反向 Poof。
+  - 幂等：重复 `windowWillClose` 因状态守卫变成 no-op；`markOpened` 本身有未读守卫，同一封信绝不重复标记（测试断言 `/open` 恰好一次）。
+  - 快速关→再开：`recentlyClosedID` 排除窗口（1.5s 或已读发布后退役），同一封信绝不立即重复打开。
+  - 菜单栏退出（`NSApp.terminate`）路径未动；关闭信纸不再触发任何退出/terminate/exit。
+- 验证：`BottleReadingWindowIntegrationTests`（真实 NSWindow/NSHostingView 集成）：完整闭环事件顺序 reading→bottleIdle→transformingBack→normal、宠物窗口仍存在、20 次连续开/关（含重复 close）不崩溃；`testWindowCloseIsIdempotentAndNeverReentrant`、`testRapidCloseReopenNeverPresentsTheSameLetter`。
+
+## 静止漂流瓶（已修复）
+
+- `PetController.setBottleModeActive(_:)`：进入瓶子形态时取消全部自主定时器（hop/float 调度、awareness、curiosity、点击回弹、拖拽衰减）并在**所有调度入口加 guard**；不产生 Hop/Float/Curious/Sleep/点击压扁/软体拖拽形变/睡眠 Z/待机 bob/漂浮摇摆；拖拽只改位置（`handleDragMoved` 跳过形变，松手直接落地 idle）。
+- 视觉层：`PetView.bobOffset` 在瓶子形态恒 0；`BottleVisualCoordinator.swayEnabled` 恒 false；仅 Poof 时间线保留跳跃/落地惯性；睡眠 Z 双保险屏蔽。
+- 来信时正在 Hop/Float：忙碌门新增 `isPetInTransientMotion`，变身等待动作落地，不硬取消。
+- 离开瓶子后单调度器恢复（cancel-first 保证不重复注册）。
+- 验证：`PetBottleModeTests`（模拟数分钟无动作、各入口 guard、点击无压扁、拖拽无形变、退出后恢复单调度器）。
+
+## 单张信纸阅读界面（已替换邮箱分栏）
+
+- 移除左侧历史列表、HSplitView、工具栏、“收好这封信”按钮与“关闭不标记已读”提示。
+- `BottleReadingPaperView`：整窗手绘信纸（`letter_paper_blank.png` 铺满 + 文字动态渲染、安全边距 72pt），隐藏标题 + 透明标题栏 + 保留红绿灯关闭入口 + 右上角关闭按钮，支持 Escape / Cmd+W / 关闭按钮；窗口可获键盘焦点（复用生日信生命周期），中文/英文/Emoji/换行/滚动/文本选择均正常；撤销授权时本地已读且不调用 `/open`。
+- **关闭信纸 = 读完当前这封信**：多封逐封点击瓶子阅读；最后一封关闭后自动反向变身并恢复 Warawara 自主行为；已读邮件数据永久保留（不强制展示列表）。
+- 验证：`BottleReadingWindowRenderTests` 与预览均改为真实窗口快照逐像素校验（信纸/墨迹/Emoji/无禁止占位符）。
+
+## 历史（前轮基线 `63e7e10`）
+
+> 注意：以下历史记录中「收好这封信按钮 / 关窗不读完」的阅读语义已被上面「单张信纸阅读界面」取代（关闭即读完）；其余（时间线、遮挡、音效、预览）仍有效。
+
+跳跃烟雾变身时间线、遮挡不变式、方向感知音效、正反向 GIF 预览等全部保留。
 
 Branch `phase8/bottle-mail` · 有未读信时 Warawara 本体以「起跳 → 烟雾“嘭” → 烟雾中完成变身 → 漂流瓶轻轻落地」连续变成漂流瓶；读完并收好全部信件后反向（瓶子跃起 → 烟雾中换回 → 落地）变回。
 

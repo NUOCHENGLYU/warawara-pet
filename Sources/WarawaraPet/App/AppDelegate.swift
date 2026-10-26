@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Darwin
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -18,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var bottleMailWindow: BottleMailWindowController?
     private var bottleVisualCoordinator: BottleVisualCoordinator?
     private var bottleReadingWindow: BottleReadingWindowController?
+    private var bottleVisualModeCancellable: AnyCancellable?
     private var pendingBottleActivationCode: String?
     private var groupSequenceActive = false
 
@@ -214,18 +216,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         visual.onOpenReadingRequested = { [weak readingWindow] _ in
             readingWindow?.show()
         }
-        visual.onReadingFinished = { [weak readingWindow] in
-            readingWindow?.closeReadingWindow()
-        }
         // The poof sound plays exactly once per transition (fired by
         // the visual coordinator at the smoke instant).
         visual.onPoofMoment = {
             BottlePoofSound.shared.play()
         }
+        // The reading window close is the ONLY reading-completion entry:
+        // the visual coordinator never closes the window itself, so the
+        // close path can never re-enter.
         windowController.bottleClickHandler = { [weak visual] in
             visual?.handleBottleTap() ?? false
         }
         windowController.bottleVisualProvider.attach(visual)
+        // While the bottle form is active the pet's autonomous machinery
+        // is fully suspended (the bottle is not a pet).
+        bottleVisualModeCancellable = visual.$bottleFormActive
+            .receive(on: DispatchQueue.main)
+            .sink { [weak windowController] active in
+                windowController?.setBottleModeActive(active)
+            }
         visual.start()
         bottleVisualCoordinator = visual
         bottleReadingWindow = readingWindow
@@ -241,11 +250,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Shared conflict gate (main thread): the bottle morph and mail
-    /// delivery defer while the user drags, the pet sleeps, a seasonal
-    /// event runs, the birthday letter is open, or companions gather.
+    /// delivery defer while the user drags, the pet sleeps, a hop/float
+    /// is still in flight, a seasonal event runs, the birthday letter
+    /// is open, or companions gather.
     private func isPetOrEventBusy() -> Bool {
         (petWindowController?.isPetDragging ?? false)
             || (petWindowController?.isPetSleeping ?? false)
+            || (petWindowController?.isPetInTransientMotion ?? false)
             || (birthdayCoordinator?.isRunning ?? false)
             || (meteorController?.isRunning ?? false)
             || LetterWindowController.isOpen

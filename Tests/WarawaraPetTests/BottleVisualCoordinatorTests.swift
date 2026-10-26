@@ -17,7 +17,6 @@ final class BottleVisualCoordinatorTests: XCTestCase {
     private var petBusy = false
     private var presentedBatches: [[String]] = []
     private var openedReadingRequests: [String] = []
-    private var readingFinishedCount = 0
 
     override func setUpWithError() throws {
         directory = FileManager.default.temporaryDirectory
@@ -28,7 +27,6 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         petBusy = false
         presentedBatches = []
         openedReadingRequests = []
-        readingFinishedCount = 0
     }
 
     override func tearDownWithError() throws {
@@ -69,9 +67,6 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         }
         visual.onOpenReadingRequested = { [weak self] id in
             self?.openedReadingRequests.append(id)
-        }
-        visual.onReadingFinished = { [weak self] in
-            self?.readingFinishedCount += 1
         }
         return (coordinator, transport, visual)
     }
@@ -132,15 +127,17 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         XCTAssertEqual(visual.snapshotForTesting().readingLetterID, id)
         XCTAssertEqual(openedReadingRequests, [id])
 
-        // Explicit put-away: local read + server reconcile + revert.
-        visual.letterPutAway(id: id)
+        // Closing the reading window IS the reading-completion action:
+        // local read + server reconcile + reverse poof.
+        visual.readingWindowClosed()
+        XCTAssertEqual(visual.snapshotForTesting().state, .bottleIdle,
+                       "closing leaves .reading FIRST (reentrancy-free)")
         await waitUntil { coordinator.snapshotForTesting().unread == 0 }
         // The read completed locally (the server confirm may already
         // have overwritten the stamp — the OFFLINE test pins the exact
         // local value).
         XCTAssertNotNil(coordinator.snapshotForTesting().letters.first?.openedAt)
         await waitUntil { visual.snapshotForTesting().state == .transformingBack }
-        XCTAssertEqual(readingFinishedCount, 1)
         advanceTime(0.5, visual: visual)
         XCTAssertEqual(visual.snapshotForTesting().state, .normal)
         XCTAssertEqual(visual.snapshotForTesting().formProgress, 0)
@@ -188,24 +185,31 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         XCTAssertEqual(visual.snapshotForTesting().readingLetterID, firstUnread)
         XCTAssertEqual(firstUnread, id1)
 
-        // First letter put away: still reading, moves to the next.
-        visual.letterPutAway(id: id1)
-        await waitUntil { visual.snapshotForTesting().readingLetterID == id2 }
+        // Close the paper for the first letter: it is marked read, the
+        // bottle STAYS (a second letter remains), and the next tap
+        // presents the next one.
+        visual.readingWindowClosed()
+        await waitUntil { coordinator.snapshotForTesting().unread == 1 }
+        XCTAssertEqual(visual.snapshotForTesting().state, .bottleIdle)
+        XCTAssertTrue(visual.handleBottleTap())
+        advanceTime(0.3, visual: visual)
         XCTAssertEqual(visual.snapshotForTesting().state, .reading)
-        XCTAssertEqual(readingFinishedCount, 0)
+        XCTAssertEqual(visual.snapshotForTesting().readingLetterID, id2,
+                       "the next tap opens the next unread letter")
 
-        // Last letter put away: finish + revert.
-        visual.letterPutAway(id: id2)
+        // Close the last paper: finish + revert.
+        visual.readingWindowClosed()
         await waitUntil { coordinator.snapshotForTesting().unread == 0 }
         await waitUntil { visual.snapshotForTesting().state == .transformingBack }
-        XCTAssertEqual(readingFinishedCount, 1)
         advanceTime(0.5, visual: visual)
         XCTAssertEqual(visual.snapshotForTesting().state, .normal)
         XCTAssertEqual(states.filter { $0 == .transformingBack }.count, 1)
         _ = cancellable
     }
 
-    func testClosingReadingWindowWithoutFinishingKeepsBottleAndUnread() async throws {
+    func testClosingReadingWindowCompletesTheRead() async throws {
+        // The NEW acceptance flow: closing the paper IS the read —
+        // there is no put-away button anymore.
         let (coordinator, transport, visual) = makeHarness()
         transport.onActivate = { _, _ in
             BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
@@ -226,14 +230,93 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         advanceTime(0.3, visual: visual)
         XCTAssertEqual(visual.snapshotForTesting().state, .reading)
 
-        // Plain close: unread stays, no revert, bottle waits.
+        // Close: the letter is read, the reverse poof follows.
         visual.readingWindowClosed()
-        XCTAssertEqual(visual.snapshotForTesting().state, .bottleIdle)
-        XCTAssertEqual(coordinator.snapshotForTesting().unread, 1)
-        XCTAssertEqual(coordinator.snapshotForTesting().letters.first?.openedAt, nil)
-        advanceTime(1, visual: visual)
-        XCTAssertEqual(visual.snapshotForTesting().state, .bottleIdle,
-                       "closing without finishing must not revert")
+        await waitUntil { coordinator.snapshotForTesting().unread == 0 }
+        XCTAssertNotNil(coordinator.snapshotForTesting().letters.first?.openedAt,
+                        "closing marks the letter read")
+        await waitUntil { visual.snapshotForTesting().state == .transformingBack }
+        advanceTime(0.5, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .normal)
+    }
+
+    func testWindowCloseIsIdempotentAndNeverReentrant() async throws {
+        let (coordinator, transport, visual) = makeHarness()
+        transport.onActivate = { _, _ in
+            BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
+        }
+        let id = UUID().uuidString
+        transport.onFetch = { after, _, _ in
+            after == 0
+                ? BottleMailPage(letters: [self.remote(1, id: id)], nextAfter: 1)
+                : BottleMailPage(letters: [], nextAfter: after)
+        }
+        transport.onOpen = { _, _ in "2026-10-17T01:00:00Z" }
+        visual.start(usingTimer: false)
+        try await coordinator.activate(code: "C", label: "Mac")
+        await waitUntil { coordinator.snapshotForTesting().letters.count == 1 }
+        await waitUntil { visual.snapshotForTesting().state == .transformingToBottle }
+        advanceTime(0.5, visual: visual)
+        XCTAssertTrue(visual.handleBottleTap())
+        advanceTime(0.3, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .reading)
+
+        // A duplicated windowWillClose (AppKit may deliver the delegate
+        // callback more than once) must be a pure no-op: no second
+        // markOpened, no reentrancy, no crash.
+        visual.readingWindowClosed()
+        visual.readingWindowClosed()
+        visual.readingWindowClosed()
+        await waitUntil { coordinator.snapshotForTesting().unread == 0 }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        // Exactly ONE read completion: one /open confirmation for the
+        // single letter.
+        XCTAssertEqual(transport.openCalls.count, 1,
+                       "repeated windowWillClose must not re-mark the letter")
+        await waitUntil { visual.snapshotForTesting().state == .transformingBack }
+        advanceTime(0.5, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .normal,
+                       "the flow completes cleanly after duplicate closes")
+    }
+
+    func testRapidCloseReopenNeverPresentsTheSameLetter() async throws {
+        let (coordinator, transport, visual) = makeHarness()
+        transport.onActivate = { _, _ in
+            BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
+        }
+        let id = UUID().uuidString
+        transport.onFetch = { after, _, _ in
+            after == 0
+                ? BottleMailPage(letters: [self.remote(1, id: id)], nextAfter: 1)
+                : BottleMailPage(letters: [], nextAfter: after)
+        }
+        transport.onOpen = { _, _ in "2026-10-17T01:00:00Z" }
+        visual.start(usingTimer: false)
+        try await coordinator.activate(code: "C", label: "Mac")
+        await waitUntil { coordinator.snapshotForTesting().letters.count == 1 }
+        await waitUntil { visual.snapshotForTesting().state == .transformingToBottle }
+        advanceTime(0.5, visual: visual)
+        XCTAssertTrue(visual.handleBottleTap())
+        advanceTime(0.3, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .reading)
+
+        // Close and IMMEDIATELY tap again — before the async local read
+        // may be published. The just-closed letter must never re-open.
+        visual.readingWindowClosed()
+        XCTAssertTrue(visual.handleBottleTap())
+        advanceTime(0.3, visual: visual)
+        if let reopened = visual.snapshotForTesting().readingLetterID {
+            XCTAssertNotEqual(reopened, id,
+                              "the just-closed letter must not be presented again")
+        } else {
+            XCTAssertEqual(visual.snapshotForTesting().state, .bottleIdle,
+                           "with nothing left to read the bottle idles")
+        }
+        // Everything settles: the letter is read, the pet reverts.
+        await waitUntil { coordinator.snapshotForTesting().unread == 0 }
+        await waitUntil { visual.snapshotForTesting().state == .transformingBack }
+        advanceTime(0.5, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .normal)
     }
 
     func testNewLetterArrivesWhileReadingStaysBottle() async throws {
@@ -310,6 +393,39 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         XCTAssertEqual(Set(presentedBatches.flatMap { $0 }), Set([id]))
     }
 
+    func testMorphWaitsForInFlightHopOrFloatToFinish() async throws {
+        // The acceptance rule: mail arriving mid-hop/mid-float must not
+        // start the morph until the current motion has landed (the
+        // morph never hard-cancels a motion, so the position never
+        // jumps).
+        let (coordinator, transport, visual) = makeHarness()
+        var transientMotion = true
+        visual.isPetBusy = { transientMotion }
+        transport.onActivate = { _, _ in
+            BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
+        }
+        let id = UUID().uuidString
+        transport.onFetch = { after, _, _ in
+            after == 0
+                ? BottleMailPage(letters: [self.remote(1, id: id)], nextAfter: 1)
+                : BottleMailPage(letters: [], nextAfter: after)
+        }
+        transport.onOpen = { _, _ in "2026-10-17T01:00:00Z" }
+        visual.start(usingTimer: false)
+        try await coordinator.activate(code: "C", label: "Mac")
+        await waitUntil { coordinator.snapshotForTesting().letters.count == 1 }
+        await waitUntil { visual.snapshotForTesting().state == .suspended }
+        advanceTime(1, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .suspended,
+                       "the morph waits for the in-flight motion")
+        // The hop/float lands: the morph proceeds.
+        transientMotion = false
+        advanceTime(0.05, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .transformingToBottle)
+        advanceTime(0.5, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .bottleIdle)
+    }
+
     func testMorphFreezesWhenBusyMidFlightAndResumesContinuously() async throws {
         let (coordinator, transport, visual) = makeHarness()
         transport.onActivate = { _, _ in
@@ -376,13 +492,13 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         // New mail while already a bottle must NOT re-play the poof.
         XCTAssertEqual(poofCount, 1)
 
-        // Reverse: put away the last letter. The reverse poof fires at
-        // the REVERSE smoke onset (timeline <= smokeFadeEnd), not at the
-        // forward poofPoint.
+        // Reverse: close the paper for the last letter. The reverse
+        // poof fires at the REVERSE smoke onset (timeline <=
+        // smokeFadeEnd), not at the forward poofPoint.
         XCTAssertTrue(visual.handleBottleTap())
         advanceTime(0.3, visual: visual)
         XCTAssertEqual(visual.snapshotForTesting().state, .reading)
-        visual.letterPutAway(id: id)
+        visual.readingWindowClosed()
         await waitUntil { coordinator.snapshotForTesting().unread == 0 }
         await waitUntil { visual.snapshotForTesting().state == .transformingBack }
         // Still early in the reverse timeline (1.0 > smokeFadeEnd): no
@@ -436,7 +552,7 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         // more fire; freezing again AFTER the onset adds nothing.
         XCTAssertTrue(visual.handleBottleTap())
         advanceTime(0.3, visual: visual)
-        visual.letterPutAway(id: id)
+        visual.readingWindowClosed()
         await waitUntil { coordinator.snapshotForTesting().unread == 0 }
         await waitUntil { visual.snapshotForTesting().state == .transformingBack }
         advanceTime(0.06, visual: visual) // timeline ~0.85 > smokeFadeEnd
@@ -543,7 +659,7 @@ final class BottleVisualCoordinatorTests: XCTestCase {
 
         // Offline: the read completes LOCALLY, the revert does NOT wait
         // for the server.
-        visual.letterPutAway(id: id)
+        visual.readingWindowClosed()
         await waitUntil { coordinator.snapshotForTesting().unread == 0 }
         XCTAssertEqual(coordinator.snapshotForTesting().letters.first?.openedAt, "LOCAL_STAMP")
         await waitUntil { visual.snapshotForTesting().state == .transformingBack }
@@ -571,7 +687,7 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         XCTAssertEqual(visual.snapshotForTesting().state, .normal)
     }
 
-    func testReduceMotionDisablesSwayButKeepsTheMorph() async throws {
+    func testReduceMotionDoesNotEnableDecorativeSway() async throws {
         // Reach bottleIdle via a delivered-but-unread mailbox.
         let id = UUID().uuidString
         let store = BottleMailFileStore(fileURL: fileURL)
@@ -585,12 +701,11 @@ final class BottleVisualCoordinatorTests: XCTestCase {
             store: BottleMailFileStore(fileURL: fileURL)
         )
         coordinator.openRetryInterval = 600
-        var reduceMotion = true
         let visual = BottleVisualCoordinator(mailbox: coordinator)
         visual.morphDuration = 0.4
         visual.nowProvider = { [weak self] in self?.currentDate ?? Date() }
         visual.isPetBusy = { false }
-        visual.reduceMotion = { reduceMotion }
+        visual.reduceMotion = { false }
         coordinator.start()
         visual.start(usingTimer: false)
 
@@ -599,10 +714,14 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         advanceTime(0.5, visual: visual)
         XCTAssertEqual(visual.snapshotForTesting().state, .bottleIdle)
 
-        // Reduce Motion ON: no decorative sway; the morph still played.
+        // The stable bottle is COMPLETELY static per the acceptance
+        // feedback: no decorative sway in ANY state (the poof timeline
+        // keeps its own jump/landing inertia).
         XCTAssertFalse(visual.swayEnabled)
-        reduceMotion = false
-        XCTAssertTrue(visual.swayEnabled)
+        XCTAssertTrue(visual.bottleFormActive,
+                      "the pet layer suspends while the bottle form is up")
+        advanceTime(2, visual: visual)
+        XCTAssertFalse(visual.swayEnabled)
     }
 
     // MARK: - Helpers

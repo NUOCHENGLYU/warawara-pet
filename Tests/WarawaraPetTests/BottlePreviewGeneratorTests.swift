@@ -222,21 +222,21 @@ final class BottlePreviewGeneratorTests: XCTestCase {
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
 
-        // The reading window contains an AppKit-backed List/HSplitView
-        // that ImageRenderer cannot rasterize (it yields the prohibition
+        // The reading window contains AppKit-backed controls that
+        // ImageRenderer cannot rasterize (it yields the prohibition
         // placeholder) — snapshot the REAL view through a real offscreen
         // NSWindow instead, and verify the render pixel-wise so the
         // preview can never silently regress to the placeholder.
-        let size = CGSize(width: 560, height: 640)
+        let size = CGSize(width: 520, height: 640)
         let cgImage = try renderWindowSnapshot(
-            BottleReadingView(coordinator: coordinator, visual: visual),
+            BottleReadingPaperView(coordinator: coordinator, visual: visual, onClose: {}),
             size: size
         )
         let rep = NSBitmapImageRep(cgImage: cgImage)
         var paperPixels = 0
         var prohibitionPixels = 0
         for y in stride(from: 0, to: rep.pixelsHigh, by: 4) {
-            for x in stride(from: 260, to: rep.pixelsWide, by: 4) {
+            for x in stride(from: 60, to: rep.pixelsWide - 60, by: 4) {
                 guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
                 let r = color.redComponent
                 let g = color.greenComponent
@@ -249,7 +249,7 @@ final class BottlePreviewGeneratorTests: XCTestCase {
                 }
             }
         }
-        XCTAssertGreaterThan(paperPixels, 800,
+        XCTAssertGreaterThan(paperPixels, 1500,
                              "the reading preview must show the parchment paper")
         XCTAssertLessThan(prohibitionPixels, 120,
                           "the reading preview must not be the renderer placeholder")

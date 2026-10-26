@@ -96,6 +96,18 @@ final class PetWindowController: NSObject {
         controller?.state == .sleepy || controller?.state == .sleeping
     }
 
+    /// True while the pet is mid-hop/mid-float/mid-drag — the bottle
+    /// morph waits for the current motion to land instead of fighting it.
+    var isPetInTransientMotion: Bool {
+        controller?.isInTransientMotion ?? false
+    }
+
+    /// Phase 8C: suspends/restores the pet's autonomous machinery while
+    /// it is a bottle (the bottle is not a pet).
+    func setBottleModeActive(_ active: Bool) {
+        controller?.setBottleModeActive(active)
+    }
+
     /// Registers an observer for companion-group activity (birthday
     /// coordinator uses this to know when gathering/ascension ends).
     func addGroupActiveObserver(_ observer: @escaping (Bool) -> Void) {

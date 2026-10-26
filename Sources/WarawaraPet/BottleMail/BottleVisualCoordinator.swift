@@ -109,6 +109,10 @@ final class BottleVisualCoordinator: ObservableObject {
     // MARK: - Published (main thread)
 
     @Published private(set) var visualState: BottleVisualState = .normal
+    /// True while ANY bottle-form presentation is active (including a
+    /// frozen mid-morph silhouette) — the pet layer suspends its whole
+    /// autonomous machinery while this is true.
+    @Published private(set) var bottleFormActive = false
     /// Timeline position 0...1 over the poof transition (raw piecewise
     /// time; the choreography's easing lives inside BottlePoofTimeline).
     @Published private(set) var morphProgress: Double = 0
@@ -149,8 +153,6 @@ final class BottleVisualCoordinator: ObservableObject {
     /// The opening animation finished: show the reading window for
     /// this letter id.
     var onOpenReadingRequested: ((String) -> Void)?
-    /// The last unread letter was put away: close the reading window.
-    var onReadingFinished: (() -> Void)?
 
     // MARK: - Internals
 
@@ -169,6 +171,12 @@ final class BottleVisualCoordinator: ObservableObject {
     /// The one-shot poof sound per morph run (forward AND back each
     /// fire once).
     private var poofFired = false
+    /// The letter closed moments ago whose local read may not be
+    /// published yet: excluded from the next tap so a fast close/re-open
+    /// never presents the SAME letter twice.
+    private var recentlyClosedID: String?
+    private var recentlyClosedAt: Date = .distantPast
+    private static let recentlyClosedExclusion: TimeInterval = 1.5
 
     init(mailbox: BottleMailCoordinator) {
         self.mailbox = mailbox
@@ -188,6 +196,12 @@ final class BottleVisualCoordinator: ObservableObject {
             .sink { [weak self] unread in
                 guard let self else { return }
                 self.lastUnread = unread
+                // The recently-closed letter is now durably read: the
+                // fast re-open exclusion can retire.
+                if let id = self.recentlyClosedID,
+                   !self.mailbox.letters.contains(where: { $0.id == id && $0.isUnread }) {
+                    self.recentlyClosedID = nil
+                }
                 self.evaluate(now: self.nowProvider())
             }
             .store(in: &cancellables)
@@ -231,32 +245,34 @@ final class BottleVisualCoordinator: ObservableObject {
         }
     }
 
-    /// The reading window's explicit "put away" action: completes the
-    /// read LOCALLY (server reconciliation stays async) and advances to
-    /// the next unread letter — or finishes when none remain.
-    func letterPutAway(id: String) {
-        guard visualState == .reading else { return }
-        mailbox.markOpened(letterID: id)
-        let next = mailbox.letters
-            .filter { $0.isUnread && $0.id != id }
-            .sorted { $0.seq < $1.seq }
-            .first
-        readingLetterID = next?.id
-    }
-
-    /// The user closed the reading window without explicitly finishing
-    /// the letter: the letter stays unread, the bottle stays.
+    /// The user closed the reading window — the ONLY reading-completion
+    /// entry (there is no put-away button anymore). Order matters:
+    /// 1. leave `.reading` FIRST so every re-entry path (including a
+    ///    repeated windowWillClose) is a no-op — this is what makes the
+    ///    close path reentrancy-free;
+    /// 2. THEN submit the local-first read (async server reconcile
+    ///    stays as-is);
+    /// 3. the mailbox publish drives the next step (unread > 0 stays a
+    ///    bottle; unread == 0 starts the reverse poof).
+    /// Never closes any window itself, never terminates anything.
     func readingWindowClosed() {
         guard visualState == .reading else { return }
+
+        let finishedID = readingLetterID
         readingLetterID = nil
-        if lastUnread == 0 {
-            // Everything was already put away (window closed right at
-            // the end): run the normal finish flow.
-            evaluate(now: nowProvider())
-        } else {
-            visualState = .bottleIdle
-            updateTimerIfNeeded()
+        visualState = .bottleIdle
+        updateTimerIfNeeded()
+
+        if let id = finishedID {
+            recentlyClosedID = id
+            recentlyClosedAt = nowProvider()
+            mailbox.markOpened(letterID: id)
         }
+
+        // Idempotent evaluate: drives the revert immediately when the
+        // read was already published, and stays inert otherwise (the
+        // mailbox subscription re-evaluates on the publish).
+        evaluate(now: nowProvider())
     }
 
     // MARK: - Evaluation
@@ -362,29 +378,31 @@ final class BottleVisualCoordinator: ObservableObject {
                 ? min(elapsed / openingDuration, 1)
                 : 1
             if openingProgress >= 1 {
-                readingLetterID = mailbox.letters
-                    .filter(\.isUnread)
+                let nextUnread = mailbox.letters
+                    .filter { $0.isUnread && $0.id != activeRecentExclusion(at: now) }
                     .sorted { $0.seq < $1.seq }
-                    .first?.id
-                visualState = .reading
-                updateTimerIfNeeded()
-                if let id = readingLetterID {
-                    onOpenReadingRequested?(id)
-                }
-            }
-        case .reading:
-            if unread == 0 {
-                // Last letter put away: finish (the window closes via
-                // onReadingFinished) and revert when the pet is free.
-                readingLetterID = nil
-                onReadingFinished?()
-                if busy {
+                    .first
+                guard let id = nextUnread?.id else {
+                    // Nothing left to read (everything was closed in a
+                    // previous session): fall back to the idle bottle —
+                    // the unread==0 rule drives the revert.
+                    readingLetterID = nil
                     visualState = .bottleIdle
                     updateTimerIfNeeded()
-                } else {
-                    beginMorph(direction: .toNormal, at: now)
+                    return
                 }
+                readingLetterID = id
+                visualState = .reading
+                updateTimerIfNeeded()
+                onOpenReadingRequested?(id)
             }
+        case .reading:
+            // The reading window close is the ONLY completion entry
+            // (`readingWindowClosed`). Nothing here may close the
+            // window, mark anything read, or terminate anything — the
+            // mailbox publish drives the revert via the .bottleIdle
+            // rule. This keeps the close path free of reentrancy.
+            break
         }
 
         // Publish the timeline + the hidden form step. The form only
@@ -393,6 +411,7 @@ final class BottleVisualCoordinator: ObservableObject {
         let timeline = min(max(rawProgress, 0), 1)
         morphProgress = timeline
         formProgress = BottlePoofTimeline.formProgress(at: timeline)
+        bottleFormActive = isBottleForm
         if !poofFired {
             // The poof sound fires when THIS direction's smoke first
             // appears: forward at poofPoint, reverse at smokeFadeEnd
@@ -506,19 +525,29 @@ final class BottleVisualCoordinator: ObservableObject {
 
     // MARK: - Test access
 
+    /// The letter just closed is excluded from the next tap until its
+    /// read is durably published (or the exclusion window passes) — a
+    /// fast close/re-open can never present the same letter twice.
+    private func activeRecentExclusion(at now: Date) -> String? {
+        guard let id = recentlyClosedID else { return nil }
+        if now.timeIntervalSince(recentlyClosedAt) > Self.recentlyClosedExclusion {
+            recentlyClosedID = nil
+            return nil
+        }
+        return id
+    }
+
     var isBottleForm: Bool {
         if visualState.isBottleForm { return true }
         // Suspended mid-morph still shows the frozen silhouette.
         return visualState == .suspended && rawProgress > 0
     }
 
+    /// The stable bottle is completely static per the acceptance
+    /// feedback: no floating sway, no idle bob — only the poof timeline
+    /// keeps its own jump/landing inertia.
     var swayEnabled: Bool {
-        switch visualState {
-        case .bottleIdle, .reading, .bottleOpening:
-            return !reduceMotion()
-        default:
-            return false
-        }
+        false
     }
 
     func snapshotForTesting() -> (

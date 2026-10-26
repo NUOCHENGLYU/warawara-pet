@@ -7,6 +7,9 @@ final class PetInteractionController {
     private var mouseDownPoint: NSPoint?
     private var grabAnchor: NSPoint = .zero
     private var isDragging = false
+    /// Bottle mode: the tap decision is deferred to mouse-up so a drag
+    /// (movement beyond the threshold) never opens the letter.
+    private var interceptOnRelease = false
 
     private var previousGlobalPoint: CGPoint = .zero
 
@@ -30,17 +33,24 @@ final class PetInteractionController {
     func mouseDown(at event: NSEvent) {
         mouseDownPoint = event.locationInWindow
         isDragging = false
+        interceptOnRelease = false
         previousGlobalPoint = NSEvent.mouseLocation
         if event.clickCount == 2 {
             // The first click already produced the normal squash; the
             // double-click opens the birthday letter instead of a
-            // second squash. In bottle form the first click opened the
-            // reading window — consume the double-click too.
+            // second squash. In bottle form the whole double-click is
+            // consumed — the birthday letter must not stack on top of
+            // the reading window.
             if clickInterceptor?() == true { return }
             onDoubleClick?()
             return
         }
-        if clickInterceptor?() == true { return }
+        if clickInterceptor?() == true {
+            // Bottle mode: record the press only. If this turns into a
+            // drag, no letter opens; the tap fires on mouse-up.
+            interceptOnRelease = true
+            return
+        }
         controller?.handleClick()
     }
 
@@ -53,6 +63,8 @@ final class PetInteractionController {
             let exceededY = abs(current.y - mouseDownPoint.y) > dragThreshold
             guard exceededX || exceededY else { return }
             isDragging = true
+            // Once a drag starts, a deferred bottle tap must not fire.
+            interceptOnRelease = false
             grabAnchor = current
             // grabAnchor is in view coordinates (the content view sits at
             // the window origin), matching PetMetrics' pet-space convention.
@@ -85,8 +97,16 @@ final class PetInteractionController {
 
     func mouseUp(at event: NSEvent) {
         defer { mouseDownPoint = nil }
-        guard isDragging else { return }
-        isDragging = false
-        controller?.handleDragEnded()
+        if isDragging {
+            isDragging = false
+            controller?.handleDragEnded()
+            return
+        }
+        if interceptOnRelease {
+            interceptOnRelease = false
+            // Press without drag: perform the bottle tap (open the
+            // letter / re-front the reading window).
+            _ = clickInterceptor?()
+        }
     }
 }

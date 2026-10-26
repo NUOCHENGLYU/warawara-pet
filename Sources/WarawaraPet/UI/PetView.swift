@@ -5,14 +5,9 @@ struct PetView: View {
     @ObservedObject var bottleVisualProvider: BottleVisualProvider
 
     @State private var bobbing = false
-    @State private var bottleSwaying = false
 
     private let bobAnimation = Animation
         .easeInOut(duration: 2.2)
-        .repeatForever(autoreverses: true)
-
-    private let bottleSwayAnimation = Animation
-        .easeInOut(duration: 4.2)
         .repeatForever(autoreverses: true)
 
     private let poseAnimation = Animation
@@ -58,10 +53,11 @@ struct PetView: View {
             .offset(y: -poofJump)
             .rotationEffect(.radians(poofWobble), anchor: .bottom)
             .offset(y: bobOffset)
-            .rotationEffect(.radians(bottleSwayAngle), anchor: .bottom)
-            .animation(bottleSwayAnimation, value: bottleSwaying)
 
-            if controller.state == .sleeping {
+            // The stable bottle never shows the sleep "Z" — the pet's
+            // sleep machinery is suspended while bottle-formed anyway;
+            // this gate also covers the transition edges.
+            if controller.state == .sleeping && !(visual?.isBottleForm ?? false) {
                 SleepIndicatorView()
             }
         }
@@ -69,7 +65,6 @@ struct PetView: View {
         .animation(bobAnimation, value: bobbing)
         .onAppear {
             bobbing = true
-            bottleSwaying = true
         }
     }
 
@@ -95,13 +90,6 @@ struct PetView: View {
     private var poofWobble: Double {
         guard let visual else { return 0 }
         return BottlePoofTimeline.landingWobble(t: visual.morphProgress)
-    }
-
-    /// Gentle floating tilt while the bottle waits (disabled under
-    /// Reduce Motion — the morph itself still plays).
-    private var bottleSwayAngle: Double {
-        guard visual?.swayEnabled == true else { return 0 }
-        return bottleSwaying ? 0.021 : -0.021
     }
 
     private var petGroup: some View {
@@ -134,7 +122,11 @@ struct PetView: View {
     }
 
     private var bobOffset: CGFloat {
-        controller.state == .idle ? (bobbing ? -6 : 6) : 0
+        // The bottle is completely static: no idle bob while any part
+        // of the bottle form (or its frozen silhouette) is visible —
+        // the poof timeline's own jump/landing is the only motion.
+        guard !(visual?.isBottleForm ?? false) else { return 0 }
+        return controller.state == .idle ? (bobbing ? -6 : 6) : 0
     }
 
     /// Continuous expression inputs for the layered character system:

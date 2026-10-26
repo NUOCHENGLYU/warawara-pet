@@ -74,12 +74,14 @@ final class BottleReadingWindowRenderTests: XCTestCase {
         XCTAssertFalse(coordinator.letters.isEmpty, "the test letter must publish")
 
         let cgImage = try renderWindowSnapshot(
-            BottleReadingView(coordinator: coordinator, visual: visual),
-            size: CGSize(width: 560, height: 640)
+            BottleReadingPaperView(coordinator: coordinator, visual: visual, onClose: {}),
+            size: CGSize(width: 520, height: 640)
         )
         let rep = NSBitmapImageRep(cgImage: cgImage)
 
-        // Coarse pixel classification over the real render.
+        // Coarse pixel classification over the real render. The paper
+        // fills the whole window; the text sits inside the painted
+        // margins (~72 pt on each side).
         var paperPixels = 0
         var inkPixels = 0
         var prohibitionPixels = 0
@@ -87,15 +89,13 @@ final class BottleReadingWindowRenderTests: XCTestCase {
         let width = rep.pixelsWide
         let height = rep.pixelsHigh
         for y in stride(from: 0, to: height, by: 4) {
-            for x in stride(from: 0, to: width, by: 4) {
+            for x in stride(from: 60, to: width - 60, by: 4) {
                 guard let color = rep.colorAt(x: x, y: y) else { continue }
                 let r = color.redComponent
                 let g = color.greenComponent
                 let b = color.blueComponent
                 let a = color.alphaComponent
-                // The reading pane starts after the collection column.
-                let inPaperPane = x > 260 && a > 0.5
-                if inPaperPane {
+                if a > 0.5 {
                     if r > 0.85 && g > 0.78 && b > 0.60 && b < 0.98 {
                         paperPixels += 1
                     }
@@ -113,7 +113,7 @@ final class BottleReadingWindowRenderTests: XCTestCase {
             }
         }
 
-        XCTAssertGreaterThan(paperPixels, 800, "the parchment background must fill the reading pane")
+        XCTAssertGreaterThan(paperPixels, 1500, "the parchment must fill the paper window")
         XCTAssertGreaterThan(inkPixels, 60, "the letter body text must render in ink on the paper")
         XCTAssertGreaterThan(coloredTextPixels, 15, "the body glyphs (incl. Emoji) must render")
         XCTAssertLessThan(prohibitionPixels, 120,
