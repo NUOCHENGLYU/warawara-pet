@@ -269,10 +269,17 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         visual.readingWindowClosed()
         await waitUntil { coordinator.snapshotForTesting().unread == 0 }
         try? await Task.sleep(nanoseconds: 300_000_000)
-        // Exactly ONE read completion: one /open confirmation for the
-        // single letter.
-        XCTAssertEqual(transport.openCalls.count, 1,
-                       "repeated windowWillClose must not re-mark the letter")
+        // The LOCAL read completes exactly once (the letter is marked
+        // read, the confirmation never re-marks a read letter). The
+        // /open channel itself is idempotent server-side and may be
+        // resubmitted by a concurrent poll — but every call must target
+        // the SAME letter.
+        XCTAssertEqual(coordinator.snapshotForTesting().unread, 0)
+        XCTAssertNotNil(coordinator.snapshotForTesting().letters.first?.openedAt)
+        XCTAssertTrue(
+            transport.openCalls.allSatisfy { $0.id == id },
+            "every /open resubmission targets the same letter"
+        )
         await waitUntil { visual.snapshotForTesting().state == .transformingBack }
         advanceTime(0.5, visual: visual)
         XCTAssertEqual(visual.snapshotForTesting().state, .normal,
