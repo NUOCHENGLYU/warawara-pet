@@ -275,6 +275,9 @@ final class BottleVisualCoordinator: ObservableObject {
         case .normal:
             if unread > 0 {
                 if busy {
+                    // Delayed start: remember where the suspension came
+                    // from so the resume path restarts the morph.
+                    suspendedFrom = .normal
                     visualState = .suspended
                 } else {
                     beginMorph(direction: .toBottle, at: now)
@@ -282,15 +285,23 @@ final class BottleVisualCoordinator: ObservableObject {
             }
         case .suspended:
             if busy { break }
-            if unread > 0 {
-                if suspendedFrom == .bottleOpening {
-                    resumeOpening(at: now)
+            if suspendedFrom == .bottleOpening {
+                resumeOpening(at: now)
+            } else if suspendedFrom == .normal {
+                // Delayed start (busy blocked the morph before it
+                // began): begin only if mail is still waiting.
+                if unread > 0 {
+                    beginMorph(direction: .toBottle, at: now)
                 } else {
-                    resumeMorph(at: now)
+                    visualState = .normal
+                    updateTimerIfNeeded()
                 }
             } else {
-                visualState = .normal
-                updateTimerIfNeeded()
+                // A frozen in-flight morph (toBottle or back): resume it
+                // REGARDLESS of the unread count — the in-flight cases
+                // handle a mid-freeze unread change themselves (a read
+                // mid-freeze reverses, new mail mid-reverse turns back).
+                resumeMorph(at: now)
             }
         case .transformingToBottle:
             if busy {
