@@ -265,7 +265,7 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         // standing bottle), NO second morph happens.
         deliverSecond = true
         await waitUntil { coordinator.snapshotForTesting().letters.count == 2 }
-        await waitUntil { presentedBatches.count == 2 }
+        await waitUntil { self.presentedBatches.count == 2 }
         XCTAssertEqual(visual.snapshotForTesting().state, .reading)
         XCTAssertEqual(Set(presentedBatches[1]), Set([id2]))
         await waitUntil { coordinator.snapshotForTesting().deliveryQueue.isEmpty }
