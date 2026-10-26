@@ -1,50 +1,53 @@
-# Phase 8C — 本体变身漂流瓶（正式美术接入 v3）
+# Phase 8C — 本体变身漂流瓶（跳跃烟雾变身 · 正式版）
 
-Branch `phase8/bottle-mail` · 有未读信时 Warawara 本体连续变成漂流瓶（普通、非拟人化：无眼睛嘴巴表情），读完并收好全部信件后连续变回。
+Branch `phase8/bottle-mail` · 有未读信时 Warawara 本体以「起跳 → 烟雾“嘭” → 烟雾中完成变身 → 漂流瓶轻轻落地」连续变成漂流瓶；读完并收好全部信件后反向（瓶子跃起 → 烟雾中换回 → 落地）变回。
 
-## 美术
+## 动画时间线（1.35s，纯函数驱动，正反向同一参数）
 
-正式采用 `art_handoff/Warawara_BottleMail_Phase8C_Ghibli_Minimal_v3`（v1/v2 全部弃用）：
-- 素材随包分发：`Resources/BottleMail/`（SwiftPM `.copy`，打包后经 `Bundle.module` / main bundle 解析，`--verify-bottle-art` 在打包 App 内验证）。
-- `BottleMailArtStore`：加载 + 缺失诊断（`ART_MISSING` 事件）+ 透明内容测量；素材缺失时**回退到程序化占位瓶**，桌宠不会消失。
-- 状态映射：未读/待读 → `bottle_unread.png`；开封/阅读 → `bottle_opening.png`；反向变身 → `bottle_idle.png` 在回收过程中交叉过渡（信已收好=空瓶）；阅读窗口信纸 → `letter_paper_blank.png`（文字由 SwiftUI 动态渲染，不烘焙）；`scroll_sealed.png` 用于阅读窗口的信封徽标。
-- `bottle_opening.png` 为整张状态参考图：开封动画 = 同轮廓下 unread→opening 的短交叉过渡 + 整体轻微下沉复位，**不在瓶上叠加卷信**（避免双卷信/双瓶塞）。若未来需要卷信飞出动画，需先对整图做内容感知拆分——记为已知限制。
+| 时间 | 动作 |
+|---|---|
+| 0–0.15s | 压扁蓄力（1.07x 宽 × 0.88y 高） |
+| 0.15–0.43s | 向上跳跃 30pt（Reduce Motion 14pt），滞空微拉伸 |
+| 0.43s | 轻柔“嘭”音效（`soft_poof.wav`，音量 0.25，尊重系统静音与 `warawarapet.sound.enabled`），烟雾迅速出现 |
+| 0.43–0.57s | 烟雾膨胀至**完全遮挡**（核心烟层不透明区覆盖两个造型的外轮廓并集——有机器校验） |
+| 0.57s | 烟雾后切换素材（Warawara ↔ `bottle_unread.png`），用户不可见 |
+| 0.57–1.03s | 烟雾扩散淡去，瓶子从烟云中下降 |
+| 1.03–1.35s | 瓶子柔和落地、轻微惯性晃动、稳定 |
 
-## 连续变身（非两张 PNG 硬切/淡入淡出）
+反向：瓶子小幅跃起 → 烟雾遮挡时换回 Warawara → 落地，同一 `BottlePoofTimeline` 函数反向求值，天然镜像。
 
-- 单一可逆参数 `morphProgress`（时间 + smoothstep），状态机与 8C 一致（`normal/transformingToBottle/bottleIdle/bottleOpening/reading/transformingBack/suspended`）。
-- `BottleMorphGeometry` 揭示几何：瓶子始终被「底部锚定的圆角矩形揭示区」遮罩，其宽/高/圆角半径/内部图像缩放随进度插值——从 Warawara 身体轮廓（胶囊=身体剪影，起点尺寸取自真实 Rig 体宽）**生长**为完整瓶形；瓶塞随顶部生长出现。
-- 表达系统配合（`bottleMorphProgress` 混入 mapper）：身体先收缩再拉伸；`bodyOpacity` 把身体栅格交接给瓶绘；**`faceOpacity` 让眼睛嘴巴在变形中溶解**——瓶子全程无表情；反向完全相同参数反向播放。
-- 时长 1.5s（1.2–1.8s 范围内）；冲突（睡眠/拖拽/生日/Meteor/群体/生日信）延迟或冻结，恢复后无缝续接；尊重「减少动态效果」（关闭漂浮倾斜，变身保留）。
+## 关键实现
 
-## 邮件语义（沿用并保持）
-
-- `已接收/已呈现/已读完` 分离：投递 ACK ≠ 已读；只有「收好这封信」完成阅读（本地优先持久化，服务器 `/open` 异步幂等对账，断网不卡视觉）；多封只变一次、逐封收好；阅读中来新信追加队列、不二次变身；关窗不读完保持未读；重启恢复投递/阅读状态。
-- 阅读窗口：信纸背景 + 完整正文（中/英/Emoji/换行/滚动/可选）、逐封浏览、收藏重看、撤销授权离线可读。
+- `BottlePoofTimeline`（纯函数）：跳跃弧线（蓄力/上升/峰值/隐藏下落切换点/缓降/落地晃动）、压扁-拉伸-落地挤压曲线、核心烟雾透明度/缩放、装饰层扩散、落地尘。**统一时间参数 `t ∈ 0...1`，正反向同式**，无两张 PNG 轮播。
+- **遮挡不变式**：`occludedRect(t) ⊇ envelopeRect(t)`（烟雾不透明区覆盖 Warawara 与瓶子外轮廓的并集，含 Reduce Motion 两种设置），由 `BottlePoofTimelineTests.testOcclusionCoversBothSilhouettesAtTheSwitch` 机器校验；底层素材只在 t=0.57 切换（`formProgress` 阶跃），面部/身体交接为**瞬时通道**（不做平滑淡入淡出，杜绝半透明重叠）。
+- 烟雾分层：`smoke_core`（不透明遮挡主团）+ `smoke_soft`/`smoke_small`/`smoke_wisps`（扩散装饰）+ `landing_dust`（落地尘），连续缩放/位移/透明度；**全部在现有透明桌宠窗口内渲染**，无独立特效窗口；窗口包络经测试保证瓶颈不越界、落地位置与身体基线一致（切换瞬间的 18pt 高度差发生在满烟雾之后，不可见）。
+- 音效：`BottlePoofSound` 每段变身仅触发一次（`onPoofMoment` 回调，正反向各一次），低音量、系统静音自动生效、可关（`warawarapet.sound.enabled`）。
+- **邮件语义全部保留**：多封只变一次、阅读中来新信入队不重播变身、投递 ACK ≠ 已读、本地优先离线可读、联网对账、重启恢复；生日/Meteor/拖拽/睡眠冲突期间延迟或冻结。
+- Reduce Motion：跳跃 30→14pt、装饰烟雾扩散缩小；核心遮挡烟不变（仍保证无突变切换）。
+- 回退链：完整素材 → poof 模式；缺烟雾包 → 几何揭示回退（原 BottleMorphGeometry，仅内部回退）；缺 v3 美术 → 程序化占位瓶。缺音效仅静音跳过。
 
 ## 测试
 
-- 新增：`BottleMailArtStoreTests`（素材加载/1024 尺寸/内容测量/缺失回退/art-vs-procedural 解析）、`BottleMorphGeometryTests`（揭示几何端点/单调/遮罩边界/窗口包络）、`BottleExpressionBlendTests`（面部溶解、身体交接、先压后伸、睡眠下同样无表情、进度连续）、`BottlePreviewGeneratorTests`（真实素材连续变形 **GIF** + 状态单帧 + 阅读窗口）。
-- 更新：`BottleMorphMathTests` 窗口包络断言（art + procedural 双路径）。
-- 保留全绿：`BottleVisualCoordinatorTests`（状态机/ACK/离线/重启/冲突）与 8B 全部回归。
-- CI：打包 App 新增 `--verify-bottle-art` 校验；预览产物 `WarawaraPet-Bottle-Preview`（含 `200-morph.gif`）。
+- 新增 `BottlePoofTimelineTests`：相位边界、跳跃弧线（26–32pt/Reduce 14pt）、正反向切换点、**遮挡完整性机器校验**、包络不越窗、落地晃动衰减、烟雾可见窗口。
+- 新增视觉测试：`testPoofMomentFiresExactlyOncePerTransition`（正反向各一次、新信不重播）、`testFormProgressStepsOnlyAtTheSmokeCoveredSwitch`。
+- 更新：`BottleExpressionBlendTests`（阶跃语义 + 动画器瞬时交接）、`BottleMailArtStoreTests`（11 项素材、poof/reveal/procedural 三级回退解析）、视觉测试 formProgress 断言。
+- 预览：`200-poof-forward.gif` / `201-poof-reverse.gif`（各 30 帧真实连续渲染）+ `210-poof-occlusion.png`（满烟雾遮挡瞬间）+ `211-poof-landing.png` + 阅读窗口。
+- 打包 App 内 `--verify-bottle-art` 校验全部 11 项素材（5 张 v3 + 4 张烟雾 + 落地尘 + wav）。
 
 ## Mac 真机验收步骤
 
-1. 安装最新 zip；右键宠物 → Bottle Mail → 绑定设备；发信网页发一封信。
-2. 桌宠空闲时变瓶（~1.5s）：身体先收缩→拉伸生长出瓶身，眼睛嘴巴溶解，瓶塞随顶部出现，全程无跳帧、无脸残留。
-3. 单击瓶身：unread→opening 短过渡 + 轻微下沉，阅读窗口弹出（信纸背景 + 正文）。
-4. 「收好这封信」→ 变回 Warawara（反向同参数，回收过程中空瓶替换带信瓶）。
-5. 多封：只变一次、逐封收好；中途关窗→保持瓶子未读；阅读中来新信→队列追加。
-6. 冲突：拖拽冻结、睡眠不抢醒、`--replay-birthday`/`--replay-meteor` 期间延迟。
-7. 断网读完→本地完成并变回，联网自动对账（`--bottle-diagnose`）。
-8. 开启「减少动态效果」→ 漂浮消失、变身保留。
-9. 多显示器/多分辨率：瓶颈不被窗口顶部裁切。
-10. 菜单栏退出、生日双击、右键邮箱、拖拽、睡眠全部照旧。
+1. 安装最新 zip；右键 → Bottle Mail 绑定设备；发一封信。
+2. 观察变身：压扁蓄力 → 跳起 → “嘭”一声轻响 + 白色烟雾迅速充满宠物区域 → 完全遮挡的瞬间切换（看不到瓶子与本体重叠）→ 烟雾散去，瓶子缓缓降下、轻轻落地、微晃后稳定。全程约 1.35s。
+3. 关键检查：烟雾最浓时是否完全盖住两个造型（无半透明重叠/无轮廓闪烁）；消散后瓶子位置与原来桌宠位置一致、无突然跳位；瓶颈/瓶塞不被窗口顶部裁切（多显示器各试）。
+4. 读完并收好最后一封信：反向变身（小跃起 + 烟雾换回 + 落地），音效再响一次。
+5. 多封来信只变一次；阅读中来新信不重播；拖拽/睡眠/生日/Meteor 冲突期间延迟或冻结。
+6. 系统「减少动态效果」：跳跃变小、烟雾扩散收敛，仍完整遮挡切换。
+7. 关闭音效（`defaults write …` 或后续偏好开关）：无声但动画完整。
+8. 断网读信、重启恢复、右键邮箱、菜单栏退出等原有行为回归。
 
 ## 已知问题 / 未完成
 
-- 开封动画目前为同轮廓状态过渡，未做卷信飞出瓶口至阅读窗口的跨窗口动画（`bottle_opening.png` 自带卷信，叠加 `scroll_sealed.png` 会重影；需内容感知拆分——待 ChatGPT 美术提供分层或授权拆分）。
-- 变身前后的瓶绘锚定基于 v3 画布内容测量与固定包络常量，真机多分辨率下请以观感为准微调 `BottleMetrics`。
-- 程序化占位瓶仅在素材缺失时出现（回退路径，非正式视觉）。
-- 真机观感（时长/幅度/饱和）待最终调参。
+- 开封动画（unread→opening 同轮廓过渡）与卷信飞出瓶口动画维持此前限制（`bottle_opening.png` 自带卷信，未做内容感知拆分）。
+- 烟雾为固定遮挡尺寸（核心烟层充满宠物窗口），观感如需更“云团状”可再调 `BottlePoofTimeline` 常数与装饰层参数（真机调参）。
+- 程序化占位与几何揭示仅作缺素材回退，非正式视觉。
+- 音效音量/时机以真机听感为准微调（当前 0.25 / 0.43s）。

@@ -33,18 +33,30 @@ struct PetView: View {
 
     var body: some View {
         ZStack {
-            // The whole bottle reads as ONE body: the bottle art and the
-            // character share the bob and the gentle floating tilt.
+            // The whole transition reads as ONE body: the character, the
+            // bottle form and the smoke share the hop, squash and
+            // landing wobble driven by the poof timeline.
             ZStack {
                 petGroup
-                // The bottle form renders IN FRONT of the fading rig:
-                // the v3 art (or the procedural fallback) grows out of
-                // the body silhouette while the face dissolves.
+                // The bottle form renders IN FRONT of the character —
+                // only AFTER the hidden swap (formProgress == 1), so
+                // the two silhouettes never visibly overlap.
                 if let visual, visual.isBottleForm {
                     BottleArtOverlayView(visual: visual, store: .shared)
                         .scaleEffect(x: stateScaleX, y: stateScaleY, anchor: .bottom)
                 }
+                // The occlusion smoke sits ON TOP of both forms.
+                if let visual, BottlePoofTimeline.smokeVisible(t: visual.morphProgress) {
+                    BottlePoofSmokeView(
+                        timeline: visual.morphProgress,
+                        reduceMotion: visual.reduceMotion(),
+                        store: .shared
+                    )
+                }
             }
+            .scaleEffect(x: stateScaleX * poofSquash.x, y: stateScaleY * poofSquash.y, anchor: .bottom)
+            .offset(y: -poofJump)
+            .rotationEffect(.radians(poofWobble), anchor: .bottom)
             .offset(y: bobOffset)
             .rotationEffect(.radians(bottleSwayAngle), anchor: .bottom)
             .animation(bottleSwayAnimation, value: bottleSwaying)
@@ -59,6 +71,30 @@ struct PetView: View {
             bobbing = true
             bottleSwaying = true
         }
+    }
+
+    /// The poof transition hop (0 outside the transition timeline).
+    private var poofJump: CGFloat {
+        guard let visual else { return 0 }
+        return BottlePoofTimeline.jumpOffsetY(
+            t: visual.morphProgress,
+            reduceMotion: visual.reduceMotion()
+        )
+    }
+
+    /// Anticipation -> flight stretch -> landing squash (poof timeline).
+    private var poofSquash: (x: CGFloat, y: CGFloat) {
+        guard let visual else { return (1, 1) }
+        return (
+            BottlePoofTimeline.squashX(t: visual.morphProgress),
+            BottlePoofTimeline.squashY(t: visual.morphProgress)
+        )
+    }
+
+    /// Tiny inertial tilt after the landing.
+    private var poofWobble: Double {
+        guard let visual else { return 0 }
+        return BottlePoofTimeline.landingWobble(t: visual.morphProgress)
     }
 
     /// Gentle floating tilt while the bottle waits (disabled under
@@ -105,11 +141,13 @@ struct PetView: View {
     /// event attention (birthday) overrides the mouse-driven gaze when
     /// active, so the pet can visibly "look at" something specific.
     private var expressionInputs: WarawaraExpressionInputs {
-        let morph: CGFloat
+        // The bottle form is a hidden step (0/1) — the face/body
+        // handover happens behind full occlusion smoke.
+        let form: CGFloat
         if let visual, visual.isBottleForm {
-            morph = CGFloat(visual.morphProgress)
+            form = CGFloat(visual.formProgress)
         } else {
-            morph = 0
+            form = 0
         }
         return WarawaraExpressionInputs(
             state: controller.state,
@@ -118,7 +156,7 @@ struct PetView: View {
             hopProgress: controller.hopProgress,
             floatProgress: controller.floatProgress,
             wishingEyes: controller.wishing,
-            bottleMorphProgress: morph
+            bottleMorphProgress: form
         )
     }
 

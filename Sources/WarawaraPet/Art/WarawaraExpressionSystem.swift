@@ -173,9 +173,10 @@ enum WarawaraExpressionMapper {
             p.mouthOpenAmount = 0.12
         }
 
-        // Phase 8C bottle morph: blend the morph choreography over the
-        // state targets. The bottle is non-anthropomorphic — the face
-        // (eyes + mouth) dissolves and stays hidden in bottle form.
+        // Phase 8C bottle form: the input is the FORM step (0 =
+        // Warawara, 1 = bottle). The swap happens behind full occlusion
+        // smoke, so the handover is an instant, hidden flip — the
+        // bottle is strictly non-anthropomorphic (no face).
         let morph = clamp(inputs.bottleMorphProgress, 0, 1)
         if morph > 0 {
             p = bottleBlendParameters(base: p, progress: morph)
@@ -191,30 +192,22 @@ enum WarawaraExpressionMapper {
         return p.clamped()
     }
 
-    /// Blends the bottle morph over any base parameters. The bottle is
-    /// strictly non-anthropomorphic: the body raster and the FACE both
-    /// hand over to the bottle art (faceOpacity -> 0), while the body
-    /// choreography compresses first and stretches into the bottle
-    /// silhouette.
+    /// Blends the bottle form over any base parameters. STEP semantics:
+    /// the underlying asset swap is hidden behind full occlusion smoke,
+    /// so the face/body handover flips instantly at the midpoint — no
+    /// semi-transparent overlap is ever rendered. The jump/squash
+    /// choreography lives in BottlePoofTimeline (view layer), not here.
     static func bottleBlendParameters(
         base: WarawaraPerformanceParameters,
         progress: CGFloat
     ) -> WarawaraPerformanceParameters {
         let p = clamp(progress, 0, 1)
         var r = base
-        let compress = BottleMorphGeometry.compressAmount(progress: Double(p))
-        let stretch = BottleMorphGeometry.stretchAmount(progress: Double(p))
-        r.bodySquashX = base.bodySquashX * (1 + 0.05 * compress) * (1 - 0.08 * stretch)
-        r.bodySquashY = base.bodySquashY * (1 - 0.08 * compress) * (1 + 0.06 * stretch)
-        r.bodyTilt = mix(base.bodyTilt, 0, p)
-        // The silhouette hands over to the bottle; the face dissolves.
-        r.bodyOpacity = BottleMorphGeometry.bodyHandoverOpacity(progress: Double(p))
-        r.faceOpacity = BottleMorphGeometry.faceOpacity(progress: Double(p))
+        if p >= 0.5 {
+            r.bodyOpacity = 0
+            r.faceOpacity = 0
+        }
         return r
-    }
-
-    private static func mix(_ a: CGFloat, _ b: CGFloat, _ p: CGFloat) -> CGFloat {
-        a + (b - a) * clamp(p, 0, 1)
     }
 
     /// Mouth openness across a hop: closed at takeoff/landing, open mid-flight.
@@ -312,12 +305,6 @@ struct WarawaraParameterAnimator {
         parameters.bodySquashY = Self.approach(
             parameters.bodySquashY, t.bodySquashY, dt: dtF, tau: tuning.bodyResponse
         )
-        parameters.bodyOpacity = Self.approach(
-            parameters.bodyOpacity, t.bodyOpacity, dt: dtF, tau: tuning.bodyResponse
-        )
-        parameters.faceOpacity = Self.approach(
-            parameters.faceOpacity, t.faceOpacity, dt: dtF, tau: tuning.bodyResponse
-        )
         parameters.bodyTilt = Self.approach(parameters.bodyTilt, t.bodyTilt, dt: dtF, tau: tuning.bodyResponse)
 
         // Press uses asymmetric response: fast squash on press, slower
@@ -330,6 +317,13 @@ struct WarawaraParameterAnimator {
         // Blink is a fast transient: pass through unsmoothed so a full
         // blink always reaches a visibly closed eye state.
         parameters.blinkAmount = t.blinkAmount
+
+        // Body/face handover is an INSTANT pass-through channel: the
+        // asset swap is hidden behind full occlusion smoke, so a
+        // smoothed fade would leak a semi-transparent overlap as the
+        // smoke clears. No smoothing here, exactly like blink.
+        parameters.bodyOpacity = t.bodyOpacity
+        parameters.faceOpacity = t.faceOpacity
 
         // Mouth style: adopt the target style but let the renderer
         // crossfade the images; the style value itself eases through the

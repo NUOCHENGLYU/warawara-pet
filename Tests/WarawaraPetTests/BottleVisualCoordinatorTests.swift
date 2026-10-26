@@ -118,7 +118,7 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         // Morph completes -> bottleIdle + the delivery is acknowledged.
         advanceTime(0.5, visual: visual)
         XCTAssertEqual(visual.snapshotForTesting().state, .bottleIdle)
-        XCTAssertEqual(visual.snapshotForTesting().easedProgress, 1)
+        XCTAssertEqual(visual.snapshotForTesting().formProgress, 1)
         XCTAssertEqual(Set(presentedBatches.flatMap { $0 }), Set([id]))
         await waitUntil { coordinator.snapshotForTesting().deliveryQueue.isEmpty }
         XCTAssertEqual(makeStore().snapshot().letters.first?.delivered, true,
@@ -143,7 +143,7 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         XCTAssertEqual(readingFinishedCount, 1)
         advanceTime(0.5, visual: visual)
         XCTAssertEqual(visual.snapshotForTesting().state, .normal)
-        XCTAssertEqual(visual.snapshotForTesting().easedProgress, 0)
+        XCTAssertEqual(visual.snapshotForTesting().formProgress, 0)
         await waitUntil {
             coordinator.snapshotForTesting().letters.first?.openedAt == "2026-10-17T01:00:00Z"
         }
@@ -272,7 +272,7 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         XCTAssertEqual(visual.snapshotForTesting().state, .reading)
         XCTAssertEqual(Set(presentedBatches[1]), Set([id2]))
         await waitUntil { coordinator.snapshotForTesting().deliveryQueue.isEmpty }
-        XCTAssertEqual(visual.snapshotForTesting().easedProgress, 1)
+        XCTAssertEqual(visual.snapshotForTesting().formProgress, 1)
     }
 
     // MARK: - Busy gating
@@ -346,6 +346,77 @@ final class BottleVisualCoordinatorTests: XCTestCase {
     }
 
     // MARK: - Restart + offline
+
+    func testPoofMomentFiresExactlyOncePerTransition() async throws {
+        let (coordinator, transport, visual) = makeHarness()
+        transport.onActivate = { _, _ in
+            BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
+        }
+        let id = UUID().uuidString
+        transport.onFetch = { after, _, _ in
+            after == 0
+                ? BottleMailPage(letters: [self.remote(1, id: id)], nextAfter: 1)
+                : BottleMailPage(letters: [], nextAfter: after)
+        }
+        transport.onOpen = { _, _ in "2026-10-17T01:00:00Z" }
+        var poofCount = 0
+        visual.onPoofMoment = { poofCount += 1 }
+        visual.start(usingTimer: false)
+        try await coordinator.activate(code: "C", label: "Mac")
+
+        await waitUntil { coordinator.snapshotForTesting().letters.count == 1 }
+        await waitUntil { visual.snapshotForTesting().state == .transformingToBottle }
+        // Cross the poof instant (0.318 of the timeline).
+        advanceTime(0.15, visual: visual)
+        XCTAssertEqual(poofCount, 1, "the poof fires once on the way to the bottle")
+        // Completing the transition never re-fires it.
+        advanceTime(0.5, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .bottleIdle)
+        XCTAssertEqual(poofCount, 1)
+        // New mail while already a bottle must NOT re-play the poof.
+        XCTAssertEqual(poofCount, 1)
+
+        // Reverse: put away the last letter, the poof fires once more.
+        XCTAssertTrue(visual.handleBottleTap())
+        advanceTime(0.3, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .reading)
+        visual.letterPutAway(id: id)
+        await waitUntil { coordinator.snapshotForTesting().unread == 0 }
+        await waitUntil { visual.snapshotForTesting().state == .transformingBack }
+        advanceTime(0.5, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .normal)
+        XCTAssertEqual(poofCount, 2, "the reverse transition fires exactly one poof")
+    }
+
+    func testFormProgressStepsOnlyAtTheSmokeCoveredSwitch() async throws {
+        let (coordinator, transport, visual) = makeHarness()
+        transport.onActivate = { _, _ in
+            BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
+        }
+        let id = UUID().uuidString
+        transport.onFetch = { after, _, _ in
+            after == 0
+                ? BottleMailPage(letters: [self.remote(1, id: id)], nextAfter: 1)
+                : BottleMailPage(letters: [], nextAfter: after)
+        }
+        transport.onOpen = { _, _ in "2026-10-17T01:00:00Z" }
+        visual.start(usingTimer: false)
+        try await coordinator.activate(code: "C", label: "Mac")
+
+        await waitUntil { coordinator.snapshotForTesting().letters.count == 1 }
+        await waitUntil { visual.snapshotForTesting().state == .transformingToBottle }
+        // Before the switch: still the Warawara form.
+        advanceTime(0.1, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().formProgress, 0)
+        // Cross the switch: the form flips — and the timeline guarantees
+        // the core smoke is fully opaque exactly there.
+        advanceTime(0.1, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().formProgress, 1)
+        XCTAssertEqual(
+            BottlePoofTimeline.coreSmokeOpacity(t: BottlePoofTimeline.switchPoint), 1,
+            accuracy: 0.001
+        )
+    }
 
     func testRestartWithUnreadLettersMorphsWithoutRedelivery() async throws {
         // A mailbox with a delivered-but-unread letter (the app was

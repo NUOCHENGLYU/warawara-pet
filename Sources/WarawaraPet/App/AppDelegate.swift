@@ -217,6 +217,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         visual.onReadingFinished = { [weak readingWindow] in
             readingWindow?.closeReadingWindow()
         }
+        // The poof sound plays exactly once per transition (fired by
+        // the visual coordinator at the smoke instant).
+        visual.onPoofMoment = {
+            BottlePoofSound.shared.play()
+        }
         windowController.bottleClickHandler = { [weak visual] in
             visual?.handleBottleTap() ?? false
         }

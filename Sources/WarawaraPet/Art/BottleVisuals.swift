@@ -209,25 +209,33 @@ struct BottleArtStateView: View {
     }
 }
 
-/// Chooses art vs procedural placeholder (testable without SwiftUI).
-enum BottleVisualContent {
-    case art
+/// Chooses the presentation mode (testable without SwiftUI):
+/// - `.poofArt`: full v3 art + poof smoke — the formal transition
+///   (hop -> smoke -> hidden swap -> landing);
+/// - `.revealArt`: v3 art without smoke — the geometric-reveal
+///   fallback (never used when the poof pack is present);
+/// - `.procedural`: procedural placeholder when the v3 art is missing.
+enum BottleVisualContent: Equatable {
+    case poofArt
+    case revealArt
     case procedural
 
     static func resolve(store: BottleMailArtStore) -> BottleVisualContent {
-        store.hasBottleArt ? .art : .procedural
+        guard store.hasBottleArt else { return .procedural }
+        return store.hasPoofAssets ? .poofArt : .revealArt
     }
 }
 
 /// The complete bottle presentation inside the pet window, driven by
-/// the visual coordinator. Falls back to the procedural placeholder
-/// when the v3 art is missing — the pet never disappears.
+/// the visual coordinator. The formal path (poof) only shows the
+/// bottle once the hidden swap has happened; the geometric reveal and
+/// the procedural placeholder remain as internal fallbacks.
 struct BottleArtOverlayView: View {
     @ObservedObject var visual: BottleVisualCoordinator
     let store: BottleMailArtStore
 
-    /// The rig's actual body width in points (the reveal starts at the
-    /// body silhouette, not a hardcoded blob).
+    /// The rig's actual body width in points (the reveal fallback
+    /// starts at the body silhouette, not a hardcoded blob).
     static func rigBodyWidth() -> CGFloat {
         guard let rig = WarawaraRigLoader.shared.rig,
               let size = WarawaraExpressionDriver.renderSize(
@@ -241,8 +249,10 @@ struct BottleArtOverlayView: View {
     var body: some View {
         ZStack {
             switch BottleVisualContent.resolve(store: store) {
-            case .art:
-                artComposition
+            case .poofArt:
+                poofArtComposition
+            case .revealArt:
+                revealArtComposition
             case .procedural:
                 proceduralComposition
             }
@@ -254,10 +264,50 @@ struct BottleArtOverlayView: View {
         )
     }
 
-    // MARK: Art composition (v3)
+    // MARK: Poof composition (formal)
 
     @ViewBuilder
-    private var artComposition: some View {
+    private var poofArtComposition: some View {
+        // Only visible AFTER the hidden swap — never overlapping the
+        // Warawara silhouette.
+        if visual.formProgress >= 1 {
+            switch visual.visualState {
+            case .normal:
+                EmptyView()
+            case .transformingToBottle, .bottleIdle, .suspended:
+                if let unread = store.bottleUnread {
+                    BottlePoofArtView(image: unread)
+                }
+            case .bottleOpening:
+                if let unread = store.bottleUnread, let opening = store.bottleOpening {
+                    let blend = BottleMorphGeometry.openingBlend(openingProgress: visual.openingProgress)
+                    BottlePoofArtView(image: unread)
+                        .opacity(1 - blend)
+                    BottlePoofArtView(image: opening)
+                        .opacity(blend)
+                }
+            case .reading:
+                if let opening = store.bottleOpening {
+                    BottlePoofArtView(image: opening)
+                }
+            case .transformingBack:
+                if let unread = store.bottleUnread, let idle = store.bottleIdle {
+                    let blend = BottleMorphGeometry.revertBlend(progress: visual.morphProgress)
+                    BottlePoofArtView(image: unread)
+                        .opacity(1 - blend)
+                    BottlePoofArtView(image: idle)
+                        .opacity(blend)
+                } else if let idle = store.bottleIdle {
+                    BottlePoofArtView(image: idle)
+                }
+            }
+        }
+    }
+
+    // MARK: Geometric reveal (fallback when the poof pack is missing)
+
+    @ViewBuilder
+    private var revealArtComposition: some View {
         let progress = visual.morphProgress
         let blobWidth = Self.rigBodyWidth()
         switch visual.visualState {

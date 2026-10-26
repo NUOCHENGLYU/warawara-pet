@@ -56,15 +56,42 @@ final class BottleMailArtStoreTests: XCTestCase {
         store.baseURLOverride = emptyDir
         let state = store.verifyAllRequiredAssets()
         XCTAssertFalse(state.ok)
-        XCTAssertEqual(store.missingFileNames.count, BottleMailArtStore.requiredFileNames.count)
+        XCTAssertEqual(store.missingFileNames.count,
+                       BottleMailArtStore.requiredFileNames.count + BottleMailArtStore.poofFileNames.count)
         XCTAssertNil(store.bottleUnread)
         XCTAssertFalse(store.hasBottleArt)
+        XCTAssertFalse(store.hasPoofAssets)
         XCTAssertEqual(BottleVisualContent.resolve(store: store), .procedural)
 
-        // The real store still resolves to the art path.
+        // The real store resolves to the full poof path.
         let real = BottleMailArtStore()
         if real.verifyAllRequiredAssets().ok {
-            XCTAssertEqual(BottleVisualContent.resolve(store: real), .art)
+            XCTAssertEqual(BottleVisualContent.resolve(store: real), .poofArt)
         }
+    }
+
+    func testArtWithoutPoofPackResolvesToTheRevealFallback() throws {
+        // A directory with the five v3 bottle images but no smoke pack:
+        // the safe geometric-reveal fallback must be chosen (the poof
+        // mode cannot hide the swap without the occlusion smoke).
+        guard let sourceBase = BottleMailArtStore.shared.resolveBaseURL() else {
+            throw XCTSkip("assets unavailable")
+        }
+        let partialDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BottleArtPartial-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: partialDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: partialDir) }
+        for name in BottleMailArtStore.requiredFileNames {
+            try FileManager.default.copyItem(
+                at: sourceBase.appendingPathComponent(name),
+                to: partialDir.appendingPathComponent(name)
+            )
+        }
+
+        let store = BottleMailArtStore()
+        store.baseURLOverride = partialDir
+        XCTAssertTrue(store.hasBottleArt)
+        XCTAssertFalse(store.hasPoofAssets)
+        XCTAssertEqual(BottleVisualContent.resolve(store: store), .revealArt)
     }
 }

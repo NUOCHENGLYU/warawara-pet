@@ -109,8 +109,13 @@ final class BottleVisualCoordinator: ObservableObject {
     // MARK: - Published (main thread)
 
     @Published private(set) var visualState: BottleVisualState = .normal
-    /// Eased morph progress 0...1 consumed by the renderer.
+    /// Timeline position 0...1 over the poof transition (raw piecewise
+    /// time; the choreography's easing lives inside BottlePoofTimeline).
     @Published private(set) var morphProgress: Double = 0
+    /// Which form is visible: 0 = Warawara, 1 = bottle. A hard step at
+    /// the timeline's switch point — the swap is hidden behind full
+    /// occlusion smoke, so the step is never seen.
+    @Published private(set) var formProgress: Double = 0
     /// Cork lift + paper unfold amount 0...1 (during .bottleOpening and
     /// held at 1 while .reading).
     @Published private(set) var openingProgress: Double = 0
@@ -127,9 +132,14 @@ final class BottleVisualCoordinator: ObservableObject {
     /// itself is core state and still plays.
     var reduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     var nowProvider: () -> Date = { Date() }
-    var morphDuration: TimeInterval = 1.5
+    var morphDuration: TimeInterval = BottlePoofTimeline.duration
     var openingDuration: TimeInterval = 0.4
     var tickInterval: TimeInterval = 1.0 / 30.0
+
+    /// Fired once per transition at the poof instant (0.43 s) — the app
+    /// layer plays the one-shot soft sound. Fires for BOTH directions
+    /// (forward and back), exactly once each.
+    var onPoofMoment: (() -> Void)?
 
     /// Fired once per presentation batch with the delivery ids whose
     /// animation completed — the app layer ACKs them (persisted exactly
@@ -156,6 +166,9 @@ final class BottleVisualCoordinator: ObservableObject {
     private var pendingPresentationACKs: [String] = []
     private var lastUnread = 0
     private var started = false
+    /// The one-shot poof sound per morph run (forward AND back each
+    /// fire once).
+    private var poofFired = false
 
     init(mailbox: BottleMailCoordinator) {
         self.mailbox = mailbox
@@ -363,13 +376,30 @@ final class BottleVisualCoordinator: ObservableObject {
             }
         }
 
-        morphProgress = BottleMorphMath.eased(rawProgress)
+        // Publish the timeline + the hidden form step. The form only
+        // flips at the timeline's switch point, where the occlusion
+        // smoke is fully opaque (BottlePoofTimeline invariant).
+        let timeline = min(max(rawProgress, 0), 1)
+        morphProgress = timeline
+        formProgress = BottlePoofTimeline.formProgress(at: timeline)
+        if !poofFired {
+            let crossed: Bool
+            switch direction {
+            case .toBottle: crossed = timeline >= BottlePoofTimeline.poofPoint
+            case .toNormal: crossed = timeline <= BottlePoofTimeline.poofPoint
+            }
+            if crossed {
+                poofFired = true
+                onPoofMoment?()
+            }
+        }
     }
 
     // MARK: - Morph bookkeeping
 
     private func beginMorph(direction newDirection: BottleMorphMath.Direction, at now: Date) {
         direction = newDirection
+        poofFired = false
         morphStartedAt = BottleMorphMath.startDate(
             forCurrentProgress: rawProgress,
             at: now,
@@ -479,12 +509,12 @@ final class BottleVisualCoordinator: ObservableObject {
     func snapshotForTesting() -> (
         state: BottleVisualState,
         rawProgress: Double,
-        easedProgress: Double,
+        formProgress: Double,
         opening: Double,
         readingLetterID: String?,
         pendingACKs: [String]
     ) {
-        (visualState, rawProgress, morphProgress, openingProgress,
+        (visualState, rawProgress, formProgress, openingProgress,
          readingLetterID, pendingPresentationACKs)
     }
 }

@@ -11,13 +11,25 @@ import Foundation
 final class BottleMailArtStore {
     static let shared = BottleMailArtStore()
 
-    /// The five shipped assets.
+    /// The five shipped v3 assets.
     static let requiredFileNames: [String] = [
         "bottle_idle.png",
         "bottle_unread.png",
         "bottle_opening.png",
         "scroll_sealed.png",
         "letter_paper_blank.png"
+    ]
+
+    /// The poof-transition companion pack (smoke layers + one-shot
+    /// audio). Missing poof assets degrade to the geometric-reveal
+    /// fallback — the swap stays hidden either way.
+    static let poofFileNames: [String] = [
+        "smoke_core.png",
+        "smoke_soft.png",
+        "smoke_small.png",
+        "smoke_wisps.png",
+        "landing_dust.png",
+        "soft_poof.wav"
     ]
 
     private var imageCache: [String: NSImage] = [:]
@@ -78,10 +90,30 @@ final class BottleMailArtStore {
     var bottleOpening: NSImage? { image(named: "bottle_opening.png") }
     var scrollSealed: NSImage? { image(named: "scroll_sealed.png") }
     var letterPaper: NSImage? { image(named: "letter_paper_blank.png") }
+    var smokeCore: NSImage? { image(named: "smoke_core.png") }
+    var smokeSoft: NSImage? { image(named: "smoke_soft.png") }
+    var smokeSmall: NSImage? { image(named: "smoke_small.png") }
+    var smokeWisps: NSImage? { image(named: "smoke_wisps.png") }
+    var landingDust: NSImage? { image(named: "landing_dust.png") }
+
+    /// The one-shot poof sound URL (nil when missing).
+    func audioURL(named fileName: String) -> URL? {
+        guard let base = resolveBaseURL() else { return nil }
+        let url = base.appendingPathComponent(fileName)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
 
     /// True when all three bottle state images are usable (the art path).
     var hasBottleArt: Bool {
         bottleIdle != nil && bottleUnread != nil && bottleOpening != nil
+    }
+
+    /// True when the full poof pack is usable (occlusion smoke layers
+    /// + landing dust + the one-shot audio).
+    var hasPoofAssets: Bool {
+        smokeCore != nil && smokeSoft != nil && smokeSmall != nil
+            && smokeWisps != nil && landingDust != nil
+            && audioURL(named: "soft_poof.wav") != nil
     }
 
     /// Normalized opaque-content bounds (0...1 in canvas space, y down
@@ -139,9 +171,16 @@ final class BottleMailArtStore {
         for name in Self.requiredFileNames where image(named: name) == nil {
             missing.append(name)
         }
+        for name in Self.poofFileNames {
+            if name.hasSuffix(".wav") {
+                if audioURL(named: name) == nil { missing.append(name) }
+            } else if image(named: name) == nil {
+                missing.append(name)
+            }
+        }
         missingFileNames = missing
         if missing.isEmpty {
-            return (true, "all \(Self.requiredFileNames.count) assets present")
+            return (true, "all \(Self.requiredFileNames.count + Self.poofFileNames.count) assets present")
         }
         EventDiagnostics.bottleMail("ART_MISSING", details: "files=\(missing.joined(separator: ","))")
         return (false, "missing: \(missing)")
