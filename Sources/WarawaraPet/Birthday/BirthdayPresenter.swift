@@ -186,7 +186,8 @@ final class BirthdayPresenter: BirthdayEventPresenting {
     private func aimAttention(at target: CGPoint) {
         guard let petFrame = windowController?.currentFrame, petFrame != .zero else { return }
         let direction = EventAttentionMath.direction(
-            from: CGPoint(x: petFrame.midX, y: petFrame.midY),
+            from: windowController?.petBodyCenter
+                ?? CGPoint(x: petFrame.midX, y: petFrame.midY),
             to: target
         )
         guard direction != .zero else { return }

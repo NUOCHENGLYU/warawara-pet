@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 final class PetWindowController: NSObject {
-    static let petSize = PetMetrics.size
+    static let petSize = PetMetrics.windowSize
     static let windowMargin: CGFloat = 8
 
     private var panel: PetPanel?
@@ -31,6 +31,18 @@ final class PetWindowController: NSObject {
 
     var currentFrame: CGRect {
         panel?.frame ?? .zero
+    }
+
+    /// Screen-space center of the character body. The window includes
+    /// transparent drawing room above the pet canvas, so the window's
+    /// own midpoint is not the pet's visual center.
+    var petBodyCenter: CGPoint {
+        guard let panel else { return .zero }
+        let frame = panel.frame
+        return CGPoint(
+            x: frame.midX,
+            y: frame.minY + PetMetrics.visualCenter.y
+        )
     }
 
     /// The pet panel (lifecycle recovery + tests).

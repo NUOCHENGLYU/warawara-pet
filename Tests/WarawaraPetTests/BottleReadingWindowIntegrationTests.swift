@@ -81,6 +81,11 @@ final class BottleReadingWindowIntegrationTests: XCTestCase {
         visual.onPoofMoment = { poofCount += 1 }
 
         let readingWindow = BottleReadingWindowController(coordinator: coordinator, visual: visual)
+        XCTAssertEqual(readingWindow.window?.titleVisibility, .visible)
+        XCTAssertFalse(
+            readingWindow.window?.styleMask.contains(.fullSizeContentView) ?? true,
+            "the reader uses a normal titlebar"
+        )
         visual.onOpenReadingRequested = { [weak readingWindow] _ in
             readingWindow?.show()
         }

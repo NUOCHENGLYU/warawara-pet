@@ -14,10 +14,16 @@ enum PetMetrics {
     /// identical.
     static let blobBottomPadding: CGFloat = 54
 
-    /// Symmetric clearance: bottom and top both cover the worst-case
-    /// deformation envelope.
+    /// The pet's drawing canvas. Bottom and top clearance both cover the
+    /// worst-case deformation envelope.
     static let size = CGSize(width: 200, height: 226)
     static let topClearance = size.height - blobBottomPadding - blobHeight
+
+    /// Extra transparent drawing room ABOVE the pet canvas. It absorbs the
+    /// poof transition's hop + stretch + smoke without moving or resizing
+    /// the character (the canvas stays bottom-anchored in this window).
+    static let topDrawingMargin: CGFloat = 50
+    static let windowSize = CGSize(width: size.width, height: size.height + topDrawingMargin)
 
     /// Visual center of the placeholder blob in pet space (bottom-left
     /// origin), matching EllipseHitRegion's default region.

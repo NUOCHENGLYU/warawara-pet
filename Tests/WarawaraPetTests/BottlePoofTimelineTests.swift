@@ -149,6 +149,31 @@ final class BottlePoofTimelineTests: XCTestCase {
         }
     }
 
+    func testPoofJumpAndStretchFitInsideTopDrawingMargin() {
+        // Both directions share the same choreography, so covering the
+        // full timeline covers forward and reverse. The wrapper is
+        // bottom-anchored: its upward overhang is the jump plus the
+        // stretch beyond the 226 pt canvas.
+        let canvasHeight = PetMetrics.size.height
+        var maxOverhang: CGFloat = 0
+        var t = 0.0
+        while t <= 1.0 {
+            let stretchOverhang = max(
+                0,
+                canvasHeight * (BottlePoofTimeline.squashY(t: t) - 1)
+            )
+            let overhang = stretchOverhang
+                + BottlePoofTimeline.jumpOffsetY(t: t, reduceMotion: false)
+            maxOverhang = max(maxOverhang, overhang)
+            t += 0.005
+        }
+        XCTAssertGreaterThan(maxOverhang, 0)
+        XCTAssertLessThanOrEqual(
+            maxOverhang, PetMetrics.topDrawingMargin + 0.01,
+            "the poof must stay inside the window's transparent top margin"
+        )
+    }
+
     func testSmokeVisibleWindowSpansTheTransition() {
         XCTAssertFalse(BottlePoofTimeline.smokeVisible(t: 0))
         XCTAssertTrue(BottlePoofTimeline.smokeVisible(t: BottlePoofTimeline.switchPoint))

@@ -233,7 +233,7 @@ final class BottlePreviewGeneratorTests: XCTestCase {
             size: size
         )
         let rep = NSBitmapImageRep(cgImage: cgImage)
-        var paperPixels = 0
+        var samples: [(r: CGFloat, g: CGFloat, b: CGFloat, luminance: CGFloat)] = []
         var prohibitionPixels = 0
         for y in stride(from: 0, to: rep.pixelsHigh, by: 4) {
             for x in stride(from: 60, to: rep.pixelsWide - 60, by: 4) {
@@ -241,23 +241,76 @@ final class BottlePreviewGeneratorTests: XCTestCase {
                 let r = color.redComponent
                 let g = color.greenComponent
                 let b = color.blueComponent
-                if r > 0.85 && g > 0.78 && b > 0.60 && b < 0.98 {
-                    paperPixels += 1
-                }
+                let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+                samples.append((r, g, b, luminance))
                 if r > 0.75 && g < 0.45 && b < 0.45 {
                     prohibitionPixels += 1
                 }
             }
         }
-        XCTAssertGreaterThan(paperPixels, 1500,
-                             "the reading preview must show the parchment paper")
+        let backgroundLuminance = samples.isEmpty
+            ? 0
+            : samples.map { $0.luminance }.reduce(0, +) / CGFloat(samples.count)
+        var inkPixels = 0
+        var coloredTextPixels = 0
+        for sample in samples {
+            if abs(sample.luminance - backgroundLuminance) > 0.22 {
+                inkPixels += 1
+            }
+            let chroma = max(sample.r, sample.g, sample.b)
+                - min(sample.r, sample.g, sample.b)
+            if chroma > 0.18 && sample.luminance > 0.15 {
+                coloredTextPixels += 1
+            }
+        }
+        XCTAssertGreaterThan(samples.count, 1500,
+                             "the reading preview must show the native window background")
+        XCTAssertGreaterThan(inkPixels, 60,
+                             "the reading preview must show the letter text")
+        XCTAssertGreaterThan(coloredTextPixels, 5,
+                             "the reading preview must show the Emoji glyphs")
         XCTAssertLessThan(prohibitionPixels, 120,
                           "the reading preview must not be the renderer placeholder")
 
-        guard let png = rep.representation(using: .png, properties: [:]) else {
+        // Prefer a snapshot of the real titled window (chrome included);
+        // fall back to the content snapshot if the runner cannot render
+        // the titlebar.
+        let readingWindow = BottleReadingWindowController(
+            coordinator: coordinator, visual: visual
+        )
+        readingWindow.window?.orderFront(nil)
+        let screenshot: CGImage
+        if let window = readingWindow.window,
+           let chromeSnapshot = try? renderWindowChromeSnapshot(window) {
+            screenshot = chromeSnapshot
+        } else {
+            screenshot = cgImage
+        }
+        readingWindow.window?.orderOut(nil)
+
+        let screenshotRep = NSBitmapImageRep(cgImage: screenshot)
+        guard let png = screenshotRep.representation(using: .png, properties: [:]) else {
             throw NSError(domain: "preview", code: 7)
         }
         try png.write(to: outputDir.appendingPathComponent("212-reading.png"))
+    }
+
+    /// Snapshots the full window frame view (titlebar + content) of a
+    /// real titled reading window.
+    private func renderWindowChromeSnapshot(_ window: NSWindow) throws -> CGImage {
+        window.displayIfNeeded()
+        guard let frameView = window.contentView?.superview else {
+            throw NSError(domain: "preview", code: 8)
+        }
+        frameView.layoutSubtreeIfNeeded()
+        guard let rep = frameView.bitmapImageRepForCachingDisplay(in: frameView.bounds) else {
+            throw NSError(domain: "preview", code: 9)
+        }
+        frameView.cacheDisplay(in: frameView.bounds, to: rep)
+        guard let cgImage = rep.cgImage else {
+            throw NSError(domain: "preview", code: 10)
+        }
+        return cgImage
     }
 
     /// Mounts a view in a REAL NSHostingView + NSWindow (the production

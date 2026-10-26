@@ -256,8 +256,7 @@ final class PetController: ObservableObject {
 
     private func evaluateCuriosity(at timestamp: TimeInterval) {
         guard let windowController else { return }
-        let frame = windowController.currentFrame
-        let center = CGPoint(x: frame.midX, y: frame.midY)
+        let center = windowController.petBodyCenter
         let mouse = mouseLocationProvider()
         let dx = mouse.x - center.x
         let dy = mouse.y - center.y
@@ -419,8 +418,7 @@ final class PetController: ObservableObject {
 
     private func updateCuriosityPose(at timestamp: TimeInterval) {
         guard let windowController else { return }
-        let frame = windowController.currentFrame
-        let center = CGPoint(x: frame.midX, y: frame.midY)
+        let center = windowController.petBodyCenter
         let mouse = mouseLocationProvider()
         let dx = mouse.x - center.x
         let dy = mouse.y - center.y

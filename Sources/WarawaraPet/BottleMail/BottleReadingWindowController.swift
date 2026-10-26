@@ -1,10 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// Phase 8C reading window: ONE hand-painted letter paper, reusing the
+/// Phase 8C reading window: a plain native macOS reader, reusing the
 /// birthday letter's window lifecycle (a normal, focusable window —
-/// keyboard events, Escape/Cmd+W and text selection all work; the pet
-/// panel itself never grabs focus).
+/// Escape, the standard close button and text selection all work; the
+/// pet panel itself never grabs focus).
 ///
 /// CLOSING THE WINDOW IS THE READING-COMPLETION ACTION: the window
 /// close event notifies the visual coordinator (idempotently), which
@@ -23,20 +23,16 @@ final class BottleReadingWindowController: NSWindowController, NSWindowDelegate 
         self.visual = visual
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 640),
-            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        // The window chrome disappears into the paper: hidden title,
-        // transparent titlebar, the standard traffic lights stay as the
-        // close entry.
-        window.title = "Bottle Mail"
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
+        // A normal titlebar is the close entry.
+        window.title = "来自远方的信"
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
-        window.backgroundColor = NSColor(
-            calibratedRed: 0.96, green: 0.93, blue: 0.85, alpha: 1
-        )
+        window.backgroundColor = .windowBackgroundColor
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
@@ -59,7 +55,7 @@ final class BottleReadingWindowController: NSWindowController, NSWindowDelegate 
         fatalError("init(coder:) is not supported")
     }
 
-    /// Shows (or re-fronts) the paper. This is a deliberate user action,
+    /// Shows (or re-fronts) the reader. This is a deliberate user action,
     /// so the window may become key — the pet panel never grabs focus.
     func show() {
         guard let window else { return }
@@ -78,8 +74,8 @@ final class BottleReadingWindowController: NSWindowController, NSWindowDelegate 
     }
 }
 
-/// The single hand-painted paper: the v3 parchment fills the window and
-/// the letter text renders dynamically on top with safe margins.
+/// The reading content: date + selectable body on the native window
+/// background, with a plain 28 pt reading margin and normal scrolling.
 struct BottleReadingPaperView: View {
     @ObservedObject var coordinator: BottleMailCoordinator
     @ObservedObject var visual: BottleVisualCoordinator
@@ -93,83 +89,37 @@ struct BottleReadingPaperView: View {
     }
 
     var body: some View {
-        ZStack {
-            paperBackground
+        Group {
             if let letter = shownLetter {
-                VStack(spacing: 0) {
-                    closeEntry
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text("来自远方的信")
-                                .font(.system(size: 15, weight: .semibold, design: .serif))
-                                .foregroundColor(Color(red: 0.32, green: 0.26, blue: 0.18))
-                            Text(letter.createdAt)
-                                .font(.caption)
-                                .foregroundColor(Color(red: 0.45, green: 0.4, blue: 0.32))
-                            Rectangle()
-                                .fill(Color(red: 0.55, green: 0.48, blue: 0.36).opacity(0.5))
-                                .frame(height: 1)
-                            Text(letter.body)
-                                .font(.system(size: 15.5, design: .serif))
-                                .foregroundColor(Color(red: 0.22, green: 0.18, blue: 0.12))
-                                .lineSpacing(7.5)
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                            if case .revoked = coordinator.activationState {
-                                Label("离线阅读中（设备授权已撤销）", systemImage: "wifi.slash")
-                                    .font(.caption2)
-                                    .foregroundColor(.orange)
-                            }
-                            Spacer(minLength: 0)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(letter.createdAt)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Divider()
+                        Text(letter.body)
+                            .font(.system(size: 15.5))
+                            .lineSpacing(7)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if case .revoked = coordinator.activationState {
+                            Label("离线阅读中（设备授权已撤销）", systemImage: "wifi.slash")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
                         }
-                        // Safe margins keep the text inside the painted
-                        // paper edges.
-                        .padding(.horizontal, 72)
-                        .padding(.top, 26)
-                        .padding(.bottom, 64)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(28)
                 }
             } else {
-                VStack {
-                    Text("还没有收到信件")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                Text("还没有收到信件")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(width: 520, height: 640)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onExitCommand(perform: onClose)
-    }
-
-    /// Top-right close entry (the traffic lights stay available too).
-    private var closeEntry: some View {
-        HStack {
-            Spacer()
-            Button(action: onClose) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(Color(red: 0.45, green: 0.38, blue: 0.28).opacity(0.75))
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut("w", modifiers: [.command])
-            .help("关闭并收好这封信")
-            .padding(.top, 10)
-            .padding(.trailing, 12)
-        }
-    }
-
-    /// The v3 parchment fills the whole window; a warm solid fallback
-    /// keeps the paper usable if the art is missing.
-    @ViewBuilder
-    private var paperBackground: some View {
-        if let paper = BottleMailArtStore.shared.letterPaper {
-            Image(nsImage: paper)
-                .resizable()
-                .interpolation(.high)
-                .scaledToFill()
-                .clipped()
-        } else {
-            Color(red: 0.97, green: 0.95, blue: 0.90)
-        }
     }
 }

@@ -489,8 +489,7 @@ final class GroupSequenceController {
     // MARK: - Geometry helpers
 
     private var mainCenter: CGPoint {
-        guard let frame = windowController?.currentFrame else { return .zero }
-        return CGPoint(x: frame.midX, y: frame.midY)
+        windowController?.petBodyCenter ?? .zero
     }
 
     private var visibleFrame: CGRect {

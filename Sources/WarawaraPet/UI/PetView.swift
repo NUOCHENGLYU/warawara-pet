@@ -27,6 +27,19 @@ struct PetView: View {
     }
 
     var body: some View {
+        petCanvas
+            .frame(
+                width: PetMetrics.windowSize.width,
+                height: PetMetrics.windowSize.height,
+                alignment: .bottom
+            )
+    }
+
+    /// The unchanged 226 pt pet canvas, bottom-anchored inside the taller
+    /// window. The transparent strip above it is poof drawing room only —
+    /// every pet-space coordinate, the hit ellipse and the drag anchor
+    /// stay relative to this canvas.
+    private var petCanvas: some View {
         ZStack {
             // The whole transition reads as ONE body: the character, the
             // bottle form and the smoke share the hop, squash and
@@ -61,7 +74,7 @@ struct PetView: View {
                 SleepIndicatorView()
             }
         }
-        .frame(width: 200, height: 226, alignment: .bottom)
+        .frame(width: PetMetrics.size.width, height: PetMetrics.size.height, alignment: .bottom)
         .animation(bobAnimation, value: bobbing)
         .onAppear {
             bobbing = true

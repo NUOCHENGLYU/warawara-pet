@@ -75,6 +75,23 @@ final class PetMetricsTests: XCTestCase {
         XCTAssertEqual(PetMetrics.blobBottomPadding, 54)
     }
 
+    func testWindowOnlyAddsTransparentTopDrawingMargin() {
+        // The window grows upward; the canvas, character size, bottom
+        // baseline and visual center stay exactly where they were.
+        XCTAssertEqual(PetMetrics.topDrawingMargin, 50)
+        XCTAssertEqual(PetMetrics.windowSize.width, PetMetrics.size.width)
+        XCTAssertEqual(
+            PetMetrics.windowSize.height,
+            PetMetrics.size.height + PetMetrics.topDrawingMargin
+        )
+        XCTAssertEqual(
+            PetMetrics.visualCenter,
+            CGPoint(x: PetMetrics.size.width / 2, y: 113)
+        )
+        XCTAssertEqual(PetMetrics.blobBottomPadding, 54)
+        XCTAssertEqual(PetMetrics.headTopY, 54)
+    }
+
     func testSleepZBaseYIsAboveTheHeadTop() {
         // The sleep "Z" must emerge above the head, never from the body.
         XCTAssertEqual(PetMetrics.headTopY, 54, accuracy: 0.01)

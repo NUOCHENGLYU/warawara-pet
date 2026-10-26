@@ -6,15 +6,15 @@ import XCTest
 /// Renders the REAL BottleReadingView through the PRODUCTION hosting
 /// path — a genuine NSHostingView inside a real (offscreen) AppKit
 /// window — and verifies:
-/// - the parchment background renders (paper pixels in the reading pane);
-/// - the full Chinese/English/Emoji/multi-line body text renders (ink
-///   pixels in the paper region);
+/// - the native window background fills the reader;
+/// - the full Chinese/English/Emoji/multi-line body text renders with
+///   contrast against that background;
 /// - the renderer-failure prohibition glyph ("nosign") is absent.
 ///
-/// ImageRenderer alone cannot rasterize the AppKit-backed
-/// List/HSplitView (it yields the prohibition placeholder), so the
-/// production path is what gets verified — the CI preview uses the same
-/// offscreen-window snapshot.
+/// ImageRenderer alone cannot rasterize the AppKit-backed controls (it
+/// yields the prohibition placeholder), so the production path is what
+/// gets verified — the CI preview uses the same offscreen-window
+/// snapshot.
 @MainActor
 final class BottleReadingWindowRenderTests: XCTestCase {
     private struct StubTransport: BottleMailAPITransport {
@@ -29,15 +29,12 @@ final class BottleReadingWindowRenderTests: XCTestCase {
         func markOpened(id: String, token: String) async throws -> String? { nil }
     }
 
-    func testReadingWindowRendersPaperAndFullBodyText() async throws {
+    func testReadingWindowRendersSystemBackgroundAndFullBodyText() async throws {
         // The offscreen-window snapshot path is verified on the current
         // (macOS 15) runner in the universal build job; older runners
         // may stall in AppKit's table/split layout — skipped there.
         guard #available(macOS 15.0, *) else {
             throw XCTSkip("window snapshot render verified on macOS 15+")
-        }
-        guard BottleMailArtStore.shared.letterPaper != nil else {
-            throw XCTSkip("letter paper asset unavailable")
         }
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -79,42 +76,46 @@ final class BottleReadingWindowRenderTests: XCTestCase {
         )
         let rep = NSBitmapImageRep(cgImage: cgImage)
 
-        // Coarse pixel classification over the real render. The paper
-        // fills the whole window; the text sits inside the painted
-        // margins (~72 pt on each side).
-        var paperPixels = 0
-        var inkPixels = 0
+        // Coarse pixel classification over the real render. The native
+        // window background fills the reader; text must contrast with it
+        // in either light or dark appearance.
+        var samples: [(r: CGFloat, g: CGFloat, b: CGFloat, luminance: CGFloat)] = []
         var prohibitionPixels = 0
-        var coloredTextPixels = 0
         let width = rep.pixelsWide
         let height = rep.pixelsHigh
         for y in stride(from: 0, to: height, by: 4) {
             for x in stride(from: 60, to: width - 60, by: 4) {
-                guard let color = rep.colorAt(x: x, y: y) else { continue }
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else {
+                    continue
+                }
                 let r = color.redComponent
                 let g = color.greenComponent
                 let b = color.blueComponent
-                let a = color.alphaComponent
-                if a > 0.5 {
-                    if r > 0.85 && g > 0.78 && b > 0.60 && b < 0.98 {
-                        paperPixels += 1
-                    }
-                    if r < 0.45 && g < 0.40 && b < 0.35 {
-                        inkPixels += 1
-                    }
-                    if r > 0.75 && g < 0.45 && b < 0.45 {
-                        prohibitionPixels += 1
-                    }
-                    // Emoji / colored glyph pixels (saturated, non-paper).
-                    if r > 0.4, g < 0.85, b < 0.85, !(r > 0.85 && g > 0.78 && b > 0.6) {
-                        coloredTextPixels += 1
-                    }
+                let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+                samples.append((r, g, b, luminance))
+                if r > 0.75 && g < 0.45 && b < 0.45 {
+                    prohibitionPixels += 1
                 }
             }
         }
+        let backgroundLuminance = samples.isEmpty
+            ? 0
+            : samples.map { $0.luminance }.reduce(0, +) / CGFloat(samples.count)
+        var inkPixels = 0
+        var coloredTextPixels = 0
+        for sample in samples {
+            if abs(sample.luminance - backgroundLuminance) > 0.22 {
+                inkPixels += 1
+            }
+            let chroma = max(sample.r, sample.g, sample.b)
+                - min(sample.r, sample.g, sample.b)
+            if chroma > 0.18 && sample.luminance > 0.15 {
+                coloredTextPixels += 1
+            }
+        }
 
-        XCTAssertGreaterThan(paperPixels, 1500, "the parchment must fill the paper window")
-        XCTAssertGreaterThan(inkPixels, 60, "the letter body text must render in ink on the paper")
+        XCTAssertGreaterThan(samples.count, 1500, "the native window background must fill the reader")
+        XCTAssertGreaterThan(inkPixels, 60, "the letter body text must contrast with the background")
         XCTAssertGreaterThan(coloredTextPixels, 15, "the body glyphs (incl. Emoji) must render")
         XCTAssertLessThan(prohibitionPixels, 120,
                           "no renderer-failure prohibition glyph may appear")

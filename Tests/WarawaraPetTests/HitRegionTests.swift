@@ -46,6 +46,27 @@ final class HitRegionTests: XCTestCase {
         XCTAssertFalse(petRegion.contains(CGPoint(x: 1, y: bounds.midY)))
     }
 
+    func testTopDrawingMarginDoesNotExtendTheHitRegion() {
+        let bounds = CGRect(origin: .zero, size: PetMetrics.windowSize)
+        let petRegion = EllipseHitRegion.petDefault(in: bounds)
+        // The extra drawing room above the canvas must pass clicks
+        // through to the desktop.
+        XCTAssertFalse(
+            petRegion.contains(CGPoint(
+                x: PetMetrics.visualCenter.x,
+                y: PetMetrics.size.height + PetMetrics.topDrawingMargin / 2
+            ))
+        )
+        XCTAssertFalse(
+            petRegion.contains(CGPoint(
+                x: PetMetrics.visualCenter.x,
+                y: PetMetrics.size.height + 1
+            ))
+        )
+        // The body's hit area is identical to the pre-margin canvas.
+        XCTAssertEqual(petRegion.center, PetMetrics.visualCenter)
+    }
+
     func testDefaultRegionCoversInstalledNeutralArtworkBody() {
         // The Phase 4B neutral artwork body (bodyBounds [[0.10,0.09],
         // [0.80,0.82]] on a 1024 canvas) renders ~115 x 118 pt centered
