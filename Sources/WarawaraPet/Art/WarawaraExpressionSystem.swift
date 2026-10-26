@@ -173,9 +173,9 @@ enum WarawaraExpressionMapper {
             p.mouthOpenAmount = 0.12
         }
 
-        // Phase 8C bottle morph: blend the bottle pose over the state
-        // targets. Sleepy eyes are NOT overridden — a dozing pet keeps
-        // its eyes even if the bottle form is active.
+        // Phase 8C bottle morph: blend the morph choreography over the
+        // state targets. The bottle is non-anthropomorphic — the face
+        // (eyes + mouth) dissolves and stays hidden in bottle form.
         let morph = clamp(inputs.bottleMorphProgress, 0, 1)
         if morph > 0 {
             p = bottleBlendParameters(base: p, progress: morph)
@@ -191,31 +191,25 @@ enum WarawaraExpressionMapper {
         return p.clamped()
     }
 
-    /// Blends the bottle-form pose over any base parameters. The body
-    /// silhouette hands over to the glass (`bodyOpacity` -> 0) while
-    /// the face settles into a soft "noticed the letter" look.
+    /// Blends the bottle morph over any base parameters. The bottle is
+    /// strictly non-anthropomorphic: the body raster and the FACE both
+    /// hand over to the bottle art (faceOpacity -> 0), while the body
+    /// choreography compresses first and stretches into the bottle
+    /// silhouette.
     static func bottleBlendParameters(
         base: WarawaraPerformanceParameters,
         progress: CGFloat
     ) -> WarawaraPerformanceParameters {
         let p = clamp(progress, 0, 1)
         var r = base
-        let eyeBlend = p * (1 - base.drowsiness)
-        r.eyeOpenness = mix(base.eyeOpenness, 0.85, eyeBlend)
-        if p > 0.5 {
-            r.mouthStyle = .soft
-        }
-        r.mouthOpenAmount = mix(base.mouthOpenAmount, 0.12, p)
-        r.drowsiness = mix(base.drowsiness, 0.2, p)
-        // Taller, slightly narrower silhouette — the glass inherits the
-        // same reading so body and bottle stay one silhouette.
-        r.bodySquashX = mix(base.bodySquashX, 0.92, p)
-        r.bodySquashY = mix(base.bodySquashY, 1.06, p)
+        let compress = BottleMorphGeometry.compressAmount(progress: Double(p))
+        let stretch = BottleMorphGeometry.stretchAmount(progress: Double(p))
+        r.bodySquashX = base.bodySquashX * (1 + 0.05 * compress) * (1 - 0.08 * stretch)
+        r.bodySquashY = base.bodySquashY * (1 - 0.08 * compress) * (1 + 0.06 * stretch)
         r.bodyTilt = mix(base.bodyTilt, 0, p)
-        // A gentle upward glance toward the cork.
-        r.gazeY = mix(base.gazeY, 0.12, p)
-        // The warm white body fades out; the glass fades in behind it.
-        r.bodyOpacity = 1 - p
+        // The silhouette hands over to the bottle; the face dissolves.
+        r.bodyOpacity = BottleMorphGeometry.bodyHandoverOpacity(progress: Double(p))
+        r.faceOpacity = BottleMorphGeometry.faceOpacity(progress: Double(p))
         return r
     }
 
@@ -320,6 +314,9 @@ struct WarawaraParameterAnimator {
         )
         parameters.bodyOpacity = Self.approach(
             parameters.bodyOpacity, t.bodyOpacity, dt: dtF, tau: tuning.bodyResponse
+        )
+        parameters.faceOpacity = Self.approach(
+            parameters.faceOpacity, t.faceOpacity, dt: dtF, tau: tuning.bodyResponse
         )
         parameters.bodyTilt = Self.approach(parameters.bodyTilt, t.bodyTilt, dt: dtF, tau: tuning.bodyResponse)
 

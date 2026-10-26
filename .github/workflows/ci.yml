@@ -176,6 +176,9 @@ jobs:
           GIFTS="$("dist/WarawaraPet.app/Contents/MacOS/WarawaraPet" --verify-gift-assets)"
           echo "$GIFTS"
           echo "$GIFTS" | grep -q "GIFT_ASSETS_OK" || { echo "gift assets not loaded"; exit 1; }
+          BOTTLE="$("dist/WarawaraPet.app/Contents/MacOS/WarawaraPet" --verify-bottle-art)"
+          echo "$BOTTLE"
+          echo "$BOTTLE" | grep -q "BOTTLE_ART_OK" || { echo "bottle mail art not loaded"; exit 1; }
 
       - name: Smoke-test meteor replay (packaged app)
         run: |

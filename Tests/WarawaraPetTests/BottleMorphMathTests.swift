@@ -101,12 +101,16 @@ final class BottleMorphMathTests: XCTestCase {
     }
 
     func testBottleEnvelopeAlwaysFitsThePetWindow() {
-        // The neck/cork/paper must never be clipped by the window top:
-        // the headroom above the resting body center absorbs the full
-        // envelope including sway and bob slack.
+        // The bottle (art path AND procedural fallback) must never be
+        // clipped by the window top: the headroom above the resting
+        // body center absorbs the full envelope including sway and bob
+        // slack.
         XCTAssertTrue(BottleMetrics.fitsInWindow(), "bottle top would be clipped")
         XCTAssertLessThanOrEqual(
-            BottleMetrics.maximumTopReach(), PetMetrics.visualCenter.y
+            BottleMetrics.artTopReach(), PetMetrics.visualCenter.y
+        )
+        XCTAssertLessThanOrEqual(
+            BottleMetrics.proceduralTopReach(), PetMetrics.visualCenter.y
         )
         // Sanity: the glass body bottom also stays above the window
         // bottom (the body never exceeds the established blob envelope).

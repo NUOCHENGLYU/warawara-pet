@@ -1,51 +1,50 @@
-# Phase 8C — 本体变身漂流瓶（交付说明）
+# Phase 8C — 本体变身漂流瓶（正式美术接入 v3）
 
-Branch `phase8/bottle-mail` · 本阶段实现「有未读信时 Warawara 本体连续变成漂流瓶，读完最后一封后连续变回」。
+Branch `phase8/bottle-mail` · 有未读信时 Warawara 本体连续变成漂流瓶（普通、非拟人化：无眼睛嘴巴表情），读完并收好全部信件后连续变回。
 
-## 架构
+## 美术
 
-- `BottleMail/BottleVisualCoordinator.swift`
-  - 独立视觉状态机 `BottleVisualState`：`normal / transformingToBottle / bottleIdle / bottleOpening / reading / transformingBack / suspended`。不与 `PetState` 合并，只与现有姿态系统组合。
-  - 统一变形参数 `morphProgress`（0=本体，1=瓶子），由时间 + 平滑缓动（smoothstep）驱动；反向变身复用同一参数，方向切换时按当前进度反推起始时间——**中断/反向/继续均无跳帧**。
-  - 冲突门：睡眠/拖拽/生日/Meteor/群体/生日信打开期间延迟变身；变形中途被打断则冻结进度、空闲后无缝继续。
-  - 投递语义：一次变身承载多封未读信；变形完成即按 `deliveryQueue` 协议 ACK（`acknowledgeDelivery`，持久化、重启不重复投递）；瓶子已成形期间新来信立即 ACK 并追加阅读队列，不二次变身。
-  - 阅读语义：`已接收/已呈现/已阅读/已读完` 分离。只有明确「收好这封信」才完成阅读；关窗不读完保持未读；最后一封收好后开始反向变身。**不因 `unreadCount == 0` 单独触发视觉切换**——必须走收好流程。
-  - 尊重 macOS「减少动态效果」：仅关闭装饰性漂浮倾斜，变身本体保留。
-- `BottleMail/BottleReadingWindowController.swift`
-  - 信纸式阅读界面：收藏列表 + 完整正文（中文/英文/Emoji/换行/滚动/可选中）、「收好这封信」明确操作、关闭不标记已读、撤销授权后仍可离线读完（本地完成，不发网络）。
-  - 阅读窗口可成为 key（用户主动操作）；桌宠面板本身依旧永不抢焦点。
-- `Art/BottleVisuals.swift`
-  - 程序化占位瓶子（玻璃瓶身/瓶颈/瓶塞/卷纸），参数即接口：`morphProgress`、`openingProgress`。
-  - **美术接入点**：收到 `Warawara_BottleMail_Phase8C_Art_v1.zip` 后按此文件头部注释的分层规范替换，参数与图层顺序（玻璃在角色之后、瓶颈/瓶塞/卷纸在前、脸在瓶面上）为约定，占位并非最终设计。
-  - `BottleMetrics.fitsInWindow()` 保证瓶颈+瓶塞+漂浮余量不超过窗口顶部（有单测守护）。
-- `BottleMail/BottleMailCoordinator.swift`（8C 语义改动）
-  - `markOpened` 改为**本地优先**：立即持久化本地已读（离线不卡视觉），服务器 `/open` 保留 8B 的异步/幂等/可重试机制，恢复联网后自动对账并把服务器 `opened_at` 写回。
-- 渲染管线接入（`PetView` / `WarawaraExpressionSystem` / `WarawaraLayeredCharacterView`）
-  - `bottleMorphProgress` 进入表达式输入，映射器把瓶子姿态混合进现有参数（本体轮廓交接给玻璃，眼睛/嘴巴保留身份连续性）；新增 `bodyOpacity` 参数让身体 PNG 与玻璃连续交叉淡化。原有 Rig 与美术零改动。
-  - 单击瓶身 → 开瓶 → 阅读窗口；拖拽照旧；双击在瓶子形态下被消费，不与生日信双击叠触发；右键仍是信箱。
+正式采用 `art_handoff/Warawara_BottleMail_Phase8C_Ghibli_Minimal_v3`（v1/v2 全部弃用）：
+- 素材随包分发：`Resources/BottleMail/`（SwiftPM `.copy`，打包后经 `Bundle.module` / main bundle 解析，`--verify-bottle-art` 在打包 App 内验证）。
+- `BottleMailArtStore`：加载 + 缺失诊断（`ART_MISSING` 事件）+ 透明内容测量；素材缺失时**回退到程序化占位瓶**，桌宠不会消失。
+- 状态映射：未读/待读 → `bottle_unread.png`；开封/阅读 → `bottle_opening.png`；反向变身 → `bottle_idle.png` 在回收过程中交叉过渡（信已收好=空瓶）；阅读窗口信纸 → `letter_paper_blank.png`（文字由 SwiftUI 动态渲染，不烘焙）；`scroll_sealed.png` 用于阅读窗口的信封徽标。
+- `bottle_opening.png` 为整张状态参考图：开封动画 = 同轮廓下 unread→opening 的短交叉过渡 + 整体轻微下沉复位，**不在瓶上叠加卷信**（避免双卷信/双瓶塞）。若未来需要卷信飞出动画，需先对整图做内容感知拆分——记为已知限制。
+
+## 连续变身（非两张 PNG 硬切/淡入淡出）
+
+- 单一可逆参数 `morphProgress`（时间 + smoothstep），状态机与 8C 一致（`normal/transformingToBottle/bottleIdle/bottleOpening/reading/transformingBack/suspended`）。
+- `BottleMorphGeometry` 揭示几何：瓶子始终被「底部锚定的圆角矩形揭示区」遮罩，其宽/高/圆角半径/内部图像缩放随进度插值——从 Warawara 身体轮廓（胶囊=身体剪影，起点尺寸取自真实 Rig 体宽）**生长**为完整瓶形；瓶塞随顶部生长出现。
+- 表达系统配合（`bottleMorphProgress` 混入 mapper）：身体先收缩再拉伸；`bodyOpacity` 把身体栅格交接给瓶绘；**`faceOpacity` 让眼睛嘴巴在变形中溶解**——瓶子全程无表情；反向完全相同参数反向播放。
+- 时长 1.5s（1.2–1.8s 范围内）；冲突（睡眠/拖拽/生日/Meteor/群体/生日信）延迟或冻结，恢复后无缝续接；尊重「减少动态效果」（关闭漂浮倾斜，变身保留）。
+
+## 邮件语义（沿用并保持）
+
+- `已接收/已呈现/已读完` 分离：投递 ACK ≠ 已读；只有「收好这封信」完成阅读（本地优先持久化，服务器 `/open` 异步幂等对账，断网不卡视觉）；多封只变一次、逐封收好；阅读中来新信追加队列、不二次变身；关窗不读完保持未读；重启恢复投递/阅读状态。
+- 阅读窗口：信纸背景 + 完整正文（中/英/Emoji/换行/滚动/可选）、逐封浏览、收藏重看、撤销授权离线可读。
 
 ## 测试
 
-- `BottleMorphMathTests`：缓动端点/单调、双向可逆连续（反转瞬间值不变）、瓶子包络不越窗。
-- `BottleVisualCoordinatorTests`（接真实 `BottleMailCoordinator` + mock 传输 + 临时文件存储）：
-  一封来信完整流程（变身→呈现→ACK→开瓶→读完→恢复）；多封只变一次、按序读；关窗不读完不提前恢复；阅读中来新信保持瓶子；忙时延迟、变形中冻结/续接；带未读信重启直接进入瓶子且不重复投递；离线读完本地完成、联网后对账；减少动态效果关闭漂浮；点击消费规则。
-- `BottleMailCoordinatorTests` 更新为本地优先语义（离线立即读完 + 自动对账 + 服务器时间戳写回 + 重启重交）。
-- CI 新增 `BottlePreviewGeneratorTests`：真实 Rig + 瓶子层的连续变形帧（00–06）、封口/开瓶两态、阅读窗口，产物 `WarawaraPet-Bottle-Preview`。
+- 新增：`BottleMailArtStoreTests`（素材加载/1024 尺寸/内容测量/缺失回退/art-vs-procedural 解析）、`BottleMorphGeometryTests`（揭示几何端点/单调/遮罩边界/窗口包络）、`BottleExpressionBlendTests`（面部溶解、身体交接、先压后伸、睡眠下同样无表情、进度连续）、`BottlePreviewGeneratorTests`（真实素材连续变形 **GIF** + 状态单帧 + 阅读窗口）。
+- 更新：`BottleMorphMathTests` 窗口包络断言（art + procedural 双路径）。
+- 保留全绿：`BottleVisualCoordinatorTests`（状态机/ACK/离线/重启/冲突）与 8B 全部回归。
+- CI：打包 App 新增 `--verify-bottle-art` 校验；预览产物 `WarawaraPet-Bottle-Preview`（含 `200-morph.gif`）。
 
-## Mac 真机验收操作
+## Mac 真机验收步骤
 
-1. 安装 zip 里的 app（右键打开）；先用右键 → Bottle Mail → 绑定设备（激活码）。
-2. 发信网页发一封信 → 桌宠空闲时自动变瓶（约 1.5 秒，无跳帧）；变完瓶颈+瓶塞可见、轻微漂浮。
-3. 单击瓶身 → 开瓶 → 阅读窗口出现；滚动/选中正文；点「收好这封信」→ 变回 Warawara（约 1.5 秒）。
-4. 多封一起发 → 只变一次；逐封收好；中途关闭阅读窗口 → 保持瓶子、信件仍未读；再次点瓶身继续。
-5. 拖拽瓶子（变形中拖拽 → 冻结；松手继续）；睡眠中来信 → 不抢醒、醒来后变形；生日（10 月 17 或 `--replay-birthday`）、Meteor（22:17 或 `--replay-meteor`）期间延迟变身。
-6. 断网发信/读信 → 本地完成阅读并变回；恢复网络后自动对账（`--bottle-diagnose` 可看 unread 数）。
-7. 系统设置开启「减少动态效果」→ 漂浮倾斜消失、变形仍播放。
-8. 瓶颈顶部不被窗口裁切（多显示器、不同分辨率各试一次）。
+1. 安装最新 zip；右键宠物 → Bottle Mail → 绑定设备；发信网页发一封信。
+2. 桌宠空闲时变瓶（~1.5s）：身体先收缩→拉伸生长出瓶身，眼睛嘴巴溶解，瓶塞随顶部出现，全程无跳帧、无脸残留。
+3. 单击瓶身：unread→opening 短过渡 + 轻微下沉，阅读窗口弹出（信纸背景 + 正文）。
+4. 「收好这封信」→ 变回 Warawara（反向同参数，回收过程中空瓶替换带信瓶）。
+5. 多封：只变一次、逐封收好；中途关窗→保持瓶子未读；阅读中来新信→队列追加。
+6. 冲突：拖拽冻结、睡眠不抢醒、`--replay-birthday`/`--replay-meteor` 期间延迟。
+7. 断网读完→本地完成并变回，联网自动对账（`--bottle-diagnose`）。
+8. 开启「减少动态效果」→ 漂浮消失、变身保留。
+9. 多显示器/多分辨率：瓶颈不被窗口顶部裁切。
+10. 菜单栏退出、生日双击、右键邮箱、拖拽、睡眠全部照旧。
 
 ## 已知问题 / 未完成
 
-- 瓶子为**程序化占位**；最终视觉等 `Warawara_BottleMail_Phase8C_Art_v1.zip` 交付后按 `Art/BottleVisuals.swift` 分层规范接入（本阶段未做视觉打磨）。
-- 旧版单图 sprite/占位渲染分支不参与身体淡化（生产路径为已验收的 Rig，不受影响）。
-- 睡眠中的瓶子形态沿用现有状态机（闭眼瓶 + Z），未做专门瓶形睡眠姿态。
-- 真实 Mac 上的观感（时长、幅度、低饱和配色）待真机调参。
+- 开封动画目前为同轮廓状态过渡，未做卷信飞出瓶口至阅读窗口的跨窗口动画（`bottle_opening.png` 自带卷信，叠加 `scroll_sealed.png` 会重影；需内容感知拆分——待 ChatGPT 美术提供分层或授权拆分）。
+- 变身前后的瓶绘锚定基于 v3 画布内容测量与固定包络常量，真机多分辨率下请以观感为准微调 `BottleMetrics`。
+- 程序化占位瓶仅在素材缺失时出现（回退路径，非正式视觉）。
+- 真机观感（时长/幅度/饱和）待最终调参。

@@ -64,6 +64,19 @@ enum WarawaraPetMain {
             print("SPRITES_FAIL \(loader.lastErrorDescription ?? "unknown error")")
             exit(1)
         }
+        if arguments.contains("--verify-bottle-art") {
+            // Headless check against the packaged .app: the five Phase
+            // 8C v3 bottle-mail assets must resolve from the bundle.
+            let store = BottleMailArtStore.shared
+            store.reset()
+            let state = store.verifyAllRequiredAssets()
+            if state.ok {
+                print("BOTTLE_ART_OK assets=\(BottleMailArtStore.requiredFileNames.count)")
+                exit(0)
+            }
+            print("BOTTLE_ART_FAIL \(state.details)")
+            exit(1)
+        }
         if let flagIndex = arguments.firstIndex(of: "--diagnose-expression") {
             // Opt-in runtime diagnostics: drives the PRODUCTION expression
             // model (same mapper, animator, blink waveform, compositing

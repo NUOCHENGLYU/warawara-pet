@@ -44,6 +44,7 @@ struct WarawaraLayeredCharacterView: View {
                 eyesLayer
                 mouthLayer
             }
+            .opacity(parameters.faceOpacity)
             .scaleEffect(
                 x: faceTransform?.scaleX ?? 1,
                 y: faceTransform?.scaleY ?? 1,

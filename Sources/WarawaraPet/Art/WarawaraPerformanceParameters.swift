@@ -51,9 +51,12 @@ struct WarawaraPerformanceParameters: Equatable {
     var bodySquashX: CGFloat = 1
     var bodySquashY: CGFloat = 1
     /// Body raster opacity (1 = opaque). The bottle morph fades the body
-    /// toward 0 while the glass silhouette fades in — eyes and mouth
-    /// stay untouched so the character identity carries over.
+    /// toward 0 while the bottle silhouette grows out of it.
     var bodyOpacity: CGFloat = 1
+    /// Face (eyes + mouth) opacity (1 = opaque). The bottle form is
+    /// strictly NON-anthropomorphic: the face dissolves during the morph
+    /// and stays hidden while in bottle form.
+    var faceOpacity: CGFloat = 1
     /// Body lean in radians (internal, face-system level).
     var bodyTilt: CGFloat = 0
     /// Looping phase 0...1 for breathing.
@@ -85,6 +88,7 @@ struct WarawaraPerformanceParameters: Equatable {
         copy.bodySquashX = min(max(bodySquashX, 0.5), 2)
         copy.bodySquashY = min(max(bodySquashY, 0.5), 2)
         copy.bodyOpacity = min(max(bodyOpacity, 0), 1)
+        copy.faceOpacity = min(max(faceOpacity, 0), 1)
         copy.breathPhase = breathPhase - floor(breathPhase)
         copy.floatPhase = floatPhase - floor(floatPhase)
         copy.limbSwingAmount = min(max(limbSwingAmount, 0), 1)
@@ -102,6 +106,7 @@ struct WarawaraPerformanceParameters: Equatable {
         total += abs(dragAmount - other.dragAmount)
         total += abs(bodySquashX - other.bodySquashX) + abs(bodySquashY - other.bodySquashY)
         total += abs(bodyOpacity - other.bodyOpacity)
+        total += abs(faceOpacity - other.faceOpacity)
         total += abs(bodyTilt - other.bodyTilt)
         total += (mouthStyle == other.mouthStyle ? 0 : 1)
         return total

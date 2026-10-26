@@ -33,31 +33,16 @@ struct PetView: View {
 
     var body: some View {
         ZStack {
-            // The whole bottle reads as ONE body: glass, character and
-            // neck share the bob and the gentle floating tilt.
+            // The whole bottle reads as ONE body: the bottle art and the
+            // character share the bob and the gentle floating tilt.
             ZStack {
-                // The glass silhouette sits BEHIND the character so the
-                // eyes/mouth stay on the bottle surface.
-                if let visual, visual.isBottleForm {
-                    BottleGlassBodyView(progress: visual.morphProgress)
-                        .position(x: PetMetrics.visualCenter.x, y: PetMetrics.visualCenter.y)
-                        .scaleEffect(x: stateScaleX, y: stateScaleY, anchor: .bottom)
-                }
                 petGroup
-                // Neck + cork + paper render IN FRONT of the character,
-                // bottom-anchored on the glass top.
+                // The bottle form renders IN FRONT of the fading rig:
+                // the v3 art (or the procedural fallback) grows out of
+                // the body silhouette while the face dissolves.
                 if let visual, visual.isBottleForm {
-                    BottleExtrasView(
-                        progress: visual.morphProgress,
-                        openingProgress: visual.openingProgress
-                    )
-                    .position(
-                        x: PetMetrics.visualCenter.x,
-                        y: PetMetrics.visualCenter.y
-                            - BottleMetrics.glassHeight / 2
-                            - BottleMetrics.extrasContainerHeight / 2
-                    )
-                    .scaleEffect(x: stateScaleX, y: stateScaleY, anchor: .bottom)
+                    BottleArtOverlayView(visual: visual, store: .shared)
+                        .scaleEffect(x: stateScaleX, y: stateScaleY, anchor: .bottom)
                 }
             }
             .offset(y: bobOffset)

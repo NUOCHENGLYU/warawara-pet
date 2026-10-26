@@ -19,7 +19,9 @@ let package = Package(
                 // artwork).
                 .copy("Resources/Birthday"),
                 // Phase 7 final-gift artwork (wearables + meteor).
-                .copy("Resources/Gift")
+                .copy("Resources/Gift"),
+                // Phase 8C bottle-mail artwork (Ghibli Minimal v3).
+                .copy("Resources/BottleMail")
             ]
         ),
         .testTarget(

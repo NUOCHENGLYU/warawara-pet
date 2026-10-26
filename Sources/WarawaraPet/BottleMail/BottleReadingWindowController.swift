@@ -127,25 +127,36 @@ struct BottleReadingView: View {
             if let letter = shownLetter {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("来自远方的信")
-                            .font(.system(size: 15, weight: .semibold, design: .serif))
-                            .foregroundColor(Color(white: 0.35))
+                        HStack(spacing: 8) {
+                            if let scroll = BottleMailArtStore.shared.scrollSealed {
+                                Image(nsImage: scroll)
+                                    .resizable()
+                                    .interpolation(.high)
+                                    .scaledToFit()
+                                    .frame(height: 26)
+                            }
+                            Text("来自远方的信")
+                                .font(.system(size: 15, weight: .semibold, design: .serif))
+                                .foregroundColor(Color(red: 0.32, green: 0.26, blue: 0.18))
+                            Spacer()
+                        }
                         Text(letter.createdAt)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color(red: 0.45, green: 0.4, blue: 0.32))
                         Rectangle()
-                            .fill(Color(white: 0.8))
+                            .fill(Color(red: 0.55, green: 0.48, blue: 0.36).opacity(0.5))
                             .frame(height: 1)
                         Text(letter.body)
                             .font(.system(size: 15.5, design: .serif))
+                            .foregroundColor(Color(red: 0.22, green: 0.18, blue: 0.12))
                             .lineSpacing(7.5)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 0)
                     }
-                    .padding(24)
+                    .padding(28)
                 }
-                .background(Color(red: 0.97, green: 0.95, blue: 0.90))
+                .background(paperBackground)
                 Divider()
                 letterFooter(letter)
             } else {
@@ -155,8 +166,24 @@ struct BottleReadingView: View {
                         .foregroundColor(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(red: 0.97, green: 0.95, blue: 0.90))
+                .background(paperBackground)
             }
+        }
+    }
+
+    /// The v3 parchment (`letter_paper_blank.png`) fills the paper area;
+    /// a warm solid fallback keeps the reading surface usable if the
+    /// art is missing.
+    @ViewBuilder
+    private var paperBackground: some View {
+        if let paper = BottleMailArtStore.shared.letterPaper {
+            Image(nsImage: paper)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFill()
+                .clipped()
+        } else {
+            Color(red: 0.97, green: 0.95, blue: 0.90)
         }
     }
 
