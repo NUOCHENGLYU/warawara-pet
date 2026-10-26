@@ -665,7 +665,12 @@ final class PetController: ObservableObject {
         dragDecayTimer?.invalidate()
         dragDecayTimer = nil
         if bottleModeActive {
-            // The bottle simply rests where it was dropped.
+            // The bottle simply rests where it was dropped — through
+            // the FORMAL state machine (dragged -> settling -> idle),
+            // with no settle motion and no squash.
+            guard stateMachine.transition(to: .settling) else { return }
+            state = stateMachine.state
+            settleProgress = 0
             guard stateMachine.transition(to: .idle) else { return }
             state = stateMachine.state
             return

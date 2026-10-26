@@ -16,24 +16,53 @@ final class BottleMailCoordinatorTests: XCTestCase {
         var onActivate: ((String, String) async throws -> BottleMailActivation)?
         var onFetch: ((Int, Int, String) async throws -> BottleMailPage)?
         var onOpen: ((String, String) async throws -> String?)?
-        private(set) var fetchCalls: [(after: Int, limit: Int, token: String)] = []
-        private(set) var openCalls: [(id: String, token: String)] = []
-        private(set) var activateCalls: [(code: String, label: String)] = []
+        /// The coordinator's retry machinery may issue concurrent
+        /// requests: recordings are appended from multiple threads, so
+        /// every read AND write goes through a lock (an unsynchronized
+        /// append/read is a classic index-out-of-range crash).
+        private var recordedFetchCalls: [(after: Int, limit: Int, token: String)] = []
+        private var recordedOpenCalls: [(id: String, token: String)] = []
+        private var recordedActivateCalls: [(code: String, label: String)] = []
+        private let lock = NSLock()
+
+        var fetchCalls: [(after: Int, limit: Int, token: String)] {
+            lock.lock()
+            defer { lock.unlock() }
+            return recordedFetchCalls
+        }
+
+        var openCalls: [(id: String, token: String)] {
+            lock.lock()
+            defer { lock.unlock() }
+            return recordedOpenCalls
+        }
+
+        var activateCalls: [(code: String, label: String)] {
+            lock.lock()
+            defer { lock.unlock() }
+            return recordedActivateCalls
+        }
 
         func activate(code: String, label: String) async throws -> BottleMailActivation {
-            activateCalls.append((code, label))
+            lock.lock()
+            recordedActivateCalls.append((code, label))
+            lock.unlock()
             guard let onActivate else { throw BottleMailAPIError.network("no handler") }
             return try await onActivate(code, label)
         }
 
         func fetchLetters(after: Int, limit: Int, token: String) async throws -> BottleMailPage {
-            fetchCalls.append((after, limit, token))
+            lock.lock()
+            recordedFetchCalls.append((after, limit, token))
+            lock.unlock()
             guard let onFetch else { throw BottleMailAPIError.network("no handler") }
             return try await onFetch(after, limit, token)
         }
 
         func markOpened(id: String, token: String) async throws -> String? {
-            openCalls.append((id, token))
+            lock.lock()
+            recordedOpenCalls.append((id, token))
+            lock.unlock()
             guard let onOpen else { throw BottleMailAPIError.network("no handler") }
             return try await onOpen(id, token)
         }

@@ -128,10 +128,12 @@ final class PetBottleModeTests: XCTestCase {
         controller.setBottleModeActive(true)
         controller.setBottleModeActive(false)
         XCTAssertTrue(controller.isAutonomousScheduled)
-        // And a normal awareness tick works again (curiosity/sleepiness
-        // evaluation restored).
+        // The sleep/curiosity machinery is restored too: with a long
+        // idle time the pet legitimately drifts sleepy again — proof
+        // the evaluator resumed.
         controller.awarenessTick(at: 2000, evaluateSleepiness: true)
-        XCTAssertEqual(controller.state, .idle)
+        XCTAssertEqual(controller.state, .sleepy,
+                       "the sleep evaluator resumes after the bottle form ends")
     }
 
     func testSleepinessNeverAdvancesInBottleMode() {
