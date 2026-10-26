@@ -102,8 +102,10 @@ final class BottleMailArtStore {
         }
         let bytesPerRow = cg.bytesPerRow
         let bytesPerPixel = max(cg.bitsPerPixel / 8, 1)
-        let alphaOffset = cg.bitmapInfo.contains(.alphaLast) ? bytesPerPixel - 1 : 0
-        let hasAlpha = cg.alphaInfo != .none && cg.alphaInfo != .noneSkipFirst && cg.alphaInfo != .noneSkipLast
+        let alphaInfo = cg.alphaInfo
+        let alphaLast = alphaInfo == .premultipliedLast || alphaInfo == .last
+        let alphaOffset = alphaLast ? bytesPerPixel - 1 : 0
+        let hasAlpha = alphaInfo != .none && alphaInfo != .noneSkipFirst && alphaInfo != .noneSkipLast
 
         var minX = width
         var minY = height
@@ -148,7 +150,8 @@ final class BottleMailArtStore {
     /// Diagnose line for the packaged-app check (never prints paths).
     func diagnostics() -> String {
         let state = verifyAllRequiredAssets()
-        return "BOTTLE_ART ok=\(state.ok) details=\(state.details) bounds=\(contentBounds(named: \"bottle_unread.png\") == nil ? "none" : "ok")"
+        let boundsState = contentBounds(named: "bottle_unread.png") == nil ? "none" : "ok"
+        return "BOTTLE_ART ok=\(state.ok) details=\(state.details) bounds=\(boundsState)"
     }
 
     func reset() {
