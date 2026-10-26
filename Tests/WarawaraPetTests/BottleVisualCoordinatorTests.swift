@@ -366,7 +366,7 @@ final class BottleVisualCoordinatorTests: XCTestCase {
 
         await waitUntil { coordinator.snapshotForTesting().letters.count == 1 }
         await waitUntil { visual.snapshotForTesting().state == .transformingToBottle }
-        // Cross the poof instant (0.318 of the timeline).
+        // Forward: the sound fires at the forward smoke onset.
         advanceTime(0.15, visual: visual)
         XCTAssertEqual(poofCount, 1, "the poof fires once on the way to the bottle")
         // Completing the transition never re-fires it.
@@ -376,16 +376,83 @@ final class BottleVisualCoordinatorTests: XCTestCase {
         // New mail while already a bottle must NOT re-play the poof.
         XCTAssertEqual(poofCount, 1)
 
-        // Reverse: put away the last letter, the poof fires once more.
+        // Reverse: put away the last letter. The reverse poof fires at
+        // the REVERSE smoke onset (timeline <= smokeFadeEnd), not at the
+        // forward poofPoint.
         XCTAssertTrue(visual.handleBottleTap())
         advanceTime(0.3, visual: visual)
         XCTAssertEqual(visual.snapshotForTesting().state, .reading)
         visual.letterPutAway(id: id)
         await waitUntil { coordinator.snapshotForTesting().unread == 0 }
         await waitUntil { visual.snapshotForTesting().state == .transformingBack }
+        // Still early in the reverse timeline (1.0 > smokeFadeEnd): no
+        // sound yet.
+        advanceTime(0.08, visual: visual)
+        XCTAssertEqual(poofCount, 1, "the reverse poof must not fire before its own smoke onset")
+        // Cross the reverse onset: exactly one fire.
+        advanceTime(0.08, visual: visual)
+        XCTAssertEqual(poofCount, 2, "the reverse transition fires exactly one poof")
         advanceTime(0.5, visual: visual)
         XCTAssertEqual(visual.snapshotForTesting().state, .normal)
-        XCTAssertEqual(poofCount, 2, "the reverse transition fires exactly one poof")
+        XCTAssertEqual(poofCount, 2, "no extra poofs after the reverse completes")
+    }
+
+    func testPoofFreezeResumeNeverDuplicatesTheSound() async throws {
+        let (coordinator, transport, visual) = makeHarness()
+        transport.onActivate = { _, _ in
+            BottleMailActivation(deviceId: "d", deviceToken: "tok", label: "Mac")
+        }
+        let id = UUID().uuidString
+        transport.onFetch = { after, _, _ in
+            after == 0
+                ? BottleMailPage(letters: [self.remote(1, id: id)], nextAfter: 1)
+                : BottleMailPage(letters: [], nextAfter: after)
+        }
+        transport.onOpen = { _, _ in "2026-10-17T01:00:00Z" }
+        var poofCount = 0
+        visual.onPoofMoment = { poofCount += 1 }
+        visual.start(usingTimer: false)
+        try await coordinator.activate(code: "C", label: "Mac")
+        await waitUntil { coordinator.snapshotForTesting().letters.count == 1 }
+        await waitUntil { visual.snapshotForTesting().state == .transformingToBottle }
+
+        // FORWARD: freeze BEFORE the forward onset — no sound while
+        // frozen, exactly one after the resume.
+        advanceTime(0.05, visual: visual) // timeline 0.125 < poofPoint
+        XCTAssertEqual(poofCount, 0)
+        petBusy = true
+        advanceTime(0.1, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .suspended)
+        XCTAssertEqual(poofCount, 0, "no poof while frozen before the onset")
+        petBusy = false
+        advanceTime(0.05, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .transformingToBottle)
+        advanceTime(0.1, visual: visual) // crosses poofPoint
+        XCTAssertEqual(poofCount, 1, "exactly one poof after the forward resume")
+        advanceTime(0.5, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .bottleIdle)
+
+        // REVERSE: freeze BEFORE the reverse onset, resume, exactly one
+        // more fire; freezing again AFTER the onset adds nothing.
+        XCTAssertTrue(visual.handleBottleTap())
+        advanceTime(0.3, visual: visual)
+        visual.letterPutAway(id: id)
+        await waitUntil { coordinator.snapshotForTesting().unread == 0 }
+        await waitUntil { visual.snapshotForTesting().state == .transformingBack }
+        advanceTime(0.06, visual: visual) // timeline ~0.85 > smokeFadeEnd
+        XCTAssertEqual(poofCount, 1, "still before the reverse onset")
+        petBusy = true
+        advanceTime(0.1, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .suspended)
+        XCTAssertEqual(poofCount, 1, "no poof while frozen before the reverse onset")
+        petBusy = false
+        advanceTime(0.05, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .transformingBack)
+        advanceTime(0.1, visual: visual) // crosses smokeFadeEnd (0.726)
+        XCTAssertEqual(poofCount, 2, "exactly one poof after the reverse resume")
+        advanceTime(0.5, visual: visual)
+        XCTAssertEqual(visual.snapshotForTesting().state, .normal)
+        XCTAssertEqual(poofCount, 2, "no duplicate poofs")
     }
 
     func testFormProgressStepsOnlyAtTheSmokeCoveredSwitch() async throws {

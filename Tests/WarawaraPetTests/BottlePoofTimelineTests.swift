@@ -156,6 +156,38 @@ final class BottlePoofTimelineTests: XCTestCase {
         XCTAssertFalse(BottlePoofTimeline.smokeVisible(t: 1))
     }
 
+    func testSmokeOnsetIsDirectionAware() {
+        // Forward: the poof sound fires exactly where the smoke bursts in.
+        XCTAssertEqual(
+            BottlePoofTimeline.smokeOnset(for: .toBottle),
+            BottlePoofTimeline.poofPoint
+        )
+        XCTAssertLessThan(
+            BottlePoofTimeline.smokeOnset(for: .toBottle),
+            BottlePoofTimeline.switchPoint
+        )
+        // Reverse: the mirrored fade-in starts at the reversed
+        // dissipation tail — AFTER the switch point, never at poofPoint.
+        XCTAssertEqual(
+            BottlePoofTimeline.smokeOnset(for: .toNormal),
+            BottlePoofTimeline.smokeFadeEnd
+        )
+        XCTAssertGreaterThan(
+            BottlePoofTimeline.smokeOnset(for: .toNormal),
+            BottlePoofTimeline.switchPoint
+        )
+        // The reverse onset really is the first instant the smoke
+        // appears: zero just above it (later in reverse time), non-zero
+        // just below it.
+        let reverseOnset = BottlePoofTimeline.smokeOnset(for: .toNormal)
+        XCTAssertEqual(BottlePoofTimeline.coreSmokeOpacity(t: reverseOnset + 0.01), 0)
+        XCTAssertGreaterThan(BottlePoofTimeline.coreSmokeOpacity(t: reverseOnset - 0.01), 0)
+        // And the forward onset matches the forward smoke appearance.
+        let forwardOnset = BottlePoofTimeline.smokeOnset(for: .toBottle)
+        XCTAssertEqual(BottlePoofTimeline.coreSmokeOpacity(t: forwardOnset - 0.01), 0)
+        XCTAssertGreaterThan(BottlePoofTimeline.coreSmokeOpacity(t: forwardOnset + 0.01), 0)
+    }
+
     func testCoreSmokeFillsEnvelopeInsideWindowWidth() {
         // The core smoke at the switch covers the envelope, and its
         // soft edges simply fade past the window sides — the opaque

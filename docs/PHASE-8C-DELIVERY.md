@@ -21,7 +21,7 @@ Branch `phase8/bottle-mail` · 有未读信时 Warawara 本体以「起跳 → �
 - `BottlePoofTimeline`（纯函数）：跳跃弧线（蓄力/上升/峰值/隐藏下落切换点/缓降/落地晃动）、压扁-拉伸-落地挤压曲线、核心烟雾透明度/缩放、装饰层扩散、落地尘。**统一时间参数 `t ∈ 0...1`，正反向同式**，无两张 PNG 轮播。
 - **遮挡不变式**：`occludedRect(t) ⊇ envelopeRect(t)`（烟雾不透明区覆盖 Warawara 与瓶子外轮廓的并集，含 Reduce Motion 两种设置），由 `BottlePoofTimelineTests.testOcclusionCoversBothSilhouettesAtTheSwitch` 机器校验；底层素材只在 t=0.57 切换（`formProgress` 阶跃），面部/身体交接为**瞬时通道**（不做平滑淡入淡出，杜绝半透明重叠）。
 - 烟雾分层：`smoke_core`（不透明遮挡主团）+ `smoke_soft`/`smoke_small`/`smoke_wisps`（扩散装饰）+ `landing_dust`（落地尘），连续缩放/位移/透明度；**全部在现有透明桌宠窗口内渲染**，无独立特效窗口；窗口包络经测试保证瓶颈不越界、落地位置与身体基线一致（切换瞬间的 18pt 高度差发生在满烟雾之后，不可见）。
-- 音效：`BottlePoofSound` 每段变身仅触发一次（`onPoofMoment` 回调，正反向各一次），低音量、系统静音自动生效、可关（`warawarapet.sound.enabled`）。
+- 音效：`BottlePoofSound` 每段变身仅触发一次（`onPoofMoment` 回调，正反向各一次）。**触发点按方向区分**：正向在 `poofPoint`（烟雾爆开瞬间），反向在 `smokeFadeEnd`（倒放消散尾的镜像起点，即反向烟雾出现的瞬间）——绝不在烟雾已散尽后迟响。低音量、系统静音自动生效、可关（`warawarapet.sound.enabled`）。
 - **邮件语义全部保留**：多封只变一次、阅读中来新信入队不重播变身、投递 ACK ≠ 已读、本地优先离线可读、联网对账、重启恢复；生日/Meteor/拖拽/睡眠冲突期间延迟或冻结。
 - Reduce Motion：跳跃 30→14pt、装饰烟雾扩散缩小；核心遮挡烟不变（仍保证无突变切换）。
 - 回退链：完整素材 → poof 模式；缺烟雾包 → 几何揭示回退（原 BottleMorphGeometry，仅内部回退）；缺 v3 美术 → 程序化占位瓶。缺音效仅静音跳过。
@@ -29,7 +29,8 @@ Branch `phase8/bottle-mail` · 有未读信时 Warawara 本体以「起跳 → �
 ## 测试
 
 - 新增 `BottlePoofTimelineTests`：相位边界、跳跃弧线（26–32pt/Reduce 14pt）、正反向切换点、**遮挡完整性机器校验**、包络不越窗、落地晃动衰减、烟雾可见窗口。
-- 新增视觉测试：`testPoofMomentFiresExactlyOncePerTransition`（正反向各一次、新信不重播）、`testFormProgressStepsOnlyAtTheSmokeCoveredSwitch`。
+- 新增视觉测试：`testPoofMomentFiresExactlyOncePerTransition`（正反向各一次、按各自烟雾出现时刻触发、新信不重播）、`testPoofFreezeResumeNeverDuplicatesTheSound`（冻结在音效点前后均不重响）、`testFormProgressStepsOnlyAtTheSmokeCoveredSwitch`。
+- 阅读窗口渲染：`BottleReadingWindowRenderTests` 以**真实 NSHostingView + 离屏 NSWindow**（生产宿主路径）渲染完整阅读界面并逐像素校验：信纸背景、正文墨迹（中文/英文/换行）、Emoji 彩色字形、无渲染失败“禁止”占位符。`ImageRenderer` 无法栅格化 AppKit 版 List/HSplitView（会产出 nosign 占位符），预览与校验均改用真实窗口快照——非伪造截图。
 - 更新：`BottleExpressionBlendTests`（阶跃语义 + 动画器瞬时交接）、`BottleMailArtStoreTests`（11 项素材、poof/reveal/procedural 三级回退解析）、视觉测试 formProgress 断言。
 - 预览：`200-poof-forward.gif` / `201-poof-reverse.gif`（各 30 帧真实连续渲染）+ `210-poof-occlusion.png`（满烟雾遮挡瞬间）+ `211-poof-landing.png` + 阅读窗口。
 - 打包 App 内 `--verify-bottle-art` 校验全部 11 项素材（5 张 v3 + 4 张烟雾 + 落地尘 + wav）。

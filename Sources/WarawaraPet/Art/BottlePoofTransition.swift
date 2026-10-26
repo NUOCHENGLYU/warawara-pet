@@ -69,6 +69,21 @@ enum BottlePoofTimeline {
         t >= switchPoint ? 1 : 0
     }
 
+    // MARK: - Smoke onset (the poof sound moment)
+
+    /// The timeline instant where the smoke FIRST appears for the given
+    /// direction — the poof sound fires exactly here, once per
+    /// transition:
+    /// - forward: the smoke bursts in at `poofPoint`;
+    /// - reverse: the reversed fade-in starts at `smokeFadeEnd`
+    ///   (the mirrored tail of the forward dissipation).
+    static func smokeOnset(for direction: BottleMorphMath.Direction) -> Double {
+        switch direction {
+        case .toBottle: return poofPoint
+        case .toNormal: return smokeFadeEnd
+        }
+    }
+
     // MARK: - Jump arc
 
     /// Upward offset in points applied to the whole character wrapper.

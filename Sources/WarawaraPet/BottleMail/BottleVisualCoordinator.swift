@@ -383,10 +383,14 @@ final class BottleVisualCoordinator: ObservableObject {
         morphProgress = timeline
         formProgress = BottlePoofTimeline.formProgress(at: timeline)
         if !poofFired {
+            // The poof sound fires when THIS direction's smoke first
+            // appears: forward at poofPoint, reverse at smokeFadeEnd
+            // (the reversed dissipation tail) — never late, never twice.
+            let onset = BottlePoofTimeline.smokeOnset(for: direction)
             let crossed: Bool
             switch direction {
-            case .toBottle: crossed = timeline >= BottlePoofTimeline.poofPoint
-            case .toNormal: crossed = timeline <= BottlePoofTimeline.poofPoint
+            case .toBottle: crossed = timeline >= onset
+            case .toNormal: crossed = timeline <= onset
             }
             if crossed {
                 poofFired = true

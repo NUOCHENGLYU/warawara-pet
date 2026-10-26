@@ -222,10 +222,74 @@ final class BottlePreviewGeneratorTests: XCTestCase {
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
 
-        let content = BottleReadingView(coordinator: coordinator, visual: visual)
-            .frame(width: 560, height: 640)
-        try renderPNG(content, size: CGSize(width: 560, height: 640), scale: 1,
-                      to: outputDir.appendingPathComponent("212-reading.png"))
+        // The reading window contains an AppKit-backed List/HSplitView
+        // that ImageRenderer cannot rasterize (it yields the prohibition
+        // placeholder) — snapshot the REAL view through a real offscreen
+        // NSWindow instead, and verify the render pixel-wise so the
+        // preview can never silently regress to the placeholder.
+        let size = CGSize(width: 560, height: 640)
+        let cgImage = try renderWindowSnapshot(
+            BottleReadingView(coordinator: coordinator, visual: visual),
+            size: size
+        )
+        let rep = NSBitmapImageRep(cgImage: cgImage)
+        var paperPixels = 0
+        var prohibitionPixels = 0
+        for y in stride(from: 0, to: rep.pixelsHigh, by: 4) {
+            for x in stride(from: 260, to: rep.pixelsWide, by: 4) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let r = color.redComponent
+                let g = color.greenComponent
+                let b = color.blueComponent
+                if r > 0.85 && g > 0.78 && b > 0.60 && b < 0.98 {
+                    paperPixels += 1
+                }
+                if r > 0.75 && g < 0.45 && b < 0.45 {
+                    prohibitionPixels += 1
+                }
+            }
+        }
+        XCTAssertGreaterThan(paperPixels, 800,
+                             "the reading preview must show the parchment paper")
+        XCTAssertLessThan(prohibitionPixels, 120,
+                          "the reading preview must not be the renderer placeholder")
+
+        guard let png = rep.representation(using: .png, properties: [:]) else {
+            throw NSError(domain: "preview", code: 7)
+        }
+        try png.write(to: outputDir.appendingPathComponent("212-reading.png"))
+    }
+
+    /// Mounts a view in a REAL NSHostingView + NSWindow (the production
+    /// hosting path) and rasterizes it — required for AppKit-backed
+    /// controls (List/HSplitView) that ImageRenderer cannot render.
+    private func renderWindowSnapshot<Content: View>(
+        _ content: Content,
+        size: CGSize
+    ) throws -> CGImage {
+        let hosting = NSHostingView(rootView: content)
+        hosting.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.contentView = hosting
+        window.orderFront(nil)
+        hosting.layoutSubtreeIfNeeded()
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            window.orderOut(nil)
+            throw NSError(domain: "preview", code: 5)
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        window.orderOut(nil)
+        guard let cgImage = rep.cgImage else {
+            throw NSError(domain: "preview", code: 6)
+        }
+        return cgImage
     }
 
     // MARK: - Rendering + GIF encoding
@@ -238,15 +302,6 @@ final class BottlePreviewGeneratorTests: XCTestCase {
             throw NSError(domain: "preview", code: 1)
         }
         return cgImage
-    }
-
-    private func renderPNG(_ view: some View, size: CGSize, scale: CGFloat, to url: URL) throws {
-        let cgImage = try renderImage(view, size: size, scale: scale)
-        let rep = NSBitmapImageRep(cgImage: cgImage)
-        guard let png = rep.representation(using: .png, properties: [:]) else {
-            throw NSError(domain: "preview", code: 2)
-        }
-        try png.write(to: url)
     }
 
     private func writeAnimatedGIF(frames: [CGImage], delay: Double, to url: URL) throws {
